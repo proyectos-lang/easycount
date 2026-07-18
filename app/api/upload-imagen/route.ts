@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createClient as createServerClient } from '@/lib/supabase/server'
+
+// Solo imagenes; el bucket "productos" guarda fotos de productos y logos.
+const MIME_PERMITIDOS = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+const EXT_PERMITIDAS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif'])
+const MAX_BYTES = 5 * 1024 * 1024 // 5 MB
 
 export async function POST(req: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -11,6 +17,20 @@ export async function POST(req: NextRequest) {
       { error: 'Supabase no configurado' },
       { status: 500 }
     )
+  }
+
+  // Solo usuarios autenticados pueden subir. La subida usa la service role
+  // (salta RLS); sin este chequeo cualquiera con la URL podria escribir al
+  // bucket con archivos arbitrarios.
+  const authClient = await createServerClient()
+  if (!authClient) {
+    return NextResponse.json({ error: 'Supabase no configurado' }, { status: 500 })
+  }
+  const {
+    data: { user },
+  } = await authClient.auth.getUser()
+  if (!user) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey, {
@@ -25,8 +45,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No se recibio ningun archivo' }, { status: 400 })
     }
 
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${Date.now()}.${fileExt}`
+    // Validacion de tamano.
+    if (file.size === 0) {
+      return NextResponse.json({ error: 'El archivo esta vacio' }, { status: 400 })
+    }
+    if (file.size > MAX_BYTES) {
+      return NextResponse.json(
+        { error: 'La imagen supera el limite de 5 MB' },
+        { status: 400 }
+      )
+    }
+
+    // Validacion de tipo (MIME + extension).
+    const fileExt = (file.name.split('.').pop() || '').toLowerCase()
+    if (!MIME_PERMITIDOS.has(file.type) || !EXT_PERMITIDAS.has(fileExt)) {
+      return NextResponse.json(
+        { error: 'Solo se aceptan imagenes JPG, PNG, WEBP o GIF' },
+        { status: 400 }
+      )
+    }
+
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${fileExt}`
 
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)

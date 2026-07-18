@@ -400,7 +400,7 @@ export default function DashboardPage() {
                 {stockBajo.slice(0, 5).map(p => (
                   <Link 
                     key={p.id} 
-                    href="/catalogos/productos"
+                    href="/configuracion/productos"
                     className="flex items-center justify-between p-3 rounded-xl hover:bg-stone-100/60 transition-all duration-300"
                   >
                     <div className="flex items-center gap-2">
@@ -414,7 +414,7 @@ export default function DashboardPage() {
                   </Link>
                 ))}
                 {stockBajo.length > 5 && (
-                  <Link href="/catalogos/productos" className="block">
+                  <Link href="/configuracion/productos" className="block">
                     <Button variant="ghost" size="sm" className="w-full mt-2">
                       Ver todos <ArrowRight className="h-4 w-4 ml-1" />
                     </Button>
@@ -453,7 +453,7 @@ export default function DashboardPage() {
                 {comprasPendientes.slice(0, 5).map(c => (
                   <Link 
                     key={c.id} 
-                    href="/compras/recepciones"
+                    href="/compras/recepcion"
                     className="flex items-center justify-between p-3 rounded-xl hover:bg-stone-100/60 transition-all duration-300"
                   >
                     <div>
@@ -468,7 +468,7 @@ export default function DashboardPage() {
                   </Link>
                 ))}
                 {comprasPendientes.length > 5 && (
-                  <Link href="/compras/recepciones" className="block">
+                  <Link href="/compras/recepcion" className="block">
                     <Button variant="ghost" size="sm" className="w-full mt-2">
                       Ver todas <ArrowRight className="h-4 w-4 ml-1" />
                     </Button>
