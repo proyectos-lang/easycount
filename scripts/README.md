@@ -27,6 +27,15 @@ SQL Editor de Supabase. Son en su mayoría idempotentes (`IF NOT EXISTS` /
 > **Huecos 006–008:** la numeración salta de 005 a 009. No faltan migraciones;
 > los números simplemente no se usaron. El orden de arriba es el completo.
 
+> **Nota sobre el script 014:** en la base actual las _columnas_ de cuentas
+> por pagar (`fecha_vencimiento`, `monto_pagado`, `estado_pago` en `gastos`)
+> sí existen, pero la tabla `gastos_pagos_detalle` **no** se creó. La app no
+> la necesita (los abonos a gastos se reconstruyen desde
+> `caja_chica_movimientos` y `cuenta_movimientos`), y el script 017 la omite
+> si no existe. Si en el futuro quieres el historial de abonos en su propia
+> tabla, aplica la parte `CREATE TABLE gastos_pagos_detalle` del script 014 y
+> vuelve a correr el 017 (que entonces sí le pondrá RLS).
+
 ## Seguridad (RLS)
 
 El aislamiento entre empresas depende de las políticas del script **017**.

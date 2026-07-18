@@ -12,12 +12,17 @@
 --   1. Crea la funcion `app_current_tenant()` que devuelve el
 --      `razon_social_id` del usuario autenticado (SECURITY DEFINER para
 --      poder leer `usuarios` sin recursion de RLS).
---   2. Activa RLS en todas las tablas de negocio.
---   3. Crea una politica de aislamiento por tabla: un usuario solo ve y
---      modifica filas de SU empresa.
+--   2. Activa RLS y crea la politica de aislamiento SOLO en las tablas que
+--      existen y que tienen columna `razon_social_id`. Las tablas ausentes
+--      se saltan con un NOTICE (no fallan el script).
+--   3. Maneja los casos especiales (razon_social, usuarios,
+--      permisos_usuarios, modulos).
 --
--- IDEMPOTENTE
---   Usa DROP POLICY IF EXISTS + CREATE, asi que se puede correr varias veces.
+-- DEFENSIVO E IDEMPOTENTE
+--   - Comprueba existencia de tabla y columna antes de actuar: si tu esquema
+--     no tiene alguna tabla (p. ej. `gastos_pagos_detalle`), simplemente la
+--     omite en vez de abortar.
+--   - Usa DROP POLICY IF EXISTS + CREATE, asi que se puede correr N veces.
 --
 -- ANTES DE APLICAR (recomendado): respalda las politicas actuales para poder
 -- comparar / revertir. En el SQL Editor de Supabase:
@@ -26,8 +31,6 @@
 --     FROM pg_policies
 --     WHERE schemaname = 'public'
 --     ORDER BY tablename, policyname;
---
--- Guarda ese resultado antes de continuar.
 --
 -- NOTA SOBRE FILAS CON razon_social_id NULL
 --   Una fila con `razon_social_id` NULL no sera visible para ningun usuario
@@ -59,240 +62,134 @@ REVOKE ALL ON FUNCTION public.app_current_tenant() FROM public;
 GRANT EXECUTE ON FUNCTION public.app_current_tenant() TO authenticated;
 
 -- -------------------------------------------------------------------------
--- 2. Helper interno: aplica RLS + politica de aislamiento a una tabla que
---    tiene columna `razon_social_id`.
---
---    Se implementa como bloque DO por tabla mas abajo para mantener el SQL
---    explicito y facil de auditar. La politica cubre las 4 operaciones
---    (SELECT/INSERT/UPDATE/DELETE) con USING + WITH CHECK.
+-- 2. Aislamiento generico para todas las tablas con `razon_social_id`
 -- -------------------------------------------------------------------------
+-- Recorre la lista de tablas candidatas. Para cada una:
+--   - Si la tabla NO existe -> NOTICE y continua.
+--   - Si existe pero NO tiene columna `razon_social_id` -> NOTICE y continua.
+--   - Si todo esta bien -> ENABLE RLS + (re)crea la politica.
+-- La politica cubre las 4 operaciones (FOR ALL) con USING + WITH CHECK.
+DO $$
+DECLARE
+  t text;
+  tablas text[] := ARRAY[
+    'gastos',
+    'marcas',
+    'clientes',
+    'almacenes',
+    'productos',
+    'categorias',
+    'subcategorias',
+    'proveedores',
+    'conceptos_gastos',
+    'cuentas_config',
+    'localizaciones',
+    'ventas_encabezado',
+    'ventas_detalle',
+    'pagos_ventas',
+    'ventas_pagos_detalle',
+    'compras_encabezado',
+    'compras_detalle',
+    'transacciones_inventario',
+    'caja_chica_sesiones',
+    'caja_chica_movimientos',
+    'cuenta_movimientos',
+    'gastos_pagos_detalle'   -- opcional: solo existe si se aplico el script 014
+  ];
+BEGIN
+  FOREACH t IN ARRAY tablas LOOP
+    -- Tabla inexistente: saltar sin fallar.
+    IF to_regclass(format('public.%I', t)) IS NULL THEN
+      RAISE NOTICE 'Omitida (no existe): %', t;
+      CONTINUE;
+    END IF;
 
--- ====== Tablas con columna `razon_social_id` ======
--- gastos
-ALTER TABLE public.gastos ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_gastos ON public.gastos;
-CREATE POLICY tenant_isolation_gastos ON public.gastos
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
+    -- Sin columna razon_social_id: saltar sin fallar.
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = t
+        AND column_name = 'razon_social_id'
+    ) THEN
+      RAISE NOTICE 'Omitida (sin razon_social_id): %', t;
+      CONTINUE;
+    END IF;
 
--- marcas
-ALTER TABLE public.marcas ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_marcas ON public.marcas;
-CREATE POLICY tenant_isolation_marcas ON public.marcas
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', t);
+    EXECUTE format('DROP POLICY IF EXISTS tenant_isolation_%I ON public.%I;', t, t);
+    EXECUTE format($f$
+      CREATE POLICY tenant_isolation_%I ON public.%I
+        FOR ALL TO authenticated
+        USING (razon_social_id = public.app_current_tenant())
+        WITH CHECK (razon_social_id = public.app_current_tenant());
+    $f$, t, t);
 
--- clientes
-ALTER TABLE public.clientes ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_clientes ON public.clientes;
-CREATE POLICY tenant_isolation_clientes ON public.clientes
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- almacenes
-ALTER TABLE public.almacenes ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_almacenes ON public.almacenes;
-CREATE POLICY tenant_isolation_almacenes ON public.almacenes
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- productos
-ALTER TABLE public.productos ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_productos ON public.productos;
-CREATE POLICY tenant_isolation_productos ON public.productos
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- categorias
-ALTER TABLE public.categorias ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_categorias ON public.categorias;
-CREATE POLICY tenant_isolation_categorias ON public.categorias
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- subcategorias
-ALTER TABLE public.subcategorias ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_subcategorias ON public.subcategorias;
-CREATE POLICY tenant_isolation_subcategorias ON public.subcategorias
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- proveedores
-ALTER TABLE public.proveedores ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_proveedores ON public.proveedores;
-CREATE POLICY tenant_isolation_proveedores ON public.proveedores
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- conceptos_gastos
-ALTER TABLE public.conceptos_gastos ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_conceptos_gastos ON public.conceptos_gastos;
-CREATE POLICY tenant_isolation_conceptos_gastos ON public.conceptos_gastos
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- cuentas_config
-ALTER TABLE public.cuentas_config ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_cuentas_config ON public.cuentas_config;
-CREATE POLICY tenant_isolation_cuentas_config ON public.cuentas_config
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- localizaciones (razon_social_id es smallint; la comparacion con bigint es valida)
-ALTER TABLE public.localizaciones ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_localizaciones ON public.localizaciones;
-CREATE POLICY tenant_isolation_localizaciones ON public.localizaciones
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- ventas_encabezado
-ALTER TABLE public.ventas_encabezado ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_ventas_encabezado ON public.ventas_encabezado;
-CREATE POLICY tenant_isolation_ventas_encabezado ON public.ventas_encabezado
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- ventas_detalle
-ALTER TABLE public.ventas_detalle ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_ventas_detalle ON public.ventas_detalle;
-CREATE POLICY tenant_isolation_ventas_detalle ON public.ventas_detalle
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- pagos_ventas (razon_social_id es smallint)
-ALTER TABLE public.pagos_ventas ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_pagos_ventas ON public.pagos_ventas;
-CREATE POLICY tenant_isolation_pagos_ventas ON public.pagos_ventas
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- ventas_pagos_detalle
-ALTER TABLE public.ventas_pagos_detalle ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_ventas_pagos_detalle ON public.ventas_pagos_detalle;
-CREATE POLICY tenant_isolation_ventas_pagos_detalle ON public.ventas_pagos_detalle
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- compras_encabezado
-ALTER TABLE public.compras_encabezado ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_compras_encabezado ON public.compras_encabezado;
-CREATE POLICY tenant_isolation_compras_encabezado ON public.compras_encabezado
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- compras_detalle
-ALTER TABLE public.compras_detalle ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_compras_detalle ON public.compras_detalle;
-CREATE POLICY tenant_isolation_compras_detalle ON public.compras_detalle
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- transacciones_inventario
-ALTER TABLE public.transacciones_inventario ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_transacciones_inventario ON public.transacciones_inventario;
-CREATE POLICY tenant_isolation_transacciones_inventario ON public.transacciones_inventario
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- caja_chica_sesiones
-ALTER TABLE public.caja_chica_sesiones ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_caja_chica_sesiones ON public.caja_chica_sesiones;
-CREATE POLICY tenant_isolation_caja_chica_sesiones ON public.caja_chica_sesiones
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- caja_chica_movimientos
-ALTER TABLE public.caja_chica_movimientos ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_caja_chica_movimientos ON public.caja_chica_movimientos;
-CREATE POLICY tenant_isolation_caja_chica_movimientos ON public.caja_chica_movimientos
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- cuenta_movimientos
-ALTER TABLE public.cuenta_movimientos ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_cuenta_movimientos ON public.cuenta_movimientos;
-CREATE POLICY tenant_isolation_cuenta_movimientos ON public.cuenta_movimientos
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
-
--- gastos_pagos_detalle
-ALTER TABLE public.gastos_pagos_detalle ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_gastos_pagos_detalle ON public.gastos_pagos_detalle;
-CREATE POLICY tenant_isolation_gastos_pagos_detalle ON public.gastos_pagos_detalle
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
+    RAISE NOTICE 'RLS aplicado: %', t;
+  END LOOP;
+END $$;
 
 -- -------------------------------------------------------------------------
--- 3. Casos especiales
+-- 3. Casos especiales (con guarda de existencia)
 -- -------------------------------------------------------------------------
+DO $$
+BEGIN
+  -- razon_social: la tabla tenant misma. Un usuario solo ve/edita SU empresa.
+  -- (La comparacion es contra `id`, no `razon_social_id`.)
+  IF to_regclass('public.razon_social') IS NOT NULL THEN
+    ALTER TABLE public.razon_social ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS tenant_isolation_razon_social ON public.razon_social;
+    CREATE POLICY tenant_isolation_razon_social ON public.razon_social
+      FOR ALL TO authenticated
+      USING (id = public.app_current_tenant())
+      WITH CHECK (id = public.app_current_tenant());
+    RAISE NOTICE 'RLS aplicado: razon_social';
+  END IF;
 
--- razon_social: la tabla tenant misma. Un usuario solo ve/edita SU empresa.
--- (La comparacion es contra `id`, no `razon_social_id`.)
-ALTER TABLE public.razon_social ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_razon_social ON public.razon_social;
-CREATE POLICY tenant_isolation_razon_social ON public.razon_social
-  FOR ALL TO authenticated
-  USING (id = public.app_current_tenant())
-  WITH CHECK (id = public.app_current_tenant());
+  -- usuarios: cada usuario ve a los usuarios de SU empresa. Puede leer su
+  -- propia fila aunque su tenant no coincida, para que login/tenant-stamp
+  -- siempre resuelva.
+  IF to_regclass('public.usuarios') IS NOT NULL THEN
+    ALTER TABLE public.usuarios ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS tenant_isolation_usuarios ON public.usuarios;
+    CREATE POLICY tenant_isolation_usuarios ON public.usuarios
+      FOR ALL TO authenticated
+      USING (razon_social_id = public.app_current_tenant() OR id = auth.uid())
+      WITH CHECK (razon_social_id = public.app_current_tenant());
+    RAISE NOTICE 'RLS aplicado: usuarios';
+  END IF;
 
--- usuarios: cada usuario ve a los usuarios de SU empresa. Puede leer su
--- propia fila aunque (por algun motivo) su tenant no coincida, para que el
--- login/tenant-stamp siempre resuelva.
-ALTER TABLE public.usuarios ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_usuarios ON public.usuarios;
-CREATE POLICY tenant_isolation_usuarios ON public.usuarios
-  FOR ALL TO authenticated
-  USING (razon_social_id = public.app_current_tenant() OR id = auth.uid())
-  WITH CHECK (razon_social_id = public.app_current_tenant());
+  -- permisos_usuarios: no tiene razon_social_id; se aisla por el usuario
+  -- dueno, que a su vez pertenece a la empresa del caller.
+  IF to_regclass('public.permisos_usuarios') IS NOT NULL THEN
+    ALTER TABLE public.permisos_usuarios ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS tenant_isolation_permisos_usuarios ON public.permisos_usuarios;
+    CREATE POLICY tenant_isolation_permisos_usuarios ON public.permisos_usuarios
+      FOR ALL TO authenticated
+      USING (
+        usuario_id IN (
+          SELECT id FROM public.usuarios
+          WHERE razon_social_id = public.app_current_tenant() OR id = auth.uid()
+        )
+      )
+      WITH CHECK (
+        usuario_id IN (
+          SELECT id FROM public.usuarios
+          WHERE razon_social_id = public.app_current_tenant()
+        )
+      );
+    RAISE NOTICE 'RLS aplicado: permisos_usuarios';
+  END IF;
 
--- permisos_usuarios: no tiene razon_social_id; se aisla por el usuario dueno,
--- que a su vez pertenece a la empresa del caller.
-ALTER TABLE public.permisos_usuarios ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation_permisos_usuarios ON public.permisos_usuarios;
-CREATE POLICY tenant_isolation_permisos_usuarios ON public.permisos_usuarios
-  FOR ALL TO authenticated
-  USING (
-    usuario_id IN (
-      SELECT id FROM public.usuarios
-      WHERE razon_social_id = public.app_current_tenant() OR id = auth.uid()
-    )
-  )
-  WITH CHECK (
-    usuario_id IN (
-      SELECT id FROM public.usuarios
-      WHERE razon_social_id = public.app_current_tenant()
-    )
-  );
-
--- modulos: catalogo global compartido por todas las empresas. Solo lectura
--- para usuarios autenticados; la escritura queda para admins via service role.
-ALTER TABLE public.modulos ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS modulos_read_all ON public.modulos;
-CREATE POLICY modulos_read_all ON public.modulos
-  FOR SELECT TO authenticated
-  USING (true);
+  -- modulos: catalogo global compartido por todas las empresas. Solo lectura
+  -- para autenticados; la escritura queda para admins via service role.
+  IF to_regclass('public.modulos') IS NOT NULL THEN
+    ALTER TABLE public.modulos ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS modulos_read_all ON public.modulos;
+    CREATE POLICY modulos_read_all ON public.modulos
+      FOR SELECT TO authenticated
+      USING (true);
+    RAISE NOTICE 'RLS aplicado: modulos (solo lectura)';
+  END IF;
+END $$;
 
 -- -------------------------------------------------------------------------
 -- 4. Verificacion posterior (ejecutar aparte para confirmar)
