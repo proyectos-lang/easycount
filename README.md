@@ -21,7 +21,7 @@ Sistema ERP / Punto de Venta **multi-empresa** para pequeños y medianos negocio
 - **Permisos granulares**: 23 módulos definidos en [lib/constants/modulos.ts](lib/constants/modulos.ts) (fuente única de verdad, espejo de la tabla `modulos`). La tabla `permisos_usuarios` define qué módulo puede ver cada usuario; [components/route-guard.tsx](components/route-guard.tsx) protege las rutas.
 - **Capa de servicios**: toda la lógica de datos vive en [lib/services/](lib/services/) (un archivo por dominio: ventas, compras, inventario, caja-chica, gastos, etc.). Los componentes de página son clientes que consumen estos servicios.
 - **Modo demo sin Supabase**: si faltan las variables de entorno, los servicios caen a `localStorage` para poder probar la UI sin backend.
-- **Server Actions / API**: creación de usuarios con la service-role key ([app/(dashboard)/configuracion/usuarios/actions.ts](app/(dashboard)/configuracion/usuarios/actions.ts)) y subida de imágenes a Supabase Storage ([app/api/upload-imagen/route.ts](app/api/upload-imagen/route.ts)).
+- **Server Actions / API**: creación de usuarios con la service-role key ([app/(dashboard)/configuracion/usuarios/actions.ts](app/(dashboard)/configuracion/usuarios/actions.ts)), subida de imágenes a Supabase Storage ([app/api/upload-imagen/route.ts](app/api/upload-imagen/route.ts)) y extracción de facturas con Gemini ([app/api/procesar-factura/route.ts](app/api/procesar-factura/route.ts)) — la API key de Gemini vive solo en el servidor.
 
 ## Módulos funcionales
 
@@ -68,7 +68,7 @@ Variables de entorno (ver [.env.example](.env.example)):
 | `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto Supabase |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Llave pública (anon) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Solo server-side: crear usuarios desde Configuración |
-| `NEXT_PUBLIC_GEMINI_API_KEY` | Recepción de facturas con IA |
+| `GEMINI_API_KEY` | Solo server-side: recepción de facturas con IA (`/api/procesar-factura`) |
 
 Sin variables configuradas la app corre en **modo demo** con `localStorage`.
 
@@ -78,5 +78,3 @@ Sin variables configuradas la app corre en **modo demo** con `localStorage`.
 2. En [vercel.com](https://vercel.com) → **Add New Project** → importar el repo. Vercel detecta Next.js automáticamente (no requiere configuración extra; usa pnpm por el `pnpm-lock.yaml`).
 3. Agregar las 4 variables de entorno en **Settings → Environment Variables** (Production y Preview).
 4. Deploy. Cada `git push` a `main` genera un deploy de producción; los branches generan previews.
-
-Nota: [next.config.mjs](next.config.mjs) tiene `rewrites` que proxean `/edce/*` hacia otra app de Vercel, e `ignoreBuildErrors: true` para TypeScript (el build no falla por errores de tipos).

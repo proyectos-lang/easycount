@@ -275,7 +275,9 @@ async function getEstadoResultadosCalculado(supabase: ReturnType<typeof createCl
     }
 
     ;(gastosData || []).forEach(g => {
-      const cat = g.conceptos_gastos?.categoria_macro || 'Otros'
+      // El join puede venir tipado como objeto o arreglo segun el parser.
+      const concepto = Array.isArray(g.conceptos_gastos) ? g.conceptos_gastos[0] : g.conceptos_gastos
+      const cat = (concepto as { categoria_macro?: string } | null)?.categoria_macro || 'Otros'
       gastosPorCategoria[cat] = (gastosPorCategoria[cat] || 0) + (g.monto || 0)
     })
 

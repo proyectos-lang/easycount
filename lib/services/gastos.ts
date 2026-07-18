@@ -631,7 +631,9 @@ export async function getCuentasPorPagar(): Promise<{
     result.error &&
     /proveedor|relation .*proveedores.* does not exist/i.test(result.error.message)
   ) {
-    result = await supabase
+    // El retry no trae `proveedores`, por eso el cast: RowShape ya trata
+    // ese campo como opcional al mapear.
+    result = (await supabase
       .from('gastos')
       .select(`
         id, concepto_id, fecha_gasto, fecha_vencimiento, monto, monto_pagado,
@@ -639,7 +641,7 @@ export async function getCuentasPorPagar(): Promise<{
         conceptos_gastos:concepto_id (nombre, categoria_macro)
       `)
       .neq('estado_pago', 'Pagado')
-      .order('fecha_vencimiento', { ascending: true, nullsFirst: false })
+      .order('fecha_vencimiento', { ascending: true, nullsFirst: false })) as unknown as typeof result
   }
 
   if (result.error) {

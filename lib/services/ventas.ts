@@ -314,7 +314,7 @@ export async function crearVenta(
     const ventas: VentaEncabezado[] = savedEnc ? JSON.parse(savedEnc) : []
     const allDetalles: VentaDetalle[] = savedDet ? JSON.parse(savedDet) : []
     const productos: { id: number; stock_total: number }[] = savedProd ? JSON.parse(savedProd) : []
-    const transacciones: { id?: number; producto_id: number; tipo: string; cantidad: number; costo_unitario: number; referencia_tipo: string; referencia_id: number; created_at: string }[] = savedTrans ? JSON.parse(savedTrans) : []
+    const transacciones: { id?: number; producto_id: number; almacen_id: number; localizacion_id: number; tipo_movimiento: string; cantidad: number; costo_o_precio_unitario: number; referencia_id: number; fecha: string }[] = savedTrans ? JSON.parse(savedTrans) : []
     
     const newVenta: VentaEncabezado = { 
       ...data.encabezado, 
@@ -824,11 +824,27 @@ export async function getCuentasPorCobrar(): Promise<{ data: CuentaPorCobrar[]; 
       estado_pago,
       clientes (nombre)
     `
-    let { data: ventasData, error: ventasError } = await supabase
+    // El select se construye dinamicamente, asi que supabase-js no puede
+    // inferir el tipo de la fila; lo declaramos manualmente.
+    type CxcRow = {
+      id: number
+      numero_factura: string
+      cliente_id: number
+      fecha_venta: string
+      total_venta: number
+      valorpago?: number | null
+      estado_pago: string
+      clientes: { nombre: string } | null
+    }
+
+    const primary = await supabase
       .from('ventas_encabezado')
       .select(baseSelect.replace('estado_pago', 'valorpago,\n      estado_pago'))
       .neq('estado_pago', 'Pagado')
       .order('fecha_venta', { ascending: false })
+
+    let ventasData = primary.data as unknown as CxcRow[] | null
+    let ventasError = primary.error
 
     // Fallback: columna `valorpago` aun no existe en la DB.
     if (ventasError && /valorpago/i.test(ventasError.message || '')) {
@@ -837,7 +853,7 @@ export async function getCuentasPorCobrar(): Promise<{ data: CuentaPorCobrar[]; 
         .select(baseSelect)
         .neq('estado_pago', 'Pagado')
         .order('fecha_venta', { ascending: false })
-      ventasData = retry.data as typeof ventasData
+      ventasData = retry.data as unknown as CxcRow[] | null
       ventasError = retry.error
     }
 
@@ -1393,7 +1409,9 @@ export async function getVentasDashboard(anio?: number, mes?: number): Promise<{
     const clienteMap: Record<number, { nombre: string; ventas: number; facturas: number; ganancia: number }> = {}
     ;(ventasData || []).forEach(v => {
       if (!clienteMap[v.cliente_id]) {
-        clienteMap[v.cliente_id] = { nombre: v.clientes?.nombre || 'Desconocido', ventas: 0, facturas: 0, ganancia: 0 }
+        // El join puede venir tipado como objeto o arreglo segun el parser.
+        const cliente = Array.isArray(v.clientes) ? v.clientes[0] : v.clientes
+        clienteMap[v.cliente_id] = { nombre: cliente?.nombre || 'Desconocido', ventas: 0, facturas: 0, ganancia: 0 }
       }
       clienteMap[v.cliente_id].ventas += v.total_venta
       clienteMap[v.cliente_id].facturas += 1
@@ -1501,6 +1519,7 @@ export async function getRazonSocialForPdf(): Promise<{
   direccion: string
   telefono: string
   correo: string
+  logo_url?: string | null
 } | null> {
   if (!isSupabaseConfigured()) {
     const saved = localStorage.getItem('razon_social')

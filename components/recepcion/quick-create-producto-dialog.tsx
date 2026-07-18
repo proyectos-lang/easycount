@@ -289,11 +289,11 @@ export function QuickCreateProductoDialog({
     const enriched: Producto = {
       ...data,
       marca_nombre:
-        marcas.find((m) => m.id === marcaId)?.nombre ?? data.marca_nombre ?? null,
+        marcas.find((m) => m.id === marcaId)?.nombre ?? data.marca_nombre ?? undefined,
       categoria_nombre:
         categorias.find((c) => c.id === categoriaId)?.nombre ??
         data.categoria_nombre ??
-        null,
+        undefined,
       subcategoria_nombre:
         subcategorias.find((s) => s.id === subcategoriaId)?.nombre ??
         data.subcategoria_nombre ??

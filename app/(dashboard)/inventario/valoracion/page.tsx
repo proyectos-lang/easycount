@@ -236,7 +236,9 @@ export default function ValoracionPage() {
       'Precio Venta': 0,
       'Valor Costo': totales.valorCosto,
       'Valor Comercial': totales.valorComercial,
-      'Margen Potencial': totales.margenPotencial
+      'Margen Potencial': totales.margenPotencial,
+      'Dias Sin Venta': '',
+      'Ultima Venta': ''
     })
 
     const ws = XLSX.utils.json_to_sheet(data)

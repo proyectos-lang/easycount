@@ -214,8 +214,10 @@ export async function getValoracionInventarioExtendida(): Promise<{ data: Produc
       
       transaccionesProducto.forEach(t => {
           if (!stockByAlmacen[t.almacen_id]) {
+            // El join puede venir tipado como objeto o arreglo segun el parser.
+            const almacen = Array.isArray(t.almacenes) ? t.almacenes[0] : t.almacenes
             stockByAlmacen[t.almacen_id] = {
-              nombre: (t.almacenes as { nombre: string })?.nombre || `Almacen ${t.almacen_id}`,
+              nombre: (almacen as { nombre: string } | null)?.nombre || `Almacen ${t.almacen_id}`,
               stock: 0
             }
           }
@@ -322,8 +324,8 @@ export async function getValoracionPorAlmacen(almacenId: number): Promise<{ data
           valor_comercial: stockAlmacen * (p.precio_venta_sugerido || 0)
         }]
       }
-    }).filter((p): p is ProductoValoracionExtendida => p !== null)
-    
+    }).filter((p: ProductoValoracionExtendida | null): p is ProductoValoracionExtendida => p !== null)
+
     return { data: valoracion, error: null }
   }
 
@@ -808,8 +810,8 @@ export async function procesarTrasladosMultiples(
       cantidad: number
       costo_o_precio_unitario: number
       referencia_id: number
-      razon_social_id: number
-      usuario: string
+      razon_social_id: number | null
+      usuario: string | null
     }[] = []
     
     lineas.forEach((linea, index) => {

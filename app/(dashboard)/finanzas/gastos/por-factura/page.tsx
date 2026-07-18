@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { GoogleGenerativeAI } from "@google/generative-ai"
 import { 
   Upload, 
   Receipt, 
@@ -117,55 +116,21 @@ export default function RegistrarGastoPorFacturaPage() {
     setProcessingIA(true)
     
     try {
-      const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || "")
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
-      
-      const prompt = `Eres un experto en contabilidad. Analiza esta imagen de factura o recibo de gasto y extrae la informacion.
-
-INSTRUCCIONES ESTRICTAS:
-1. Tu respuesta debe ser UNICAMENTE un JSON valido
-2. NO incluyas markdown, comillas triples, ni texto adicional
-3. NO expliques nada, solo devuelve el JSON puro
-
-FORMATO DE RESPUESTA REQUERIDO:
-{"fecha": "YYYY-MM-DD", "monto_total": number, "items": ["item1", "item2", ...]}
-
-REGLAS DE EXTRACCION:
-- fecha: Fecha del documento en formato YYYY-MM-DD. Si no es clara, usa la fecha de hoy.
-- monto_total: El total a pagar como numero decimal (sin simbolos de moneda)
-- items: Lista de todos los productos o servicios listados en la factura como strings
-- Si no puedes leer un valor, haz tu mejor estimacion`
-
-      // Convert image to base64
+      // La extraccion con Gemini corre en el servidor (la API key no se expone)
       const base64Data = iaFilePreview.split(',')[1]
       const mimeType = iaFile.type || 'image/jpeg'
 
-      const result = await model.generateContent([
-        prompt,
-        {
-          inlineData: {
-            data: base64Data,
-            mimeType: mimeType
-          }
-        }
-      ])
+      const res = await fetch("/api/procesar-factura", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo: "gasto", base64: base64Data, mimeType }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        throw new Error(json.error || "Error procesando la factura")
+      }
 
-      const responseText = result.response.text()
-      
-      // Clean response - remove markdown if present
-      let cleanedResponse = responseText.trim()
-      if (cleanedResponse.startsWith('```json')) {
-        cleanedResponse = cleanedResponse.slice(7)
-      }
-      if (cleanedResponse.startsWith('```')) {
-        cleanedResponse = cleanedResponse.slice(3)
-      }
-      if (cleanedResponse.endsWith('```')) {
-        cleanedResponse = cleanedResponse.slice(0, -3)
-      }
-      cleanedResponse = cleanedResponse.trim()
-
-      const extractedData = JSON.parse(cleanedResponse)
+      const extractedData = json.data
       
       setIaExtractedData(extractedData)
       setIaFecha(extractedData.fecha || new Date().toISOString().split('T')[0])

@@ -190,7 +190,7 @@ export default function CierreDiarioPage() {
       let y = 18
 
       // Cabecera empresarial (si existe razon social cargada)
-      const { data: rs } = await getRazonSocialForPdf().catch(() => ({ data: null }))
+      const rs = await getRazonSocialForPdf().catch(() => null)
       pdf.setFont("helvetica", "bold")
       pdf.setFontSize(16)
       pdf.text("CIERRE DIARIO", pageWidth / 2, y, { align: "center" })
@@ -198,8 +198,9 @@ export default function CierreDiarioPage() {
 
       pdf.setFont("helvetica", "normal")
       pdf.setFontSize(10)
-      if (rs?.nombre) {
-        pdf.text(rs.nombre, pageWidth / 2, y, { align: "center" })
+      const nombreEmpresa = rs?.nombre_comercial || rs?.nombre_empresa
+      if (nombreEmpresa) {
+        pdf.text(nombreEmpresa, pageWidth / 2, y, { align: "center" })
         y += 5
       }
       pdf.text(formatFechaLarga(fecha), pageWidth / 2, y, { align: "center" })

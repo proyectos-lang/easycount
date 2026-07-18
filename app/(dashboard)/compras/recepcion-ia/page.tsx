@@ -62,7 +62,6 @@ import {
 } from "@/lib/services/compras"
 import { type Proveedor, type Producto, getProveedores, getProductos } from "@/lib/services/catalogos"
 import { type Almacen, type Localizacion, getAlmacenes, getLocalizaciones } from "@/lib/services/catalogos"
-import { GoogleGenerativeAI } from "@google/generative-ai"
 import { QuickCreateProductoDialog } from "@/components/recepcion/quick-create-producto-dialog"
 
 // Interface for AI extracted data
@@ -238,48 +237,18 @@ export default function RecepcionIAPage() {
         reader.readAsDataURL(uploadedFile)
       })
       
-      // Initialize Gemini 2.5 Flash
-      const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || "")
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" })
-      
-      const prompt = `Eres un experto en contabilidad y procesamiento de facturas. Analiza esta imagen de factura de proveedor y extrae TODOS los productos/items listados.
+      // La extraccion con Gemini corre en el servidor (la API key no se expone)
+      const res = await fetch("/api/procesar-factura", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo: "compra", base64, mimeType: uploadedFile.type }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        throw new Error(json.error || "Error procesando la factura")
+      }
 
-INSTRUCCIONES ESTRICTAS:
-1. Tu respuesta debe ser UNICAMENTE un JSON valido
-2. NO incluyas markdown, comillas triples, ni texto adicional
-3. NO expliques nada, solo devuelve el JSON puro
-
-FORMATO DE RESPUESTA REQUERIDO:
-[
-  {"nombre_extraido": "nombre exacto del producto como aparece", "cantidad": numero, "costo_unitario_original": numero}
-]
-
-REGLAS DE EXTRACCION:
-- nombre_extraido: El nombre del producto TAL COMO aparece en la factura
-- cantidad: Numero entero de unidades (si no es claro, usa 1)
-- costo_unitario_original: Precio unitario como numero decimal (sin simbolos de moneda)
-- Si hay codigos de producto, incluyelos en el nombre
-- Si no puedes leer un valor numerico claramente, usa 0
-- Extrae TODOS los items de la factura, no omitas ninguno`
-
-      const result = await model.generateContent([
-        prompt,
-        {
-          inlineData: {
-            mimeType: uploadedFile.type,
-            data: base64
-          }
-        }
-      ])
-      
-      const response = await result.response
-      let text = response.text()
-      
-      // Clean the response - remove markdown code blocks if present
-      text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-      
-      // Parse JSON
-      const extractedData: ExtractedItem[] = JSON.parse(text)
+      const extractedData: ExtractedItem[] = json.data
       
       if (!Array.isArray(extractedData) || extractedData.length === 0) {
         toast({ title: "Sin resultados", description: "No se encontraron productos en la factura", variant: "destructive" })
