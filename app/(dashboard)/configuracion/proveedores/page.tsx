@@ -52,7 +52,7 @@ export default function ProveedoresConfigPage() {
   useEffect(() => {
     if (!ready) return
     if (razonSocialId == null) {
-      console.log('[v0][Proveedores] usuario sin razon_social_id')
+      console.log('[Proveedores] usuario sin razon_social_id')
       setProveedores([])
       setLoading(false)
       return
@@ -66,13 +66,13 @@ export default function ProveedoresConfigPage() {
     try {
       const { data, error } = await getProveedores()
       if (error) {
-        console.log('[v0][Proveedores] error:', error)
+        console.log('[Proveedores] error:', error)
         toast({ title: "No se pudieron cargar los datos", description: error, variant: "destructive" })
       } else {
         setProveedores(data)
       }
     } catch (err: any) {
-      console.log('[v0][Proveedores] excepcion:', err)
+      console.log('[Proveedores] excepcion:', err)
       toast({ title: "No se pudieron cargar los datos", description: err?.message || "Error de conexion", variant: "destructive" })
     } finally {
       setLoading(false)

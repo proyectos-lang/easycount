@@ -593,7 +593,7 @@ export async function procesarIngresoManual(data: IngresoManualData): Promise<{ 
   try {
     const stamp = await getTenantStamp(supabase)
     if (!isValidStamp(stamp)) {
-      console.log('[v0][procesarIngresoManual] Stamp invalido:', stamp)
+      console.log('[procesarIngresoManual] Stamp invalido:', stamp)
       return { success: false, error: SESION_INVALIDA_ERROR }
     }
 
@@ -687,7 +687,7 @@ export async function procesarTraslado(data: TrasladoData): Promise<{ success: b
   try {
     const stamp = await getTenantStamp(supabase)
     if (!isValidStamp(stamp)) {
-      console.log('[v0][procesarTraslado] Stamp invalido:', stamp)
+      console.log('[procesarTraslado] Stamp invalido:', stamp)
       return { success: false, error: SESION_INVALIDA_ERROR }
     }
 
@@ -799,7 +799,7 @@ export async function procesarTrasladosMultiples(
   try {
     const stamp = await getTenantStamp(supabase)
     if (!isValidStamp(stamp)) {
-      console.log('[v0][procesarTrasladosMultiples] Stamp invalido:', stamp)
+      console.log('[procesarTrasladosMultiples] Stamp invalido:', stamp)
       return { success: false, error: SESION_INVALIDA_ERROR, procesados: 0 }
     }
 

@@ -46,7 +46,7 @@ export async function getTenantStamp(
       .single()
 
     if (error || !data) {
-      console.log("[v0][tenant-stamp] No se pudo leer usuarios:", error)
+      console.log("[tenant-stamp] No se pudo leer usuarios:", error)
       return { razon_social_id: null, usuario: null }
     }
 
@@ -55,7 +55,7 @@ export async function getTenantStamp(
       usuario: data.nombre ?? null,
     }
   } catch (err) {
-    console.log("[v0][tenant-stamp] Excepcion:", err)
+    console.log("[tenant-stamp] Excepcion:", err)
     return { razon_social_id: null, usuario: null }
   }
 }

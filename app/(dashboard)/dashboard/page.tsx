@@ -74,11 +74,11 @@ export default function DashboardPage() {
   const loadData = React.useCallback(async () => {
     // Gate: no lanzar consultas hasta que haya sesion y razon_social_id
     if (!ready) {
-      console.log('[v0][Dashboard] esperando sesion...')
+      console.log('[Dashboard] esperando sesion...')
       return
     }
     if (razonSocialId == null) {
-      console.log('[v0][Dashboard] usuario sin razon_social_id; mostrando ceros')
+      console.log('[Dashboard] usuario sin razon_social_id; mostrando ceros')
       setMetrics({
         valorInventario: 0,
         cuentasPorCobrar: 0,
@@ -118,7 +118,7 @@ export default function DashboardPage() {
         metricsRes.error || ventasRes.error || topRes.error ||
         stockRes.error || comprasRes.error || deudoresRes.error
       if (firstError) {
-        console.log('[v0][Dashboard] advertencia de carga parcial:', firstError)
+        console.log('[Dashboard] advertencia de carga parcial:', firstError)
         toast({
           title: "Dashboard con datos parciales",
           description: "No se pudieron cargar todos los datos. Revisa la consola.",
@@ -126,7 +126,7 @@ export default function DashboardPage() {
         })
       }
     } catch (error: any) {
-      console.log('[v0][Dashboard] excepcion inesperada:', error)
+      console.log('[Dashboard] excepcion inesperada:', error)
       toast({
         title: "No se pudieron cargar los datos",
         description: error?.message || "Error de conexion",

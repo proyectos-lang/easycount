@@ -62,7 +62,7 @@ export default function ClientesConfigPage() {
   useEffect(() => {
     if (!ready) return
     if (razonSocialId == null) {
-      console.log('[v0][Clientes] usuario sin razon_social_id')
+      console.log('[Clientes] usuario sin razon_social_id')
       setClientes([])
       setLoading(false)
       return
@@ -76,13 +76,13 @@ export default function ClientesConfigPage() {
     try {
       const { data, error } = await getClientes()
       if (error) {
-        console.log('[v0][Clientes] error:', error)
+        console.log('[Clientes] error:', error)
         toast({ title: "No se pudieron cargar los datos", description: error, variant: "destructive" })
       } else {
         setClientes(data)
       }
     } catch (err: any) {
-      console.log('[v0][Clientes] excepcion:', err)
+      console.log('[Clientes] excepcion:', err)
       toast({ title: "No se pudieron cargar los datos", description: err?.message || "Error de conexion", variant: "destructive" })
     } finally {
       setLoading(false)

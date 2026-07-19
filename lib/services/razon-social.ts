@@ -128,7 +128,7 @@ export async function saveRazonSocial(
     // Identidad del usuario autenticado (necesaria tanto para crear como para updatear)
     const { data: { user: authUser } } = await supabase.auth.getUser()
     if (!authUser) {
-      console.log('[v0][saveRazonSocial] Sin sesion')
+      console.log('[saveRazonSocial] Sin sesion')
       return { success: false, error: SESION_INVALIDA_ERROR }
     }
 
@@ -141,7 +141,7 @@ export async function saveRazonSocial(
         .single()
 
       if (error || !inserted) {
-        console.log('[v0][saveRazonSocial] error insertando razon_social:', error)
+        console.log('[saveRazonSocial] error insertando razon_social:', error)
         return { success: false, error: error?.message || 'No se pudo crear la razon social.' }
       }
 
@@ -152,7 +152,7 @@ export async function saveRazonSocial(
         .eq('id', authUser.id)
 
       if (linkErr) {
-        console.log('[v0][saveRazonSocial] error enlazando usuario a razon_social:', linkErr)
+        console.log('[saveRazonSocial] error enlazando usuario a razon_social:', linkErr)
         return {
           success: false,
           error: 'Se creo la razon social pero no se pudo enlazar al usuario. Contacta al administrador.',
@@ -164,7 +164,7 @@ export async function saveRazonSocial(
       // Update: solo permitido sobre la razon_social del propio tenant
       const razonSocialId = await getUserRazonSocialId(supabase)
       if (razonSocialId == null) {
-        console.log('[v0][saveRazonSocial] usuario sin razon_social_id al intentar update')
+        console.log('[saveRazonSocial] usuario sin razon_social_id al intentar update')
         return { success: false, error: SESION_INVALIDA_ERROR }
       }
 
@@ -254,7 +254,7 @@ export async function uploadLogo(
       })
 
     if (uploadError) {
-      console.log('[v0][uploadLogo] upload error:', uploadError)
+      console.log('[uploadLogo] upload error:', uploadError)
       const msg = uploadError.message || ''
       if (msg.toLowerCase().includes('bucket') && msg.toLowerCase().includes('not found')) {
         return {
@@ -281,13 +281,13 @@ export async function uploadLogo(
     const { ok, error: updateErrMsg } = await persistLogoUrlAction(urlConBuster)
 
     if (!ok) {
-      console.log('[v0][uploadLogo] persist error:', updateErrMsg)
+      console.log('[uploadLogo] persist error:', updateErrMsg)
       return { url: null, error: updateErrMsg || 'No se pudo guardar la URL del logo.' }
     }
 
     return { url: urlConBuster, error: null }
   } catch (err: any) {
-    console.log('[v0][uploadLogo] excepcion:', err)
+    console.log('[uploadLogo] excepcion:', err)
     return { url: null, error: err?.message || 'Error de conexion' }
   }
 }
@@ -308,7 +308,7 @@ export async function removeLogo(): Promise<{ success: boolean; error: string | 
     }
     return { success: true, error: null }
   } catch (err: any) {
-    console.log('[v0][removeLogo] excepcion:', err)
+    console.log('[removeLogo] excepcion:', err)
     return { success: false, error: err?.message || 'Error de conexion' }
   }
 }

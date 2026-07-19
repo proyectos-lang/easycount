@@ -112,7 +112,7 @@ export async function getProductos(): Promise<{ data: Producto[]; error: string 
       )
     ) {
       console.log(
-        '[v0][catalogos] subcategorias no disponibles, fallback sin join'
+        '[catalogos] subcategorias no disponibles, fallback sin join'
       )
       result = await supabase
         .from('productos')
@@ -186,7 +186,7 @@ export async function saveProducto(
     if (isNew) {
       const stamp = await getTenantStamp(supabase)
       if (!isValidStamp(stamp)) {
-        console.log('[v0][saveProducto] Stamp invalido:', stamp)
+        console.log('[saveProducto] Stamp invalido:', stamp)
         return { data: null, error: SESION_INVALIDA_ERROR }
       }
 
@@ -309,7 +309,7 @@ export async function createMarca(nombre: string): Promise<{ data: Marca | null;
   try {
     const stamp = await getTenantStamp(supabase)
     if (!isValidStamp(stamp)) {
-      console.log('[v0][createMarca] Stamp invalido:', stamp)
+      console.log('[createMarca] Stamp invalido:', stamp)
       return { data: null, error: SESION_INVALIDA_ERROR }
     }
 
@@ -368,7 +368,7 @@ export async function createCategoria(nombre: string): Promise<{ data: Categoria
   try {
     const stamp = await getTenantStamp(supabase)
     if (!isValidStamp(stamp)) {
-      console.log('[v0][createCategoria] Stamp invalido:', stamp)
+      console.log('[createCategoria] Stamp invalido:', stamp)
       return { data: null, error: SESION_INVALIDA_ERROR }
     }
 
@@ -426,7 +426,7 @@ export async function getSubcategorias(
     if (error) {
       // Migracion 015 pendiente: degradamos silenciosamente.
       if (/relation.*does not exist/i.test(error.message)) {
-        console.log('[v0][subcategorias] tabla no existe, devolviendo vacio')
+        console.log('[subcategorias] tabla no existe, devolviendo vacio')
         return { data: [], error: null }
       }
       return { data: [], error: error.message }
@@ -463,7 +463,7 @@ export async function createSubcategoria(
   try {
     const stamp = await getTenantStamp(supabase)
     if (!isValidStamp(stamp)) {
-      console.log('[v0][createSubcategoria] Stamp invalido:', stamp)
+      console.log('[createSubcategoria] Stamp invalido:', stamp)
       return { data: null, error: SESION_INVALIDA_ERROR }
     }
 
@@ -608,7 +608,7 @@ export async function saveAlmacen(
     if (isNew) {
       const stamp = await getTenantStamp(supabase)
       if (!isValidStamp(stamp)) {
-        console.log('[v0][saveAlmacen] Stamp invalido:', stamp)
+        console.log('[saveAlmacen] Stamp invalido:', stamp)
         return { data: null, error: SESION_INVALIDA_ERROR }
       }
 
@@ -722,7 +722,7 @@ export async function saveLocalizacion(
     if (isNew) {
       const stamp = await getTenantStamp(supabase)
       if (!isValidStamp(stamp)) {
-        console.log('[v0][saveLocalizacion] Stamp invalido:', stamp)
+        console.log('[saveLocalizacion] Stamp invalido:', stamp)
         return { data: null, error: SESION_INVALIDA_ERROR }
       }
 
@@ -854,7 +854,7 @@ export async function saveCliente(
     if (isNew) {
       const stamp = await getTenantStamp(supabase)
       if (!isValidStamp(stamp)) {
-        console.log('[v0][saveCliente] Stamp invalido:', stamp)
+        console.log('[saveCliente] Stamp invalido:', stamp)
         return { data: null, error: SESION_INVALIDA_ERROR }
       }
 
@@ -1005,7 +1005,7 @@ export async function saveProveedor(
     if (isNew) {
       const stamp = await getTenantStamp(supabase)
       if (!isValidStamp(stamp)) {
-        console.log('[v0][saveProveedor] Stamp invalido:', stamp)
+        console.log('[saveProveedor] Stamp invalido:', stamp)
         return { data: null, error: SESION_INVALIDA_ERROR }
       }
 

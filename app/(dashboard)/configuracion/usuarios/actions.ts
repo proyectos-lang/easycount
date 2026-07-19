@@ -81,7 +81,7 @@ export async function createUserAction(input: {
   })
 
   if (createErr || !created?.user) {
-    console.log("[v0][createUserAction] admin.createUser error:", createErr)
+    console.log("[createUserAction] admin.createUser error:", createErr)
     const msg = createErr?.message?.toLowerCase() || ""
     if (msg.includes("already") || msg.includes("exists") || msg.includes("duplicate")) {
       return { error: "Ya existe un usuario con ese correo." }
@@ -101,7 +101,7 @@ export async function createUserAction(input: {
   })
 
   if (insertErr) {
-    console.log("[v0][createUserAction] insert usuarios error:", insertErr)
+    console.log("[createUserAction] insert usuarios error:", insertErr)
     // Rollback: eliminar el auth user para no dejar huerfanos
     await admin.auth.admin.deleteUser(newAuthId).catch(() => {})
     return { error: insertErr.message || "No se pudo crear el perfil del usuario." }
@@ -151,7 +151,7 @@ export async function setPermisoAction(input: {
     )
 
   if (error) {
-    console.log("[v0][setPermisoAction] upsert error:", error)
+    console.log("[setPermisoAction] upsert error:", error)
     return { error: error.message || "No se pudo guardar el permiso." }
   }
 
@@ -191,7 +191,7 @@ export async function toggleUsuarioActivoAction(input: {
     .eq("id", input.usuarioId)
 
   if (error) {
-    console.log("[v0][toggleUsuarioActivoAction] update error:", error)
+    console.log("[toggleUsuarioActivoAction] update error:", error)
     return { error: error.message || "No se pudo actualizar el estado." }
   }
 
@@ -235,7 +235,7 @@ export async function resetUserPasswordAction(input: {
   })
 
   if (updateErr) {
-    console.log("[v0][resetUserPasswordAction] updateUserById error:", updateErr)
+    console.log("[resetUserPasswordAction] updateUserById error:", updateErr)
     return { error: updateErr.message || "No se pudo actualizar la contrasena." }
   }
 
@@ -327,7 +327,7 @@ export async function listUsuariosAction(): Promise<{
   ])
 
   if (uRes.error) {
-    console.log("[v0][listUsuariosAction] usuarios error:", uRes.error)
+    console.log("[listUsuariosAction] usuarios error:", uRes.error)
     return {
       usuarios: [],
       modulos: [],
@@ -336,7 +336,7 @@ export async function listUsuariosAction(): Promise<{
   }
 
   if (mRes.error) {
-    console.log("[v0][listUsuariosAction] modulos error:", mRes.error)
+    console.log("[listUsuariosAction] modulos error:", mRes.error)
   }
 
   return {
@@ -375,7 +375,7 @@ export async function listPermisosAction(
     .eq("usuario_id", usuarioId)
 
   if (error) {
-    console.log("[v0][listPermisosAction] error:", error)
+    console.log("[listPermisosAction] error:", error)
     return { permisos: {}, error: error.message || "No se pudieron cargar los permisos." }
   }
 

@@ -194,7 +194,7 @@ export async function createCompra(
   try {
     const stamp = await getTenantStamp(supabase)
     if (!isValidStamp(stamp)) {
-      console.log('[v0][createCompra] Stamp invalido:', stamp)
+      console.log('[createCompra] Stamp invalido:', stamp)
       return { data: null, error: SESION_INVALIDA_ERROR }
     }
 
@@ -403,7 +403,7 @@ export async function procesarRecepcion(data: RecepcionData): Promise<{ success:
   try {
     const stamp = await getTenantStamp(supabase)
     if (!isValidStamp(stamp)) {
-      console.log('[v0][procesarRecepcion] Stamp invalido:', stamp)
+      console.log('[procesarRecepcion] Stamp invalido:', stamp)
       return { success: false, error: SESION_INVALIDA_ERROR }
     }
 

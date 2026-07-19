@@ -223,7 +223,7 @@ export async function getGastos(): Promise<{ data: Gasto[]; error: string | null
     result.error &&
     /proveedor|relation .*proveedores.* does not exist/i.test(result.error.message)
   ) {
-    console.log('[v0][gastos] fallback sin join proveedores')
+    console.log('[gastos] fallback sin join proveedores')
     result = await supabase
       .from('gastos')
       .select(`
@@ -300,7 +300,7 @@ export async function createGasto(input: {
 
   const stamp = await getTenantStamp(supabase)
   if (!isValidStamp(stamp)) {
-    console.log('[v0][createGasto] Stamp invalido:', stamp)
+    console.log('[createGasto] Stamp invalido:', stamp)
     return { data: null, error: SESION_INVALIDA_ERROR }
   }
 

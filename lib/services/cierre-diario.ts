@@ -636,7 +636,7 @@ export async function getCierreDiario(fechaISO: string): Promise<{
     if (error && isMissingRelation(error)) {
       featurePending = true
     } else if (error) {
-      console.log("[v0][cierre-diario] error pagos gasto efectivo:", error.message)
+      console.log("[cierre-diario] error pagos gasto efectivo:", error.message)
     } else {
       for (const m of data || []) {
         const monto = Math.abs(Number(m.monto || 0))
@@ -674,7 +674,7 @@ export async function getCierreDiario(fechaISO: string): Promise<{
     if (error && isMissingRelation(error)) {
       featurePending = true
     } else if (error) {
-      console.log("[v0][cierre-diario] error pagos gasto banco:", error.message)
+      console.log("[cierre-diario] error pagos gasto banco:", error.message)
     } else {
       for (const m of data || []) {
         const monto = Number(m.monto || 0)
@@ -715,7 +715,7 @@ export async function getCierreDiario(fechaISO: string): Promise<{
       .in("id", ids)
 
     if (gastosErr) {
-      console.log("[v0][cierre-diario] no se pudo enriquecer gastos:", gastosErr.message)
+      console.log("[cierre-diario] no se pudo enriquecer gastos:", gastosErr.message)
     } else {
       for (const g of gastosData || []) {
         const c = Array.isArray(g.conceptos_gastos) ? g.conceptos_gastos[0] : g.conceptos_gastos

@@ -124,7 +124,7 @@ export default function UsuariosPage() {
       const { usuarios: u, modulos: m, error } = await listUsuariosAction()
 
       if (error) {
-        console.log("[v0][Usuarios] error cargando:", error)
+        console.log("[Usuarios] error cargando:", error)
         toast({
           title: "No se pudieron cargar los usuarios",
           description: error,
@@ -136,7 +136,7 @@ export default function UsuariosPage() {
       setUsuarios(u as Usuario[])
       setModulos(m as Modulo[])
     } catch (err: any) {
-      console.log("[v0][Usuarios] excepcion:", err)
+      console.log("[Usuarios] excepcion:", err)
       toast({
         title: "Error",
         description: err?.message || "Error de conexion",
@@ -160,7 +160,7 @@ export default function UsuariosPage() {
         const { permisos, error } = await listPermisosAction(usuarioId)
 
         if (error) {
-          console.log("[v0][Usuarios] error cargando permisos:", error)
+          console.log("[Usuarios] error cargando permisos:", error)
           toast({
             title: "No se pudieron cargar los permisos",
             description: error,

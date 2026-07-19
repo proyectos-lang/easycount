@@ -67,7 +67,7 @@ export async function persistLogoUrlAction(
     .eq("id", ctx.razonSocialId)
 
   if (error) {
-    console.log("[v0][persistLogoUrlAction] error:", error)
+    console.log("[persistLogoUrlAction] error:", error)
     return { ok: false, error: error.message || "No se pudo guardar la URL del logo." }
   }
 
@@ -93,7 +93,7 @@ export async function removeLogoAction(): Promise<{ ok: boolean; error: string |
   const { error: removeErr } = await admin.storage.from(LOGO_BUCKET).remove(paths)
   if (removeErr) {
     // No abortamos: podemos aun limpiar la URL
-    console.log("[v0][removeLogoAction] storage warning:", removeErr)
+    console.log("[removeLogoAction] storage warning:", removeErr)
   }
 
   const { error: updateErr } = await admin
@@ -102,7 +102,7 @@ export async function removeLogoAction(): Promise<{ ok: boolean; error: string |
     .eq("id", ctx.razonSocialId)
 
   if (updateErr) {
-    console.log("[v0][removeLogoAction] update error:", updateErr)
+    console.log("[removeLogoAction] update error:", updateErr)
     return { ok: false, error: updateErr.message || "No se pudo limpiar la URL del logo." }
   }
 

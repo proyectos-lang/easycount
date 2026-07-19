@@ -125,11 +125,11 @@ export default function ProductosConfigPage() {
 
   useEffect(() => {
     if (!ready) {
-      console.log('[v0][Productos] esperando sesion...')
+      console.log('[Productos] esperando sesion...')
       return
     }
     if (razonSocialId == null) {
-      console.log('[v0][Productos] usuario sin razon_social_id')
+      console.log('[Productos] usuario sin razon_social_id')
       setProductos([])
       setLoading(false)
       return
@@ -148,7 +148,7 @@ export default function ProductosConfigPage() {
         getSubcategorias(),
       ])
       if (prodRes.error) {
-        console.log('[v0][Productos] error:', prodRes.error)
+        console.log('[Productos] error:', prodRes.error)
         toast({ title: "No se pudieron cargar los datos", description: prodRes.error, variant: "destructive" })
       } else {
         setProductos(prodRes.data)
@@ -157,7 +157,7 @@ export default function ProductosConfigPage() {
       if (!catRes.error) setCategorias(catRes.data)
       if (!subRes.error) setSubcategorias(subRes.data)
     } catch (err: any) {
-      console.log('[v0][Productos] excepcion:', err)
+      console.log('[Productos] excepcion:', err)
       toast({ title: "No se pudieron cargar los datos", description: err?.message || "Error de conexion", variant: "destructive" })
     } finally {
       setLoading(false)

@@ -181,14 +181,14 @@ export default function CajaChicaPage() {
     //    historial completo solo porque el refetch volvio null.
     const fresh = await refetch()
     const idActivo = fresh?.id ?? sesion?.id
-    console.log("[v0][caja-chica] reload idActivo:", idActivo, {
+    console.log("[caja-chica] reload idActivo:", idActivo, {
       fresh: fresh?.id,
       closure: sesion?.id,
     })
     if (idActivo) {
       setLoadingMovs(true)
       const { data, error } = await getMovimientosSesion(idActivo)
-      console.log("[v0][caja-chica] reload movimientos:", {
+      console.log("[caja-chica] reload movimientos:", {
         count: data.length,
         error,
       })
@@ -210,14 +210,14 @@ export default function CajaChicaPage() {
   useEffect(() => {
     if (!ready) return
     if (razonSocialId == null) return
-    console.log("[v0][caja-chica] initial load useEffect:", {
+    console.log("[caja-chica] initial load useEffect:", {
       sesionId: sesion?.id,
       razonSocialId,
     })
     if (sesion?.id) {
       setLoadingMovs(true)
       getMovimientosSesion(sesion.id).then(({ data, error }) => {
-        console.log("[v0][caja-chica] initial load result:", {
+        console.log("[caja-chica] initial load result:", {
           count: data.length,
           error,
         })

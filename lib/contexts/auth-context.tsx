@@ -46,17 +46,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .single()
 
         if (error) {
-          console.log("[v0] Error cargando perfil desde 'usuarios':", error)
+          console.log("Error cargando perfil desde 'usuarios':", error)
           return null
         }
 
         if (!perfil) {
-          console.log("[v0] No se encontro perfil en 'usuarios' para auth_user_id:", authUserId)
+          console.log("No se encontro perfil en 'usuarios' para auth_user_id:", authUserId)
           return null
         }
 
         if (perfil.activo === false) {
-          console.log("[v0] Usuario inactivo:", email)
+          console.log("Usuario inactivo:", email)
           return null
         }
 
@@ -66,7 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (!razonSocial) {
           console.log(
-            "[v0] Advertencia: perfil existe pero razon_social es null. Revisa que razon_social_id apunte a un registro valido en la tabla razon_social. perfil.razon_social_id =",
+            "Advertencia: perfil existe pero razon_social es null. Revisa que razon_social_id apunte a un registro valido en la tabla razon_social. perfil.razon_social_id =",
             perfil.razon_social_id
           )
         }
@@ -81,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .eq("puede_ver", true)
 
         if (permisosError) {
-          console.log("[v0] Error cargando permisos:", permisosError)
+          console.log("Error cargando permisos:", permisosError)
         }
 
         // Canonizamos cada nombre de permiso al nombre exacto del constants.
@@ -106,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           modulos_permitidos: modulosPermitidos,
         }
       } catch (err) {
-        console.log("[v0] Excepcion cargando perfil:", err)
+        console.log("Excepcion cargando perfil:", err)
         return null
       }
     },
@@ -140,7 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // autenticado" y el layout redirige a /login.
     const safetyTimer = setTimeout(() => {
       if (mounted) {
-        console.log("[v0] Safety timeout alcanzado; forzando loading=false")
+        console.log("Safety timeout alcanzado; forzando loading=false")
         setLoading(false)
       }
     }, 8000)
@@ -155,7 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (mounted) setUser(profile)
         }
       } catch (err) {
-        console.log("[v0] Error restaurando sesion:", err)
+        console.log("Error restaurando sesion:", err)
       } finally {
         if (mounted) setLoading(false)
       }
@@ -191,7 +191,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               const profile = await loadProfile(authUserId, authEmail)
               if (mounted) setUser(profile)
             } catch (err) {
-              console.log("[v0] Error en onAuthStateChange loadProfile:", err)
+              console.log("Error en onAuthStateChange loadProfile:", err)
             } finally {
               if (mounted) setLoading(false)
             }
@@ -234,7 +234,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         )
 
         if (error) {
-          console.log("[v0] Error signInWithPassword:", error)
+          console.log("Error signInWithPassword:", error)
           const msg = (error.message || "").toLowerCase()
           if (msg.includes("invalid login") || msg.includes("invalid_credentials")) {
             return { error: "Email o contrasena incorrectos" }
@@ -262,7 +262,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(profile)
         return { error: null }
       } catch (err: any) {
-        console.log("[v0] Login exception:", err)
+        console.log("Login exception:", err)
         const raw = String(err?.message || err || "").toLowerCase()
 
         // Error de red: no se pudo llegar al servidor de Supabase
@@ -298,7 +298,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         await supabase.auth.signOut()
       } catch (err) {
-        console.log("[v0] Error en signOut:", err)
+        console.log("Error en signOut:", err)
       }
     }
     setUser(null)

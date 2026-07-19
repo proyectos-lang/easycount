@@ -65,7 +65,7 @@ export async function getDashboardMetrics(
   if (!supabase) return { data: DEFAULT_METRICS, error: 'Cliente no disponible' }
 
   if (razonSocialId == null) {
-    console.log('[v0][Dashboard] getDashboardMetrics: razonSocialId es null, devolviendo ceros')
+    console.log('[Dashboard] getDashboardMetrics: razonSocialId es null, devolviendo ceros')
     return { data: DEFAULT_METRICS, error: null }
   }
 
@@ -106,10 +106,10 @@ export async function getDashboardMetrics(
     ])
 
     // Log errores de cada consulta para debug
-    if (productosRes.error) console.log('[v0][Dashboard] productos error:', productosRes.error)
-    if (detallesRes.error) console.log('[v0][Dashboard] detalles error:', detallesRes.error)
-    if (ventasMesRes.error) console.log('[v0][Dashboard] ventasMes error:', ventasMesRes.error)
-    if (carteraRes.error) console.log('[v0][Dashboard] cartera error:', carteraRes.error)
+    if (productosRes.error) console.log('[Dashboard] productos error:', productosRes.error)
+    if (detallesRes.error) console.log('[Dashboard] detalles error:', detallesRes.error)
+    if (ventasMesRes.error) console.log('[Dashboard] ventasMes error:', ventasMesRes.error)
+    if (carteraRes.error) console.log('[Dashboard] cartera error:', carteraRes.error)
 
     const valorInventario = (productosRes.data || []).reduce(
       (acc, p: any) => acc + ((p.stock_total || 0) * (p.costo_promedio || 0)),
@@ -141,7 +141,7 @@ export async function getDashboardMetrics(
       error: null,
     }
   } catch (err: any) {
-    console.log('[v0][Dashboard] Excepcion en getDashboardMetrics:', err)
+    console.log('[Dashboard] Excepcion en getDashboardMetrics:', err)
     return { data: DEFAULT_METRICS, error: err?.message || 'Error de conexion' }
   }
 }
@@ -181,8 +181,8 @@ export async function getVentasVsCobros(
         .gte('fecha_pago', startDate.toISOString()),
     ])
 
-    if (ventasRes.error) console.log('[v0][Dashboard] ventasVsCobros ventas error:', ventasRes.error)
-    if (pagosRes.error) console.log('[v0][Dashboard] ventasVsCobros pagos error:', pagosRes.error)
+    if (ventasRes.error) console.log('[Dashboard] ventasVsCobros ventas error:', ventasRes.error)
+    if (pagosRes.error) console.log('[Dashboard] ventasVsCobros pagos error:', pagosRes.error)
 
     ;(ventasRes.data || []).forEach((v: any) => {
       if (!v.fecha_venta) return
@@ -200,7 +200,7 @@ export async function getVentasVsCobros(
 
     return { data: result, error: null }
   } catch (err: any) {
-    console.log('[v0][Dashboard] Excepcion en getVentasVsCobros:', err)
+    console.log('[Dashboard] Excepcion en getVentasVsCobros:', err)
     return { data: result, error: err?.message || 'Error de conexion' }
   }
 }
@@ -222,7 +222,7 @@ export async function getTopProductos(
       .eq('ventas_encabezado.razon_social_id', razonSocialId)
 
     if (error) {
-      console.log('[v0][Dashboard] getTopProductos error:', error)
+      console.log('[Dashboard] getTopProductos error:', error)
       return { data: [], error: error.message }
     }
 
@@ -248,7 +248,7 @@ export async function getTopProductos(
 
     return { data: sorted, error: null }
   } catch (err: any) {
-    console.log('[v0][Dashboard] Excepcion en getTopProductos:', err)
+    console.log('[Dashboard] Excepcion en getTopProductos:', err)
     return { data: [], error: err?.message || 'Error de conexion' }
   }
 }
@@ -272,12 +272,12 @@ export async function getProductosStockBajo(
       .order('stock_total', { ascending: true })
 
     if (error) {
-      console.log('[v0][Dashboard] getProductosStockBajo error:', error)
+      console.log('[Dashboard] getProductosStockBajo error:', error)
       return { data: [], error: error.message }
     }
     return { data: data || [], error: null }
   } catch (err: any) {
-    console.log('[v0][Dashboard] Excepcion en getProductosStockBajo:', err)
+    console.log('[Dashboard] Excepcion en getProductosStockBajo:', err)
     return { data: [], error: err?.message || 'Error de conexion' }
   }
 }
@@ -300,7 +300,7 @@ export async function getComprasPendientes(
       .order('fecha_tentativa', { ascending: true })
 
     if (error) {
-      console.log('[v0][Dashboard] getComprasPendientes error:', error)
+      console.log('[Dashboard] getComprasPendientes error:', error)
       return { data: [], error: error.message }
     }
 
@@ -314,7 +314,7 @@ export async function getComprasPendientes(
 
     return { data: formatted, error: null }
   } catch (err: any) {
-    console.log('[v0][Dashboard] Excepcion en getComprasPendientes:', err)
+    console.log('[Dashboard] Excepcion en getComprasPendientes:', err)
     return { data: [], error: err?.message || 'Error de conexion' }
   }
 }
@@ -337,7 +337,7 @@ export async function getTopClientesDeudores(
       .neq('estado_pago', 'Pagado')
 
     if (ventasError) {
-      console.log('[v0][Dashboard] getTopClientesDeudores ventas error:', ventasError)
+      console.log('[Dashboard] getTopClientesDeudores ventas error:', ventasError)
       return { data: [], error: ventasError.message }
     }
 
@@ -350,7 +350,7 @@ export async function getTopClientesDeudores(
         .select('venta_id, monto')
         .in('venta_id', ventaIds)
 
-      if (pagosError) console.log('[v0][Dashboard] getTopClientesDeudores pagos error:', pagosError)
+      if (pagosError) console.log('[Dashboard] getTopClientesDeudores pagos error:', pagosError)
 
       pagosMap = (pagosData || []).reduce((acc: Record<number, number>, p: any) => {
         acc[p.venta_id] = (acc[p.venta_id] || 0) + p.monto
@@ -388,7 +388,7 @@ export async function getTopClientesDeudores(
 
     return { data: sorted, error: null }
   } catch (err: any) {
-    console.log('[v0][Dashboard] Excepcion en getTopClientesDeudores:', err)
+    console.log('[Dashboard] Excepcion en getTopClientesDeudores:', err)
     return { data: [], error: err?.message || 'Error de conexion' }
   }
 }

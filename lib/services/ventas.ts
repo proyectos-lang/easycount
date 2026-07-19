@@ -369,7 +369,7 @@ export async function crearVenta(
   try {
     const stamp = await getTenantStamp(supabase)
     if (!isValidStamp(stamp)) {
-      console.log('[v0][crearVenta] Stamp invalido:', stamp)
+      console.log('[crearVenta] Stamp invalido:', stamp)
       return { data: null, error: SESION_INVALIDA_ERROR }
     }
 
@@ -681,7 +681,7 @@ export async function registrarPago(
   try {
     const stamp = await getTenantStamp(supabase)
     if (!isValidStamp(stamp)) {
-      console.log('[v0][registrarPago] Stamp invalido:', stamp)
+      console.log('[registrarPago] Stamp invalido:', stamp)
       return { data: null, error: SESION_INVALIDA_ERROR }
     }
 
@@ -1523,12 +1523,12 @@ export async function getRazonSocialForPdf(): Promise<{
       .single()
 
     if (error) {
-      console.error('[v0] Error fetching razon_social:', error)
+      console.error('Error fetching razon_social:', error)
       return null
     }
     return data
   } catch (err) {
-    console.error('[v0] Exception fetching razon_social:', err)
+    console.error('Exception fetching razon_social:', err)
     return null
   }
 }
@@ -1588,7 +1588,7 @@ export async function eliminarVentaCompletamente(
       .eq('razon_social_id', stamp.razon_social_id)
 
     if (detErr) {
-      console.error('[v0][eliminarVentaCompletamente] Error leyendo detalles:', detErr)
+      console.error('[eliminarVentaCompletamente] Error leyendo detalles:', detErr)
       return { error: detErr.message }
     }
 
@@ -1689,7 +1689,7 @@ export async function eliminarVentaCompletamente(
       .eq('venta_id', ventaId)
       .eq('razon_social_id', stamp.razon_social_id)
     if (delDetErr) {
-      console.error('[v0][eliminarVentaCompletamente] Error borrando detalle:', delDetErr)
+      console.error('[eliminarVentaCompletamente] Error borrando detalle:', delDetErr)
       return { error: delDetErr.message }
     }
 
@@ -1699,13 +1699,13 @@ export async function eliminarVentaCompletamente(
       .eq('id', ventaId)
       .eq('razon_social_id', stamp.razon_social_id)
     if (delEncErr) {
-      console.error('[v0][eliminarVentaCompletamente] Error borrando encabezado:', delEncErr)
+      console.error('[eliminarVentaCompletamente] Error borrando encabezado:', delEncErr)
       return { error: delEncErr.message }
     }
 
     return { error: null }
   } catch (err) {
-    console.error('[v0][eliminarVentaCompletamente] Exception:', err)
+    console.error('[eliminarVentaCompletamente] Exception:', err)
     return { error: 'No se pudo eliminar la venta' }
   }
 }

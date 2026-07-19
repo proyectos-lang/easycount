@@ -334,7 +334,7 @@ export async function registrarMovimientoCaja(input: {
   // Hora Honduras (UTC-6 codificada como ISO) para que la BD muestre la
   // fecha operativa del dia HN al inspeccionarla directamente.
   const nowHN = getHondurasNowISO()
-  console.log("[v0][caja-chica] registrarMovimientoCaja insert:", {
+  console.log("[caja-chica] registrarMovimientoCaja insert:", {
     sesion_id: sesion.id,
     tipo: input.tipo,
     delta,
@@ -361,13 +361,13 @@ export async function registrarMovimientoCaja(input: {
     .select()
     .single()
   if (mErr) {
-    console.log("[v0][caja-chica] registrarMovimientoCaja error:", mErr)
+    console.log("[caja-chica] registrarMovimientoCaja error:", mErr)
     if (isMissingTableError(mErr)) {
       return { data: null, error: CAJA_FEATURE_PENDING }
     }
     return { data: null, error: mErr.message }
   }
-  console.log("[v0][caja-chica] registrarMovimientoCaja success id:", mov?.id)
+  console.log("[caja-chica] registrarMovimientoCaja success id:", mov?.id)
 
   // Si es transferencia a banco, espejamos un Ingreso en la cuenta destino.
   if (
@@ -406,7 +406,7 @@ export async function getMovimientosSesion(
   }
 
   const asc = order === "asc"
-  console.log("[v0][caja-chica] getMovimientosSesion query:", {
+  console.log("[caja-chica] getMovimientosSesion query:", {
     sesion_id,
     razon_social_id: stamp.razon_social_id,
     order,
@@ -424,7 +424,7 @@ export async function getMovimientosSesion(
     .order("created_at", { ascending: asc })
     .order("id", { ascending: asc })
     .limit(limit)
-  console.log("[v0][caja-chica] getMovimientosSesion result:", {
+  console.log("[caja-chica] getMovimientosSesion result:", {
     count: data?.length ?? 0,
     error: error?.message ?? null,
   })

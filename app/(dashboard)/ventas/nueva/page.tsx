@@ -127,11 +127,11 @@ export default function NuevaVentaPage() {
 
   React.useEffect(() => {
     if (!ready) {
-      console.log("[v0][NuevaVenta] esperando sesion...")
+      console.log("[NuevaVenta] esperando sesion...")
       return
     }
     if (razonSocialId == null) {
-      console.log("[v0][NuevaVenta] usuario sin razon_social_id; mostrando formulario vacio")
+      console.log("[NuevaVenta] usuario sin razon_social_id; mostrando formulario vacio")
       setLoading(false)
       return
     }
@@ -142,7 +142,7 @@ export default function NuevaVentaPage() {
   async function loadData() {
     setLoading(true)
     try {
-      console.log("[v0][NuevaVenta] cargando datos...")
+      console.log("[NuevaVenta] cargando datos...")
       const [clientesRes, productosRes, almacenesRes, localizacionesRes, correlativo, cuentasRes, marcasRes, categoriasRes] = await Promise.all([
         getClientes(),
         getProductos(),
@@ -154,7 +154,7 @@ export default function NuevaVentaPage() {
         getCategorias(),
       ])
 
-      console.log("[v0][NuevaVenta] datos recibidos:", {
+      console.log("[NuevaVenta] datos recibidos:", {
         clientes: clientesRes.data?.length,
         productos: productosRes.data?.length,
         almacenes: almacenesRes.data?.length,
@@ -191,7 +191,7 @@ export default function NuevaVentaPage() {
         }
       }
     } catch (err: any) {
-      console.log("[v0][NuevaVenta] excepcion cargando datos:", err)
+      console.log("[NuevaVenta] excepcion cargando datos:", err)
       toast({
         title: "No se pudieron cargar los datos",
         description: err?.message || "Error de conexion",
@@ -248,7 +248,7 @@ export default function NuevaVentaPage() {
       const { data: stockMap } = await getStockMultipleProducts(productoIds, locId)
       setStockCatalogo(stockMap || {})
     } catch (err) {
-      console.error('[v0] Error cargando stock del catalogo:', err)
+      console.error('Error cargando stock del catalogo:', err)
       setStockCatalogo({})
     } finally {
       setLoadingCatalogo(false)

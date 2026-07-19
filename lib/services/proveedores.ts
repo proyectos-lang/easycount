@@ -62,7 +62,7 @@ export async function getProveedores(): Promise<{
 
   if (error) {
     if (isMissingTable(error)) {
-      console.log("[v0][proveedores] tabla no existe, devolviendo vacio")
+      console.log("[proveedores] tabla no existe, devolviendo vacio")
       return { data: [], error: PROVEEDORES_FEATURE_PENDING }
     }
     return { data: [], error: error.message }

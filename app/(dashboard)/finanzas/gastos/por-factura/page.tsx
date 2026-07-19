@@ -140,7 +140,7 @@ export default function RegistrarGastoPorFacturaPage() {
       toast({ title: "Factura procesada", description: "Datos extraidos correctamente. Verifique y complete el formulario." })
       
     } catch (err) {
-      console.error("[v0] AI processing error:", err)
+      console.error("AI processing error:", err)
       toast({ title: "Error", description: "No se pudo procesar la factura. Intente de nuevo.", variant: "destructive" })
     } finally {
       setProcessingIA(false)
