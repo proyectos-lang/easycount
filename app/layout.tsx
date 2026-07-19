@@ -1,11 +1,13 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from '@/components/ui/toaster'
 import { AuthProvider } from '@/lib/contexts/auth-context'
+import { PwaRegister } from '@/components/pwa-register'
+import { MonitoringInit } from '@/components/monitoring-init'
 import './globals.css'
 
-const inter = Inter({ 
+const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter"
 });
@@ -21,9 +23,19 @@ export const metadata: Metadata = {
         type: 'image/png',
       },
     ],
-    apple: '/favicon.png',
+    apple: '/icons/icon-192.png',
     shortcut: '/favicon.png',
   },
+  // PWA: instalable en iOS (Safari usa estas etiquetas, no el manifest).
+  appleWebApp: {
+    capable: true,
+    title: 'EasyCount',
+    statusBarStyle: 'default',
+  },
+}
+
+export const viewport: Viewport = {
+  themeColor: '#f59e0b',
 }
 
 export default function RootLayout({
@@ -38,6 +50,8 @@ export default function RootLayout({
           {children}
           <Toaster />
           <Analytics />
+          <PwaRegister />
+          <MonitoringInit />
         </AuthProvider>
       </body>
     </html>

@@ -175,6 +175,11 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
           "Eliminar es para errores de captura (la venta nunca debió existir): borra todo el rastro. Devolución es para cuando el cliente regresa productos de una venta real: la factura original queda intacta y se genera una nota de crédito.",
       },
       {
+        pregunta: "No veo facturas viejas en la lista, ¿dónde están?",
+        respuesta:
+          "El listado carga las 100 facturas más recientes; usa el botón 'Cargar más facturas' al final de la tabla para traer las anteriores, o el buscador para ubicar una específica.",
+      },
+      {
         pregunta: "Registré un abono y no bajó el saldo, ¿qué reviso?",
         respuesta:
           "Confirma que el abono se guardó en la factura correcta (detalle → pagos). El saldo pendiente es total menos abonos acumulados.",

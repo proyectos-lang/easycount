@@ -106,37 +106,52 @@ export async function getNextCorrelativo(): Promise<string> {
 
 // ==================== VENTAS ====================
 
-export async function getVentas(): Promise<{ data: VentaEncabezado[]; error: string | null }> {
+/**
+ * Lista de ventas con paginacion opcional. Sin opciones devuelve TODO
+ * (compatibilidad con llamadores existentes); con `limit`/`offset` devuelve
+ * la pagina pedida junto con `total` (conteo exacto) para saber si hay mas.
+ */
+export async function getVentas(
+  opts: { limit?: number; offset?: number } = {}
+): Promise<{ data: VentaEncabezado[]; total: number; error: string | null }> {
   if (!isSupabaseConfigured()) {
     const saved = localStorage.getItem('ventas_encabezado')
-    return { data: saved ? JSON.parse(saved) : [], error: null }
+    const todas: VentaEncabezado[] = saved ? JSON.parse(saved) : []
+    return { data: todas, total: todas.length, error: null }
   }
 
   const supabase = createClient()
-  if (!supabase) return { data: [], error: 'Cliente no disponible' }
+  if (!supabase) return { data: [], total: 0, error: 'Cliente no disponible' }
 
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('ventas_encabezado')
       .select(`
         *,
         clientes (nombre),
         almacenes (nombre)
-      `)
+      `, { count: 'exact' })
       .order('id', { ascending: false })
 
-    if (error) return { data: [], error: error.message }
+    if (opts.limit != null) {
+      const desde = opts.offset ?? 0
+      query = query.range(desde, desde + opts.limit - 1)
+    }
+
+    const { data, count, error } = await query
+
+    if (error) return { data: [], total: 0, error: error.message }
     
     const formattedData = (data || []).map(v => ({
       ...v,
       cliente_nombre: v.clientes?.nombre || '',
       almacen_nombre: v.almacenes?.nombre || ''
     }))
-    
-    return { data: formattedData, error: null }
+
+    return { data: formattedData, total: count ?? formattedData.length, error: null }
   } catch (err) {
     console.error('[Supabase] Error obteniendo ventas:', err)
-    return { data: [], error: 'Error de conexion' }
+    return { data: [], total: 0, error: 'Error de conexion' }
   }
 }
 

@@ -165,6 +165,16 @@ export interface CajaMovimientoRow {
   cuenta_destino_nombre?: string | null
 }
 
+/** Devolucion registrada en el dia del cierre. */
+export interface DevolucionDelDia {
+  id: number
+  numero_devolucion: string | null
+  monto_total: number
+  destino_reembolso: string
+  motivo: string | null
+  numero_factura: string | null
+}
+
 export interface CierreDiarioData {
   resumen: CierreResumen
   bancos: DesgloseBanco[]
@@ -183,6 +193,10 @@ export interface CierreDiarioData {
    * Se usa para el desplegable "Detalle de Ingresos en Efectivo".
    */
   detalleEfectivo: IngresoEfectivoDetalle[]
+  /** Devoluciones (notas de credito) registradas en el dia. */
+  devoluciones: DevolucionDelDia[]
+  /** Suma de las devoluciones del dia. */
+  totalDevoluciones: number
   /** True si alguna parte del feature esta pendiente de migracion. */
   featurePending: boolean
 }
@@ -253,6 +267,8 @@ export async function getCierreDiario(fechaISO: string): Promise<{
     pagosGastos: [],
     gastosDelDia: [],
     detalleEfectivo: [],
+    devoluciones: [],
+    totalDevoluciones: 0,
     featurePending: false,
   }
 
@@ -918,6 +934,43 @@ export async function getCierreDiario(fechaISO: string): Promise<{
     }
   }
 
+  // ---- Devoluciones del dia (notas de credito, script 020) --------------
+  // Se listan aparte del flujo de caja/banco para que el corte muestre QUE
+  // se devolvio, ademas del dinero que salio. Si la tabla no existe, se
+  // degrada en silencio (sin devoluciones).
+  const devoluciones: DevolucionDelDia[] = []
+  let totalDevoluciones = 0
+  {
+    const { data, error } = await supabase
+      .from("devoluciones_encabezado")
+      .select("id, numero_devolucion, monto_total, destino_reembolso, motivo, ventas_encabezado:venta_id (numero_factura)")
+      .eq("razon_social_id", tenantId)
+      .gte("fecha", start)
+      .lt("fecha", end)
+      .order("id", { ascending: true })
+
+    if (error) {
+      if (!isMissingRelation(error)) {
+        console.warn("[cierre-diario] error devoluciones del dia:", error.message)
+      }
+    } else {
+      for (const d of data || []) {
+        const venta = Array.isArray(d.ventas_encabezado) ? d.ventas_encabezado[0] : d.ventas_encabezado
+        const monto = Number(d.monto_total || 0)
+        totalDevoluciones += monto
+        devoluciones.push({
+          id: Number(d.id),
+          numero_devolucion: d.numero_devolucion ?? null,
+          monto_total: monto,
+          destino_reembolso: d.destino_reembolso || "",
+          motivo: d.motivo ?? null,
+          numero_factura: (venta as { numero_factura?: string } | null)?.numero_factura ?? null,
+        })
+      }
+      totalDevoluciones = +totalDevoluciones.toFixed(2)
+    }
+  }
+
   return {
     data: {
       resumen,
@@ -927,6 +980,8 @@ export async function getCierreDiario(fechaISO: string): Promise<{
       pagosGastos,
       gastosDelDia,
       detalleEfectivo,
+      devoluciones,
+      totalDevoluciones,
       featurePending,
     },
     error: null,

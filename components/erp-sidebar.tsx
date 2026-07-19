@@ -27,6 +27,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { MODULOS, CATEGORIAS_ORDEN, type Categoria, type ModuloGranular } from "@/lib/constants/modulos"
+import { usePedidosPendientes } from "@/lib/hooks/use-pedidos-pendientes"
 
 // Iconos por categoria (el contenedor del collapsible)
 const CATEGORIA_ICON: Record<Categoria, React.ComponentType<{ className?: string }>> = {
@@ -48,6 +49,7 @@ function getInitials(name: string): string {
 export function ERPSidebar() {
   const pathname = usePathname()
   const { user, hasModulo } = useAuth()
+  const pedidosPendientes = usePedidosPendientes()
 
   // Agrupa los modulos granulares por categoria, filtrando por permiso
   // en CADA HOJA (no en el contenedor). Si una categoria queda vacia,
@@ -130,7 +132,12 @@ export function ERPSidebar() {
                         <SidebarMenuButton tooltip={categoria} isActive={isActive}>
                           <Icon className="h-4 w-4" />
                           <span>{categoria}</span>
-                          <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                          {categoria === "Ventas" && pedidosPendientes > 0 && (
+                            <span className="ml-auto rounded-full bg-amber-500 text-white text-[10px] font-semibold px-1.5 py-0.5 leading-none">
+                              {pedidosPendientes}
+                            </span>
+                          )}
+                          <ChevronRight className={`h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 ${categoria === "Ventas" && pedidosPendientes > 0 ? "" : "ml-auto"}`} />
                         </SidebarMenuButton>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
@@ -144,6 +151,11 @@ export function ERPSidebar() {
                                 <Link href={m.href}>
                                   <m.icon className="h-3.5 w-3.5" />
                                   <span>{m.nombre}</span>
+                                  {m.nombre === "Pedidos por Catalogo" && pedidosPendientes > 0 && (
+                                    <span className="ml-auto rounded-full bg-amber-500 text-white text-[10px] font-semibold px-1.5 py-0.5 leading-none">
+                                      {pedidosPendientes}
+                                    </span>
+                                  )}
                                 </Link>
                               </SidebarMenuSubButton>
                             </SidebarMenuSubItem>

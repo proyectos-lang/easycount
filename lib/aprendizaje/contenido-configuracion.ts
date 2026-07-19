@@ -242,6 +242,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "Permite establecer un saldo inicial al crear la cuenta (queda registrado como movimiento de apertura).",
       "Activa/desactiva cuentas: solo las activas aparecen al cobrar en Nueva Venta.",
       "El saldo de cada cuenta se actualiza solo con cada venta, gasto, transferencia o movimiento manual.",
+      "Botón de reconciliación (ícono de flechas circulares): recalcula el saldo desde la suma real de los movimientos y corrige cualquier descuadre del cache.",
     ],
     queNoHace: [
       "No se puede eliminar una cuenta con movimientos (desactívala en su lugar).",

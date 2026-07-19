@@ -64,6 +64,9 @@ import {
 } from "@/lib/services/ventas"
 import { getMetodosPagoPorVenta } from "@/lib/services/ventas-analytics"
 
+/** Tamano de pagina del listado de facturas (paginacion server-side). */
+const PAGINA_VENTAS = 100
+
 export default function HistorialVentasPage() {
   const { toast } = useToast()
 
@@ -112,6 +115,10 @@ export default function HistorialVentasPage() {
   const [pagoCuentaId, setPagoCuentaId] = React.useState<string>("")
   const [cuentas, setCuentas] = React.useState<CuentaConfig[]>([])
   const { sesion: cajaSesion } = useCajaSesion()
+
+  // Paginacion server-side del listado de facturas.
+  const [totalVentas, setTotalVentas] = React.useState(0)
+  const [cargandoMas, setCargandoMas] = React.useState(false)
   const [savingPago, setSavingPago] = React.useState(false)
 
   // --- Eliminar venta (alert dialog) ---
@@ -126,12 +133,14 @@ export default function HistorialVentasPage() {
     setLoading(true)
     try {
       const [ventasRes, clientesRes, almacenesRes, productosRes] = await Promise.all([
-        getVentas(),
+        // Paginado: carga inicial de PAGINA_VENTAS facturas mas recientes.
+        getVentas({ limit: PAGINA_VENTAS, offset: 0 }),
         getClientes(),
         getAlmacenes(),
         getProductos()
       ])
       setVentas(ventasRes.data)
+      setTotalVentas(ventasRes.total)
       setClientes(clientesRes.data)
       setAlmacenes(almacenesRes.data)
       setProductos(productosRes.data)
@@ -149,6 +158,35 @@ export default function HistorialVentasPage() {
       toast({ title: "Error", description: "No se pudieron cargar las ventas", variant: "destructive" })
     } finally {
       setLoading(false)
+    }
+  }
+
+  /** Trae la siguiente pagina de facturas y la agrega a la lista. */
+  async function cargarMasVentas() {
+    setCargandoMas(true)
+    try {
+      const res = await getVentas({ limit: PAGINA_VENTAS, offset: ventas.length })
+      if (res.error) {
+        toast({ title: "Error", description: res.error, variant: "destructive" })
+        return
+      }
+      // Evita duplicados si entraron ventas nuevas entre cargas.
+      const existentes = new Set(ventas.map(v => v.id))
+      const nuevas = res.data.filter(v => !existentes.has(v.id))
+      setVentas(prev => [...prev, ...nuevas])
+      setTotalVentas(res.total)
+
+      const ids = nuevas.map(v => v.id!).filter((id): id is number => id != null)
+      if (ids.length > 0) {
+        const { data: mapa } = await getMetodosPagoPorVenta(ids)
+        setMetodosPago(prev => {
+          const merged = new Map(prev)
+          mapa.forEach((v, k) => merged.set(k, v))
+          return merged
+        })
+      }
+    } finally {
+      setCargandoMas(false)
     }
   }
 
@@ -773,6 +811,16 @@ export default function HistorialVentasPage() {
               </Table>
             </CardContent>
           </Card>
+
+          {/* Paginacion: cargar mas facturas del servidor */}
+          {!loading && ventas.length < totalVentas && (
+            <div className="flex justify-center pt-2">
+              <Button variant="outline" onClick={cargarMasVentas} disabled={cargandoMas} className="gap-2">
+                {cargandoMas ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Cargar más facturas ({ventas.length} de {totalVentas})
+              </Button>
+            </div>
+          )}
         </TabsContent>
 
         {/* ── Tab 2: Detalle por Producto ── */}

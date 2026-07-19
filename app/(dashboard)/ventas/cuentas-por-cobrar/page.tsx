@@ -55,6 +55,22 @@ import {
   type VentaDetalle
 } from "@/lib/services/ventas"
 
+// ===== Antigüedad de saldos (aging) — helpers puros a nivel de módulo =====
+/** Días transcurridos desde la fecha de la venta hasta hoy. */
+function diasDeAntiguedad(fechaVenta: string): number {
+  const fecha = new Date(fechaVenta)
+  return Math.max(0, Math.floor((Date.now() - fecha.getTime()) / (1000 * 60 * 60 * 24)))
+}
+
+type RangoAging = "todos" | "0-30" | "31-60" | "61-90" | "90+"
+
+function rangoDeDias(dias: number): Exclude<RangoAging, "todos"> {
+  if (dias <= 30) return "0-30"
+  if (dias <= 60) return "31-60"
+  if (dias <= 90) return "61-90"
+  return "90+"
+}
+
 export default function CuentasPorCobrarPage() {
   const [cuentas, setCuentas] = React.useState<CuentaPorCobrar[]>([])
   const [pagos, setPagos] = React.useState<(PagoVenta & { numero_factura?: string; cliente_nombre?: string })[]>([])
@@ -97,11 +113,33 @@ export default function CuentasPorCobrarPage() {
   const totalAbonado = cuentas.reduce((acc, c) => acc + c.total_abonado, 0)
   const totalFacturado = cuentas.reduce((acc, c) => acc + c.total_venta, 0)
 
+  const [filtroAging, setFiltroAging] = React.useState<RangoAging>("todos")
+
+  // Totales de saldo pendiente por rango de antigüedad.
+  const aging = React.useMemo(() => {
+    const buckets: Record<Exclude<RangoAging, "todos">, { saldo: number; facturas: number }> = {
+      "0-30": { saldo: 0, facturas: 0 },
+      "31-60": { saldo: 0, facturas: 0 },
+      "61-90": { saldo: 0, facturas: 0 },
+      "90+": { saldo: 0, facturas: 0 },
+    }
+    for (const c of cuentas) {
+      const b = buckets[rangoDeDias(diasDeAntiguedad(c.fecha_venta))]
+      b.saldo += c.saldo_pendiente
+      b.facturas += 1
+    }
+    return buckets
+  }, [cuentas])
+
   // Filtered cuentas
-  const filteredCuentas = cuentas.filter(c => 
-    c.numero_factura.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.cliente_nombre.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const filteredCuentas = cuentas.filter(c => {
+    const matchTexto =
+      c.numero_factura.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.cliente_nombre.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchAging =
+      filtroAging === "todos" || rangoDeDias(diasDeAntiguedad(c.fecha_venta)) === filtroAging
+    return matchTexto && matchAging
+  })
 
   function openPagoDialog(cuenta: CuentaPorCobrar) {
     setSelectedCuenta(cuenta)
@@ -239,6 +277,46 @@ export default function CuentasPorCobrarPage() {
         </Card>
       </div>
 
+      {/* Antigüedad de saldos */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm text-stone-600 flex items-center gap-2">
+            <Clock className="h-4 w-4" /> Antigüedad de saldos
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Saldo pendiente por días desde la factura. Toca un rango para filtrar la cartera.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {([
+              { rango: "0-30" as const, label: "0–30 días", color: "text-emerald-700 border-emerald-300 bg-emerald-50/60" },
+              { rango: "31-60" as const, label: "31–60 días", color: "text-amber-700 border-amber-300 bg-amber-50/60" },
+              { rango: "61-90" as const, label: "61–90 días", color: "text-orange-700 border-orange-300 bg-orange-50/60" },
+              { rango: "90+" as const, label: "Más de 90 días", color: "text-red-700 border-red-300 bg-red-50/60" },
+            ]).map(({ rango, label, color }) => (
+              <button
+                key={rango}
+                onClick={() => setFiltroAging(filtroAging === rango ? "todos" : rango)}
+                className={`rounded-xl border p-3 text-left transition-all ${color} ${
+                  filtroAging === rango ? "ring-2 ring-offset-1 ring-stone-400" : "hover:opacity-80"
+                }`}
+              >
+                <p className="text-xs font-medium">{label}</p>
+                <p className="text-lg font-bold">L {aging[rango].saldo.toFixed(2)}</p>
+                <p className="text-[10px] opacity-70">{aging[rango].facturas} factura(s)</p>
+              </button>
+            ))}
+          </div>
+          {filtroAging !== "todos" && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Filtrando cartera: {filtroAging} días.{" "}
+              <button className="underline" onClick={() => setFiltroAging("todos")}>Quitar filtro</button>
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Tabs */}
       <Tabs defaultValue="cartera" className="space-y-4">
         <TabsList className="w-full sm:w-auto">
@@ -319,6 +397,7 @@ export default function CuentasPorCobrarPage() {
                     <TableHead>Factura</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Fecha</TableHead>
+                    <TableHead className="text-center">Días</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                     <TableHead className="text-right">Abonado</TableHead>
                     <TableHead className="text-right">Saldo</TableHead>
@@ -330,16 +409,21 @@ export default function CuentasPorCobrarPage() {
                 <TableBody>
                   {filteredCuentas.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                         No hay cuentas por cobrar pendientes
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredCuentas.map((cuenta) => (
+                    filteredCuentas.map((cuenta) => {
+                      const dias = diasDeAntiguedad(cuenta.fecha_venta)
+                      const diasColor =
+                        dias <= 30 ? "text-emerald-600" : dias <= 60 ? "text-amber-600" : dias <= 90 ? "text-orange-600" : "text-red-600"
+                      return (
                       <TableRow key={cuenta.id}>
                         <TableCell className="font-mono font-medium">{cuenta.numero_factura}</TableCell>
                         <TableCell>{cuenta.cliente_nombre}</TableCell>
                         <TableCell>{cuenta.fecha_venta?.split('T')[0] || ''}</TableCell>
+                        <TableCell className={`text-center font-medium ${diasColor}`}>{dias}</TableCell>
                         <TableCell className="text-right">L {cuenta.total_venta.toFixed(2)}</TableCell>
                         <TableCell className="text-right text-green-600">L {cuenta.total_abonado.toFixed(2)}</TableCell>
                         <TableCell className="text-right font-medium text-red-600">L {cuenta.saldo_pendiente.toFixed(2)}</TableCell>
@@ -374,7 +458,8 @@ export default function CuentasPorCobrarPage() {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))
+                      )
+                    })
                   )}
                 </TableBody>
               </Table>

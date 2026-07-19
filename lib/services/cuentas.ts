@@ -324,6 +324,48 @@ export async function registrarMovimientoCuenta(input: {
   return { data: mov as CuentaMovimiento, error: null }
 }
 
+/**
+ * Reconciliacion: recalcula el saldo de una cuenta desde la SUMA REAL de sus
+ * movimientos (Ingresos - Egresos) y corrige el cache `cuentas_config.saldo`.
+ * Uti para cuando el cache derivo (ej. un update fallo a mitad).
+ * Devuelve el saldo anterior y el recalculado.
+ */
+export async function recalcSaldoCuenta(
+  cuenta_id: number
+): Promise<{ saldoAnterior: number; saldoRecalculado: number; error: string | null }> {
+  const supabase = createClient()
+  if (!supabase) return { saldoAnterior: 0, saldoRecalculado: 0, error: "Cliente no disponible" }
+
+  const { data: cuenta, error: cErr } = await supabase
+    .from("cuentas_config")
+    .select("saldo")
+    .eq("id", cuenta_id)
+    .single()
+  if (cErr) return { saldoAnterior: 0, saldoRecalculado: 0, error: cErr.message }
+  const saldoAnterior = Number(cuenta?.saldo ?? 0)
+
+  // Suma real de TODOS los movimientos de la cuenta.
+  const { data: movs, error: mErr } = await supabase
+    .from("cuenta_movimientos")
+    .select("tipo, monto")
+    .eq("cuenta_id", cuenta_id)
+  if (mErr) return { saldoAnterior, saldoRecalculado: saldoAnterior, error: mErr.message }
+
+  const saldoRecalculado = +(movs || [])
+    .reduce((a, m) => a + (m.tipo === "Ingreso" ? Number(m.monto || 0) : -Number(m.monto || 0)), 0)
+    .toFixed(2)
+
+  if (saldoRecalculado !== saldoAnterior) {
+    const { error: uErr } = await supabase
+      .from("cuentas_config")
+      .update({ saldo: saldoRecalculado })
+      .eq("id", cuenta_id)
+    if (uErr) return { saldoAnterior, saldoRecalculado, error: uErr.message }
+  }
+
+  return { saldoAnterior, saldoRecalculado, error: null }
+}
+
 export async function getMovimientosCuenta(
   cuenta_id: number,
   opts: { desde?: string; hasta?: string; limit?: number } = {}

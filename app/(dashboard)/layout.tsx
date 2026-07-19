@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/lib/contexts/auth-context"
 import { RouteGuard } from "@/components/route-guard"
+import { BusquedaGlobal } from "@/components/busqueda-global"
 
 // Dynamic import with SSR disabled to prevent hydration mismatch from Radix IDs
 const ERPSidebar = dynamic(
@@ -101,6 +102,7 @@ export default function DashboardLayout({
 
           {/* Usuario a la derecha */}
           <div className="ml-auto flex items-center gap-3">
+            <BusquedaGlobal />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-3 px-3 py-1.5 rounded-xl hover:bg-stone-100 transition-colors">

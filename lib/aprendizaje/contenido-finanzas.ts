@@ -279,6 +279,7 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
       "Desglose por cuenta bancaria con sus movimientos del día.",
       "Productos vendidos en el día.",
       "Gastos del día y pagos a gastos (efectivo y banco).",
+      "Devoluciones (notas de crédito) registradas en el día, con su factura y monto reembolsado.",
       "Detalle de la caja: sesiones y movimientos del día.",
       "Exporta el cierre completo a PDF con el nombre de la empresa.",
     ],

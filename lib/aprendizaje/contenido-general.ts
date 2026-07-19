@@ -42,6 +42,25 @@ export const TUTORIAL_GENERAL: TutorialModulo = {
       ],
     },
     {
+      titulo: "Instalar EasyCount como aplicación (computadora o celular)",
+      pasos: [
+        "Abre EasyCount en el navegador (Chrome, Edge o Safari).",
+        "En computadora: busca el ícono de instalar en la barra de direcciones (un monitor con flecha) y presiona 'Instalar'.",
+        "En Android: menú del navegador (⋮) → 'Agregar a pantalla principal' o 'Instalar aplicación'.",
+        "En iPhone/iPad: botón Compartir en Safari → 'Agregar a pantalla de inicio'.",
+        "Queda un acceso directo con el ícono de EasyCount que abre la app en su propia ventana.",
+        "Las actualizaciones son automáticas: cada vez que se publica una mejora, la app la detecta y se recarga sola con la versión nueva.",
+      ],
+    },
+    {
+      titulo: "Buscar en toda la aplicación (Ctrl+K)",
+      pasos: [
+        "Presiona Ctrl+K (o Cmd+K en Mac), o toca el botón 'Buscar…' en la barra superior.",
+        "Escribe el nombre de un módulo (ej. 'devoluciones') para saltar directo a él.",
+        "O escribe un tema de ayuda (ej. 'cerrar caja') para ver los tutoriales relacionados del Centro de Aprendizaje.",
+      ],
+    },
+    {
       titulo: "Entender el menú y los permisos",
       pasos: [
         "El menú lateral agrupa los módulos por categoría: Ventas, Compras, Inventario, Finanzas y Configuración.",
@@ -76,5 +95,6 @@ export const TUTORIAL_GENERAL: TutorialModulo = {
   keywords: [
     "inicio", "login", "empezar", "introduccion", "que es", "ayuda",
     "permisos", "empresa", "razon social", "flujo", "manual", "guia",
+    "instalar", "app", "celular", "acceso directo", "buscar", "atajo",
   ],
 }

@@ -76,6 +76,7 @@ import {
   type PagoGastoRow,
   type GastoDelDia,
   type IngresoEfectivoDetalle,
+  type DevolucionDelDia,
 } from "@/lib/services/cierre-diario"
 import { getRazonSocialForPdf } from "@/lib/services/ventas"
 
@@ -683,9 +684,92 @@ export default function CierreDiarioPage() {
             totalEfectivo={data?.resumen.egresos_gastos_efectivo ?? 0}
             totalBanco={data?.resumen.egresos_gastos_banco ?? 0}
           />
+          <DevolucionesDelDiaCard
+            loading={loading}
+            devoluciones={data?.devoluciones ?? []}
+            total={data?.totalDevoluciones ?? 0}
+          />
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+/**
+ * Devoluciones (notas de credito) registradas en el dia del cierre. El
+ * dinero reembolsado ya aparece como salida en caja/banco; esta tarjeta
+ * muestra QUE se devolvio y contra que factura.
+ */
+function DevolucionesDelDiaCard({
+  loading,
+  devoluciones,
+  total,
+}: {
+  loading: boolean
+  devoluciones: DevolucionDelDia[]
+  total: number
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-base">Devoluciones del Dia</CardTitle>
+            <CardDescription>
+              Notas de credito registradas hoy (el reembolso ya figura como salida en caja/banco)
+            </CardDescription>
+          </div>
+          {!loading && devoluciones.length > 0 && (
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Total devuelto</p>
+              <p className="text-lg font-bold tabular-nums text-rose-700">
+                {formatCurrency(total)}
+              </p>
+            </div>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        {loading ? (
+          <div className="p-4"><Skeleton className="h-16 w-full" /></div>
+        ) : devoluciones.length === 0 ? (
+          <p className="px-6 pb-4 text-sm text-muted-foreground">Sin devoluciones este dia.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Devolucion</TableHead>
+                  <TableHead>Factura</TableHead>
+                  <TableHead>Reembolso</TableHead>
+                  <TableHead>Motivo</TableHead>
+                  <TableHead className="text-right">Monto</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {devoluciones.map((d) => (
+                  <TableRow key={d.id}>
+                    <TableCell className="font-mono">{d.numero_devolucion || `#${d.id}`}</TableCell>
+                    <TableCell className="font-mono">{d.numero_factura || "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">
+                        {d.destino_reembolso === "caja" ? "Efectivo" : "Banco"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground max-w-[220px] truncate">
+                      {d.motivo || "—"}
+                    </TableCell>
+                    <TableCell className="text-right font-medium text-rose-700">
+                      {formatCurrency(d.monto_total)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 

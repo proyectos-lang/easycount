@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Landmark, Pencil, Trash2 } from "lucide-react"
+import { Plus, Landmark, Pencil, Trash2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -45,6 +45,7 @@ import {
   getCuentas,
   saveCuenta,
   deleteCuenta,
+  recalcSaldoCuenta,
   CUENTAS_FEATURE_PENDING,
 } from "@/lib/services/cuentas"
 import { useTenant } from "@/lib/hooks/use-tenant"
@@ -203,6 +204,24 @@ export default function CuentasBancariasPage() {
     }
   }
 
+  async function handleRecalc(c: CuentaConfig) {
+    if (!c.id) return
+    const res = await recalcSaldoCuenta(c.id)
+    if (res.error) {
+      toast({ title: "Error al reconciliar", description: res.error, variant: "destructive" })
+      return
+    }
+    if (res.saldoAnterior === res.saldoRecalculado) {
+      toast({ title: "Saldo correcto", description: `"${c.nombre}" ya cuadra con sus movimientos.` })
+    } else {
+      toast({
+        title: "Saldo reconciliado",
+        description: `"${c.nombre}": L ${res.saldoAnterior.toFixed(2)} → L ${res.saldoRecalculado.toFixed(2)} (recalculado desde los movimientos).`,
+      })
+      loadCuentas()
+    }
+  }
+
   const tipoBadgeClass = (tipo: CuentaConfig["tipo"]) =>
     tipo === "Banco"
       ? "bg-primary/10 text-primary border-primary/20"
@@ -298,6 +317,15 @@ export default function CuentasBancariasPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
+                            title="Reconciliar saldo desde los movimientos"
+                            onClick={() => handleRecalc(c)}
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
                             onClick={() => openEditDialog(c)}
                           >
                             <Pencil className="h-4 w-4" />
@@ -356,6 +384,15 @@ export default function CuentasBancariasPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            title="Reconciliar saldo desde los movimientos"
+                            onClick={() => handleRecalc(c)}
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
