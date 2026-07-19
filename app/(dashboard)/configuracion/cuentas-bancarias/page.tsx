@@ -116,6 +116,7 @@ export default function CuentasBancariasPage() {
       tipo: "Banco",
       porcentaje_comision: 0,
       activo: true,
+      saldo_inicial: 0,
     })
     setDialogOpen(true)
   }
@@ -152,6 +153,8 @@ export default function CuentasBancariasPage() {
       tipo: formData.tipo as CuentaConfig["tipo"],
       porcentaje_comision: Number(formData.porcentaje_comision || 0),
       activo: formData.activo ?? true,
+      // Solo al crear: siembra el saldo de apertura via movimiento.
+      ...(editing ? {} : { saldo_inicial: Number(formData.saldo_inicial || 0) }),
     }
     const { error } = await saveCuenta(payload, !editing)
     setSaving(false)
@@ -460,6 +463,36 @@ export default function CuentasBancariasPage() {
                 )}
               </div>
             </div>
+
+            {/* Saldo inicial: solo al crear una cuenta nueva. */}
+            {!editing && (
+              <div className="grid gap-2">
+                <Label htmlFor="cb-saldo-inicial">Saldo inicial (L)</Label>
+                <Input
+                  id="cb-saldo-inicial"
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step={0.01}
+                  value={
+                    formData.saldo_inicial == null
+                      ? ""
+                      : String(formData.saldo_inicial)
+                  }
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      saldo_inicial:
+                        e.target.value === "" ? 0 : Number(e.target.value),
+                    })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Registra un movimiento de apertura. Dejalo en 0 si la cuenta
+                  arranca sin fondos.
+                </p>
+              </div>
+            )}
 
             <div className="flex items-center justify-between rounded-lg border px-3 py-2">
               <div>

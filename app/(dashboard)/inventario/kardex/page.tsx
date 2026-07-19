@@ -25,7 +25,7 @@ import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { getProductos, getAlmacenes, getLocalizaciones, type Producto, type Almacen, type Localizacion } from "@/lib/services/catalogos"
 import { getAllTransacciones, type TransaccionInventario } from "@/lib/services/inventario"
-import * as XLSX from "xlsx"
+import { exportToXlsx } from "@/lib/utils/export"
 
 export default function KardexPage() {
   const { toast } = useToast()
@@ -116,7 +116,7 @@ export default function KardexPage() {
       return
     }
 
-    const data = transaccionesFiltradas.map(t => ({
+    const data: Record<string, unknown>[] = transaccionesFiltradas.map(t => ({
       Fecha: t.fecha?.split('T')[0] || '',
       Hora: t.fecha?.split('T')[1]?.substring(0, 8) || '',
       Producto: t.producto_nombre || '',
@@ -128,13 +128,11 @@ export default function KardexPage() {
       'Costo/Precio': t.costo_o_precio_unitario
     }))
 
-    const ws = XLSX.utils.json_to_sheet(data)
-    const wb = XLSX.utils.book_new()
-XLSX.utils.book_append_sheet(wb, ws, "Transacciones")
-  
-  const filename = `Historial_Transacciones_${new Date().toISOString().split('T')[0]}.xlsx`
-    XLSX.writeFile(wb, filename)
-    
+    exportToXlsx(data, {
+      sheetName: "Transacciones",
+      filename: "Historial_Transacciones",
+      colWidths: [12, 10, 30, 14, 18, 16, 16, 10, 12],
+    })
     toast({ title: "Exportado", description: "El archivo Excel se descargo correctamente" })
   }
 

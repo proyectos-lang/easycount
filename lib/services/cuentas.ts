@@ -15,6 +15,13 @@ export interface CuentaConfig {
   activo?: boolean
   saldo?: number // calculado por el backend
   created_at?: string
+  /**
+   * Saldo de apertura. SOLO entrada de UI al crear la cuenta — no es una
+   * columna de la BD. Si es > 0, `saveCuenta` registra un movimiento de
+   * Ingreso 'Saldo inicial' tras crear la cuenta (el saldo lo gobierna el
+   * motor de movimientos, no se escribe `saldo` directo).
+   */
+  saldo_inicial?: number
 }
 
 export interface CuentaMovimiento {
@@ -140,7 +147,9 @@ export async function saveCuenta(
     // real de la BD (`comision_porcentaje`). Tambien excluimos `saldo`
     // del payload: la BD pone 0 por default y el saldo lo gobierna el
     // motor de movimientos.
-    const { id: _omit, saldo: _s, porcentaje_comision, ...rest } = cuenta
+    // `saldo` y `saldo_inicial` NO son columnas persistibles del insert:
+    // el saldo lo gobierna el motor de movimientos.
+    const { id: _omit, saldo: _s, saldo_inicial, porcentaje_comision, ...rest } = cuenta
     const insertPayload = {
       ...rest,
       comision_porcentaje: porcentaje_comision ?? 0,
@@ -157,7 +166,30 @@ export async function saveCuenta(
       }
       return { data: null, error: error.message }
     }
-    return { data: data as CuentaConfig, error: null }
+
+    // Saldo de apertura: registra un Ingreso 'Saldo inicial' (reutiliza el
+    // motor de movimientos, que actualiza el saldo cacheado de la cuenta).
+    const cuentaCreada = data as CuentaConfig
+    if (saldo_inicial && saldo_inicial > 0 && cuentaCreada.id != null) {
+      const apertura = await registrarMovimientoCuenta({
+        cuenta_id: cuentaCreada.id,
+        tipo: "Ingreso",
+        monto: saldo_inicial,
+        concepto: "Saldo inicial",
+        ref_tipo: "apertura",
+      })
+      if (apertura.error) {
+        // La cuenta ya existe; solo falló el asiento de apertura. No abortamos
+        // la creación, pero informamos para que el usuario lo registre a mano.
+        return {
+          data: { ...cuentaCreada, saldo: cuentaCreada.saldo ?? 0 },
+          error: `Cuenta creada, pero no se pudo registrar el saldo inicial: ${apertura.error}`,
+        }
+      }
+      return { data: { ...cuentaCreada, saldo: saldo_inicial }, error: null }
+    }
+
+    return { data: cuentaCreada, error: null }
   }
 
   // Update: jamas tocamos razon_social_id ni saldo (este lo gobierna el motor

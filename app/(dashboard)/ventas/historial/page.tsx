@@ -4,7 +4,7 @@ import * as React from "react"
 import { Eye, CreditCard, Download, FileSpreadsheet, CalendarIcon, Banknote, Wallet, Shuffle, Trash2, Loader2 } from "lucide-react"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
-import * as XLSX from "xlsx"
+import { exportToXlsx } from "@/lib/utils/export"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -282,7 +282,7 @@ export default function HistorialVentasPage() {
       toast({ title: "Sin datos", description: "No hay registros para exportar", variant: "destructive" })
       return
     }
-    const rows = detalleFiltrado.map(d => ({
+    const rows: Record<string, unknown>[] = detalleFiltrado.map(d => ({
       "Fecha": d.fecha_venta?.split('T')[0] || "",
       "N° Factura": d.numero_factura,
       "Cliente": d.cliente_nombre,
@@ -294,14 +294,11 @@ export default function HistorialVentasPage() {
       "Utilidad Bruta (L)": d.utilidad_linea.toFixed(2),
       "Bodega": d.almacen_nombre,
     }))
-    const ws = XLSX.utils.json_to_sheet(rows)
-    ws["!cols"] = [
-      { wch: 12 }, { wch: 14 }, { wch: 22 }, { wch: 28 }, { wch: 14 },
-      { wch: 8 }, { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 16 },
-    ]
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "Detalle por Producto")
-    XLSX.writeFile(wb, `Detalle_Ventas_${new Date().toISOString().split('T')[0]}.xlsx`)
+    exportToXlsx(rows, {
+      sheetName: "Detalle por Producto",
+      filename: "Detalle_Ventas",
+      colWidths: [12, 14, 22, 28, 14, 8, 16, 16, 18, 16],
+    })
     toast({ title: "Exportado", description: "Archivo Excel generado correctamente" })
   }
 

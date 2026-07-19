@@ -55,7 +55,7 @@ import { Progress } from "@/components/ui/progress"
 import { useToast } from "@/hooks/use-toast"
 import { getValoracionInventarioExtendida, getValoracionPorAlmacen, type ProductoValoracionExtendida } from "@/lib/services/inventario"
 import { getAlmacenes, type Almacen } from "@/lib/services/catalogos"
-import * as XLSX from "xlsx"
+import { exportToXlsx } from "@/lib/utils/export"
 import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from "recharts"
 
 const CHART_COLORS = ['#abcde0', '#8fbdd4', '#73adc8', '#579dbc', '#3b8db0', '#1f7da4', '#039798']
@@ -215,7 +215,7 @@ export default function ValoracionPage() {
       return
     }
 
-    const data = productosFiltrados.map(p => ({
+    const data: Record<string, unknown>[] = productosFiltrados.map(p => ({
       'Codigo': p.codigo_barras || '',
       'Producto': p.nombre,
       'Stock Total': p.stock_total,
@@ -241,35 +241,12 @@ export default function ValoracionPage() {
       'Ultima Venta': ''
     })
 
-    const ws = XLSX.utils.json_to_sheet(data)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "Valoracion")
-    
-    const filename = `Valoracion_Inventario_${new Date().toISOString().split('T')[0]}.xlsx`
-    XLSX.writeFile(wb, filename)
-    
+    exportToXlsx(data, {
+      sheetName: "Valoracion",
+      filename: "Valoracion_Inventario",
+      colWidths: [14, 30, 12, 14, 12, 14, 16, 16, 14, 14],
+    })
     toast({ title: "Exportado", description: "El archivo Excel se descargo correctamente" })
-  }
-
-  function exportToCSV() {
-    if (productosFiltrados.length === 0) {
-      toast({ title: "Sin datos", description: "No hay productos para exportar", variant: "destructive" })
-      return
-    }
-
-    const headers = ['Codigo,Producto,Stock Total,Costo Promedio,Precio Venta,Valor Costo,Valor Comercial,Margen Potencial,Dias Sin Venta,Ultima Venta']
-    const rows = productosFiltrados.map(p => 
-      `"${p.codigo_barras || ''}","${p.nombre}",${p.stock_total},${p.costo_promedio},${p.precio_venta},${p.valor_costo},${p.valor_comercial},${p.margen_potencial},${p.dias_sin_venta ?? 'Sin ventas'},"${p.ultima_venta ? new Date(p.ultima_venta).toLocaleDateString('es-HN') : 'Nunca'}"`
-    )
-    
-    const csv = [headers, ...rows].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `Valoracion_Inventario_${new Date().toISOString().split('T')[0]}.csv`
-    link.click()
-    
-    toast({ title: "Exportado", description: "El archivo CSV se descargo correctamente" })
   }
 
   function getStockBadge(stock: number) {
@@ -309,9 +286,9 @@ export default function ValoracionPage() {
             </SelectContent>
           </Select>
           
-          <Button onClick={exportToCSV} variant="outline" className="gap-2 bg-white/50 backdrop-blur-sm rounded-full border-stone-200 shadow-sm">
+          <Button onClick={exportToExcel} variant="outline" className="gap-2 bg-white/50 backdrop-blur-sm rounded-full border-stone-200 shadow-sm">
             <Download className="h-4 w-4" />
-            Descargar Reporte
+            Descargar Excel
           </Button>
         </div>
       </div>
