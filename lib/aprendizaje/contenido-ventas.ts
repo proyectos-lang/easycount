@@ -173,6 +173,83 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
     keywords: ["facturas", "consultar", "reimprimir", "abono", "eliminar venta", "exportar", "excel", "historial"],
   },
   {
+    modulo: "Pedidos por Catalogo",
+    titulo: "Pedidos por Catálogo",
+    descripcion:
+      "Genera links de catálogo para enviar a tus clientes: ellos arman su carrito sin necesidad de usuario, y tú conviertes el pedido en una venta al aprobarlo.",
+    queHace: [
+      "Genera links únicos de catálogo: completo (todos tus productos) o una selección específica para ese cliente.",
+      "El cliente abre el link SIN iniciar sesión, ve productos con foto, precio de catálogo y disponibilidad, arma su carrito y lo envía con su nombre y teléfono.",
+      "El link se vence automáticamente al enviarse el carrito, al pasar su vigencia (días configurables) o si lo anulas.",
+      "Los pedidos llegan a tu bandeja en estado Pendiente: puedes modificar cantidades y precios, rechazar con motivo, o aprobar.",
+      "Al aprobar se genera una VENTA real: factura correlativa, descuento de inventario, y el cobro entra a caja o banco según el método que elijas (o queda al crédito).",
+      "El pedido aprobado queda enlazado a su factura; historial exportable a Excel.",
+    ],
+    queNoHace: [
+      "El pedido NO descuenta inventario ni mueve dinero hasta que lo APRUEBAS: es solo una solicitud del cliente.",
+      "El cliente no ve costos, stock exacto ni datos internos — solo nombre, foto, precio de catálogo y Disponible/Agotado.",
+      "Los precios que ve el cliente son los de catálogo (precio de venta sugerido); el sistema nunca acepta precios manipulados desde el navegador del cliente.",
+      "Un link usado no revive: si el cliente quiere pedir de nuevo, genera otro link.",
+      "Para que el link funcione fuera de tu red local, la aplicación debe estar publicada en internet.",
+    ],
+    operaciones: [
+      {
+        titulo: "Generar y enviar un link de catálogo",
+        pasos: [
+          "Abre Ventas → Pedidos por Catálogo, pestaña 'Links de catálogo'.",
+          "Presiona 'Nuevo link': ponle una referencia interna (ej. 'Catálogo Doña María').",
+          "Elige el tipo: catálogo completo o selección de productos (márcalos en la lista).",
+          "Define la vigencia en días (ej. 7) y presiona 'Generar link'.",
+          "El link se copia solo al portapapeles: pégalo en WhatsApp o correo al cliente.",
+        ],
+      },
+      {
+        titulo: "Revisar y aprobar un pedido",
+        pasos: [
+          "Cuando el cliente envía su carrito, aparece en la pestaña 'Pedidos' como Pendiente.",
+          "Presiona 'Revisar': verás los productos, cantidades, precios y las notas del cliente.",
+          "Ajusta cantidades o precios si es necesario (la columna Stock te muestra la disponibilidad real).",
+          "Presiona 'Aprobar y facturar': asocia el cliente (o créalo con un clic desde los datos del pedido), elige almacén/localización y el método de pago.",
+          "Confirma: se genera la factura, baja el stock y el dinero entra a caja o banco (o queda por cobrar si fue a crédito).",
+        ],
+      },
+      {
+        titulo: "Rechazar un pedido",
+        pasos: [
+          "Abre el pedido con 'Revisar'.",
+          "Presiona 'Rechazar', escribe el motivo y confirma.",
+          "El pedido queda Rechazado con su motivo guardado; no afecta inventario ni dinero.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        pregunta: "El cliente dice que el link 'no está disponible', ¿por qué?",
+        respuesta:
+          "El link muere al enviarse un carrito, al pasar su vigencia o si fue anulado. Genera un link nuevo y envíaselo.",
+      },
+      {
+        pregunta: "¿Puedo cambiar los precios que pidió el cliente?",
+        respuesta:
+          "Sí. En la revisión puedes ajustar precio y cantidad de cada línea antes de aprobar; la factura se genera con los valores finales que dejes.",
+      },
+      {
+        pregunta: "¿Qué pasa si ya no tengo stock de algo que pidieron?",
+        respuesta:
+          "La columna Stock de la revisión te lo marca en rojo. Baja la cantidad de esa línea (o recházala) — el sistema no deja facturar más de lo disponible.",
+      },
+      {
+        pregunta: "¿El mismo link sirve para varios clientes?",
+        respuesta:
+          "Sirve para quien lo abra primero y envíe un carrito: en ese momento muere. Si quieres atender a varios clientes, genera un link para cada uno.",
+      },
+    ],
+    keywords: [
+      "catalogo", "link", "whatsapp", "carrito", "pedido", "cliente pide",
+      "aprobar", "rechazar", "vender a distancia", "compartir catalogo",
+    ],
+  },
+  {
     modulo: "Devoluciones",
     titulo: "Devoluciones (notas de crédito)",
     descripcion:

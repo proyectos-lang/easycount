@@ -23,6 +23,9 @@ SQL Editor de Supabase. Son en su mayoría idempotentes (`IF NOT EXISTS` /
 | 016 | `016-vista-historico-caja-chica.sql` | Vista `vista_historico_caja_chica` |
 | 017 | `017-rls-policies.sql` | **Políticas RLS de aislamiento multi-empresa** |
 | 018 | `018-funciones-stock-atomico.sql` | **Funciones atómicas de stock y costo promedio** |
+| 019 | `019-modulos-finanzas.sql` | Módulos Dashboard Finanzas y Movimientos de Cuentas |
+| 020 | `020-devoluciones.sql` | Devoluciones (notas de crédito): 2 tablas + RLS + módulo |
+| 021 | `021-pedidos-catalogo.sql` | Pedidos por Catálogo: 4 tablas + RLS + módulo |
 | — | `add-almacen-to-ventas-encabezado.sql` | Agrega `almacen_id` a ventas (aplicar tras 011) |
 
 > **Huecos 006–008:** la numeración salta de 005 a 009. No faltan migraciones;
