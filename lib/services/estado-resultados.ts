@@ -3,6 +3,7 @@
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { getTenantStamp, isValidStamp } from "@/lib/services/tenant-stamp"
 import { getComisionesPeriodo } from "@/lib/services/ventas-analytics"
+import { getDevolucionesDelPeriodo } from "@/lib/services/devoluciones"
 
 // ==================== TIPOS ====================
 
@@ -40,7 +41,45 @@ const MESES = [
 
 // ==================== ESTADO DE RESULTADOS ====================
 
+/**
+ * Aplica las devoluciones del periodo a un estado de resultados: resta las
+ * ventas devueltas de `ventas_totales` y el costo devuelto del CMV, y recalcula
+ * utilidad bruta/neta y margenes. Deja los reportes en terminos NETOS.
+ */
+function netearDevoluciones(
+  d: EstadoResultadosMensual,
+  montoVentasDev: number,
+  montoCostoDev: number
+): EstadoResultadosMensual {
+  const ventas = +(d.ventas_totales - montoVentasDev).toFixed(2)
+  const cmv = +(d.costo_mercancia_vendida - montoCostoDev).toFixed(2)
+  const utilidadBruta = +(ventas - cmv).toFixed(2)
+  const utilidadNeta = +(utilidadBruta - d.total_gastos_operativos - d.comisiones_bancarias).toFixed(2)
+  return {
+    ...d,
+    ventas_totales: ventas,
+    costo_mercancia_vendida: cmv,
+    utilidad_bruta: utilidadBruta,
+    utilidad_neta: utilidadNeta,
+    margen_bruto: ventas > 0 ? +((utilidadBruta / ventas) * 100).toFixed(2) : 0,
+    margen_neto: ventas > 0 ? +((utilidadNeta / ventas) * 100).toFixed(2) : 0,
+  }
+}
+
 export async function getEstadoResultadosMensual(anio: number, mes: number): Promise<{ data: EstadoResultadosMensual | null; error: string | null }> {
+  const base = await getEstadoResultadosMensualBase(anio, mes)
+  if (!base.data) return base
+
+  // Netea las devoluciones del periodo (factura original queda intacta).
+  const dev = await getDevolucionesDelPeriodo(anio, mes).catch(
+    () => ({ montoVentas: 0, montoCosto: 0, error: null })
+  )
+  if ((dev.montoVentas || 0) === 0 && (dev.montoCosto || 0) === 0) return base
+
+  return { data: netearDevoluciones(base.data, dev.montoVentas, dev.montoCosto), error: base.error }
+}
+
+async function getEstadoResultadosMensualBase(anio: number, mes: number): Promise<{ data: EstadoResultadosMensual | null; error: string | null }> {
   if (!isSupabaseConfigured()) {
     // LocalStorage implementation
     return getEstadoResultadosLocal(anio, mes)
