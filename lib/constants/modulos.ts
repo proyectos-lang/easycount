@@ -82,7 +82,15 @@ export const MODULOS: ReadonlyArray<ModuloGranular> = [
     aliases: ["Historial"],
   },
   { nombre: "Devoluciones", href: "/ventas/devoluciones", categoria: "Ventas", icon: Undo2 },
-  { nombre: "Pedidos por Catalogo", href: "/ventas/pedidos", categoria: "Ventas", icon: Send },
+  {
+    nombre: "Catalogo",
+    href: "/ventas/pedidos",
+    categoria: "Ventas",
+    icon: Send,
+    // La fila historica en la tabla `modulos` se llama 'Pedidos por Catalogo';
+    // el alias mantiene validos los permisos ya otorgados con ese nombre.
+    aliases: ["Pedidos por Catalogo"],
+  },
 
   // ── Compras ────────────────────────────────────────────────────────────
   { nombre: "Orden de Compra", href: "/compras/orden", categoria: "Compras", icon: FileText },

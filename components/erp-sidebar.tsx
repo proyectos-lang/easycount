@@ -151,7 +151,7 @@ export function ERPSidebar() {
                                 <Link href={m.href}>
                                   <m.icon className="h-3.5 w-3.5" />
                                   <span>{m.nombre}</span>
-                                  {m.nombre === "Pedidos por Catalogo" && pedidosPendientes > 0 && (
+                                  {m.nombre === "Catalogo" && pedidosPendientes > 0 && (
                                     <span className="ml-auto rounded-full bg-amber-500 text-white text-[10px] font-semibold px-1.5 py-0.5 leading-none">
                                       {pedidosPendientes}
                                     </span>

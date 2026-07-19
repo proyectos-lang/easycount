@@ -101,7 +101,7 @@ export default function PedidosCatalogoPage() {
     <div className="space-y-6 p-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-stone-800">Pedidos por Catálogo</h1>
+          <h1 className="text-3xl font-bold text-stone-800">Catálogo</h1>
           <p className="text-stone-500 text-sm mt-1">
             Genera links de catálogo para tus clientes y convierte sus pedidos en ventas.
           </p>

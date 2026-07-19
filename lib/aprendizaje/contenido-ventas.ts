@@ -188,8 +188,8 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
     keywords: ["facturas", "consultar", "reimprimir", "abono", "eliminar venta", "exportar", "excel", "historial"],
   },
   {
-    modulo: "Pedidos por Catalogo",
-    titulo: "Pedidos por Catálogo",
+    modulo: "Catalogo",
+    titulo: "Catálogo (pedidos por link)",
     descripcion:
       "Genera links de catálogo para enviar a tus clientes: ellos arman su carrito sin necesidad de usuario, y tú conviertes el pedido en una venta al aprobarlo.",
     queHace: [
@@ -211,7 +211,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       {
         titulo: "Generar y enviar un link de catálogo",
         pasos: [
-          "Abre Ventas → Pedidos por Catálogo, pestaña 'Links de catálogo'.",
+          "Abre Ventas → Catálogo, pestaña 'Links de catálogo'.",
           "Presiona 'Nuevo link': ponle una referencia interna (ej. 'Catálogo Doña María').",
           "Elige el tipo: catálogo completo o selección de productos (márcalos en la lista).",
           "Define la vigencia en días (ej. 7) y presiona 'Generar link'.",
