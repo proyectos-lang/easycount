@@ -47,6 +47,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/hooks/use-toast"
 import { getClientes, getAlmacenes, getProductos, type Cliente, type Almacen, type Producto } from "@/lib/services/catalogos"
+import { getCuentas, type CuentaConfig } from "@/lib/services/cuentas"
+import { useCajaSesion } from "@/lib/hooks/use-caja-sesion"
 import {
   getVentas,
   getDetallesVenta,
@@ -107,6 +109,9 @@ export default function HistorialVentasPage() {
   const [showPagoDialog, setShowPagoDialog] = React.useState(false)
   const [pagoMonto, setPagoMonto] = React.useState("")
   const [pagoMetodo, setPagoMetodo] = React.useState<string>("Efectivo")
+  const [pagoCuentaId, setPagoCuentaId] = React.useState<string>("")
+  const [cuentas, setCuentas] = React.useState<CuentaConfig[]>([])
+  const { sesion: cajaSesion } = useCajaSesion()
   const [savingPago, setSavingPago] = React.useState(false)
 
   // --- Eliminar venta (alert dialog) ---
@@ -227,19 +232,36 @@ export default function HistorialVentasPage() {
       (venta.total_venta ?? 0) - (venta.valorpago ?? 0)
     )
     setPagoMonto(pendiente.toFixed(2))
-    setPagoMetodo("Efectivo")
+    // Default segun tesoreria: efectivo solo si hay caja abierta.
+    setPagoMetodo(cajaSesion ? "Efectivo" : "Banco")
+    setPagoCuentaId("")
+    if (cuentas.length === 0) {
+      getCuentas().then((r) => setCuentas((r.data || []).filter((c) => c.activo !== false)))
+    }
     setShowPagoDialog(true)
   }
 
   async function handleRegistrarPago() {
     if (!selectedVenta || !pagoMonto) return
+    const monto = parseFloat(pagoMonto)
+    if (!monto || monto <= 0) {
+      toast({ title: "Monto inválido", description: "Ingresa un monto mayor a 0", variant: "destructive" })
+      return
+    }
+    if (pagoMetodo === "Banco" && !pagoCuentaId) {
+      toast({ title: "Falta cuenta", description: "Selecciona la cuenta bancaria del abono", variant: "destructive" })
+      return
+    }
     setSavingPago(true)
     try {
-      const { error } = await registrarPago({
-        venta_id: selectedVenta.id!,
-        monto: parseFloat(pagoMonto),
-        metodo_pago: pagoMetodo,
-      })
+      const { error } = await registrarPago(
+        {
+          venta_id: selectedVenta.id!,
+          monto,
+          metodo_pago: pagoMetodo,
+        },
+        { cuenta_id: pagoMetodo === "Banco" ? Number(pagoCuentaId) : null }
+      )
       if (error) { toast({ title: "Error", description: error, variant: "destructive" }); return }
       toast({ title: "Pago registrado", description: "El pago se registro correctamente" })
       setShowPagoDialog(false)
@@ -636,6 +658,16 @@ export default function HistorialVentasPage() {
                       </p>
                     </div>
                     <div className="flex gap-1 shrink-0">
+                      {saldo > 0.005 && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                          onClick={() => openPagoDialog(venta)}
+                        >
+                          <Banknote className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => viewDetalle(venta)}>
                         <Eye className="h-4 w-4" />
                       </Button>
@@ -706,6 +738,17 @@ export default function HistorialVentasPage() {
                         <TableCell>{getMetodoPagoBadge(venta.id)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
+                            {saldo > 0.005 && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                onClick={() => openPagoDialog(venta)}
+                                title="Registrar pago"
+                              >
+                                <Banknote className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Button variant="ghost" size="icon" onClick={() => viewDetalle(venta)} title="Ver detalle">
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -1031,6 +1074,12 @@ export default function HistorialVentasPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Registrar Pago</DialogTitle>
+            {selectedVenta && (
+              <p className="text-sm text-muted-foreground">
+                Factura <span className="font-mono">{selectedVenta.numero_factura}</span>
+                {selectedVenta.cliente_nombre ? ` · ${selectedVenta.cliente_nombre}` : ""}
+              </p>
+            )}
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -1039,20 +1088,45 @@ export default function HistorialVentasPage() {
                 type="number" step="0.01" min="0" max={saldoPendiente}
                 value={pagoMonto} onChange={e => setPagoMonto(e.target.value)} placeholder="0.00"
               />
-              <p className="text-xs text-muted-foreground mt-1">Saldo pendiente: L {saldoPendiente.toFixed(2)}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Saldo pendiente: L {saldoPendiente.toFixed(2)} — puede ser un abono parcial o el total.
+              </p>
             </div>
             <div>
               <Label>Metodo de Pago</Label>
               <Select value={pagoMetodo} onValueChange={setPagoMetodo}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Efectivo">Efectivo</SelectItem>
-                  <SelectItem value="Tarjeta">Tarjeta</SelectItem>
-                  <SelectItem value="Transferencia">Transferencia</SelectItem>
-                  <SelectItem value="Otro">Otro</SelectItem>
+                  <SelectItem value="Efectivo" disabled={!cajaSesion}>
+                    Efectivo{!cajaSesion ? " (caja cerrada)" : ""}
+                  </SelectItem>
+                  <SelectItem value="Banco">Banco / Tarjeta / Transferencia</SelectItem>
+                  <SelectItem value="Otro">Otro (sin movimiento de dinero)</SelectItem>
                 </SelectContent>
               </Select>
+              {pagoMetodo === "Efectivo" && (
+                <p className="text-xs text-muted-foreground mt-1">El efectivo entra a la caja chica abierta.</p>
+              )}
+              {pagoMetodo === "Otro" && (
+                <p className="text-xs text-amber-600 mt-1">
+                  Solo baja el saldo de la factura; no registra entrada en caja ni bancos.
+                </p>
+              )}
             </div>
+            {pagoMetodo === "Banco" && (
+              <div>
+                <Label>Cuenta bancaria</Label>
+                <Select value={pagoCuentaId} onValueChange={setPagoCuentaId}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
+                  <SelectContent>
+                    {cuentas.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">El abono entra como Ingreso a esta cuenta.</p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowPagoDialog(false)}>Cancelar</Button>

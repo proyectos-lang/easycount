@@ -123,7 +123,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Lista todas las facturas con filtros por fecha, cliente y método de pago.",
       "Detalle de cada factura: productos, cantidades, pagos registrados y saldo pendiente.",
       "Reimprime la factura en PDF.",
-      "Registra abonos a facturas al crédito.",
+      "Registra abonos (parciales o totales) a facturas con saldo pendiente: el botón verde de pago aparece directo en la fila. El efectivo entra a la caja chica y los pagos por banco a la cuenta que elijas.",
       "Pestaña 'Detalle por Producto': todas las líneas vendidas con costo y utilidad, exportable a Excel.",
       "Elimina una venta por completo: devuelve el stock, borra los movimientos de caja/banco asociados y elimina la factura (pide confirmación).",
     ],
@@ -139,6 +139,16 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
           "Filtra por rango de fechas o busca por cliente/número.",
           "Haz clic en el ícono de ojo para ver el detalle.",
           "Usa el botón de PDF para regenerar la factura.",
+        ],
+      },
+      {
+        titulo: "Registrar un abono a una factura pendiente",
+        pasos: [
+          "En Resumen de Facturas, ubica la factura con saldo (estado Pendiente o Parcial).",
+          "Presiona el botón verde de pago en la fila (o dentro del detalle).",
+          "El monto viene pre-llenado con el saldo total; edítalo si es un abono parcial.",
+          "Elige el método: Efectivo (requiere caja abierta; entra a la caja), Banco (elige la cuenta; entra como ingreso) u Otro (solo baja el saldo, sin movimiento de dinero).",
+          "Guarda: el saldo y el estado de la factura se actualizan, y el dinero queda en tesorería.",
         ],
       },
       {

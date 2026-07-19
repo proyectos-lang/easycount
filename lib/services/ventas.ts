@@ -640,8 +640,20 @@ export async function getPagosVenta(ventaId: number): Promise<{ data: PagoVenta[
   }
 }
 
+/**
+ * Registra un abono (parcial o total) a una venta al credito.
+ *
+ * Ademas de actualizar `pagos_ventas` + `valorpago`/`estado_pago` de la
+ * factura, el dinero ENTRA a tesoreria segun el metodo:
+ *   - 'Efectivo'          -> Ingreso_Venta en la caja chica (requiere sesion abierta).
+ *   - 'Banco'             -> Ingreso en la cuenta bancaria (`opciones.cuenta_id`).
+ *   - 'Otro'              -> sin movimiento de tesoreria (solo baja el saldo).
+ * Los movimientos van con ref_tipo='venta' + ref_id, igual que los cobros de
+ * Nueva Venta, asi `eliminarVentaCompletamente` tambien los revierte.
+ */
 export async function registrarPago(
-  pago: Omit<PagoVenta, 'id' | 'fecha_pago'>
+  pago: Omit<PagoVenta, 'id' | 'fecha_pago'>,
+  opciones?: { cuenta_id?: number | null }
 ): Promise<{ data: PagoVenta | null; error: string | null }> {
   if (!isSupabaseConfigured()) {
     const savedPagos = localStorage.getItem('pagos_ventas')
@@ -685,6 +697,25 @@ export async function registrarPago(
       return { data: null, error: SESION_INVALIDA_ERROR }
     }
 
+    if (pago.monto <= 0) {
+      return { data: null, error: 'El monto debe ser mayor a 0' }
+    }
+
+    // Validaciones de tesoreria ANTES de insertar el pago, para no dejar
+    // un abono registrado sin su entrada de dinero.
+    if (pago.metodo_pago === 'Efectivo') {
+      const { data: sesion } = await getSesionAbierta()
+      if (!sesion) {
+        return {
+          data: null,
+          error: 'Debes abrir la caja chica para registrar abonos en efectivo',
+        }
+      }
+    }
+    if (pago.metodo_pago === 'Banco' && !opciones?.cuenta_id) {
+      return { data: null, error: 'Selecciona la cuenta bancaria del abono' }
+    }
+
     // Insert payment (sello completo: empresa + usuario que registra el pago)
     const { data: pagoData, error: pagoError } = await supabase
       .from('pagos_ventas')
@@ -693,6 +724,35 @@ export async function registrarPago(
       .single()
 
     if (pagoError) return { data: null, error: pagoError.message }
+
+    // Entrada del dinero a tesoreria (mismo ref que los cobros de Nueva
+    // Venta, para que la eliminacion de la venta tambien lo revierta).
+    let avisoTesoreria: string | null = null
+    if (pago.metodo_pago === 'Efectivo') {
+      const mov = await registrarMovimientoCaja({
+        tipo: 'Ingreso_Venta',
+        monto: pago.monto,
+        concepto: `Abono venta #${pago.venta_id}`,
+        ref_tipo: 'venta',
+        ref_id: pago.venta_id,
+      })
+      if (mov.error) avisoTesoreria = mov.error
+    } else if (pago.metodo_pago === 'Banco' && opciones?.cuenta_id) {
+      const mov = await registrarMovimientoCuenta({
+        cuenta_id: opciones.cuenta_id,
+        tipo: 'Ingreso',
+        monto: pago.monto,
+        concepto: `Abono venta #${pago.venta_id}`,
+        ref_tipo: 'venta',
+        ref_id: pago.venta_id,
+      })
+      if (mov.error) avisoTesoreria = mov.error
+    }
+    if (avisoTesoreria) {
+      // El abono quedo registrado pero el asiento de dinero fallo:
+      // informar para regularizar manualmente en Finanzas.
+      console.error('[registrarPago] Abono sin asiento de tesoreria:', avisoTesoreria)
+    }
 
     // Intentamos leer `valorpago` (contador acumulado). Si la columna aun
     // no existe en la DB (migracion 009 pendiente), caemos al calculo
