@@ -49,6 +49,9 @@ Sistema ERP / Punto de Venta **multi-empresa** para pequeños y medianos negocio
 ### Configuración
 Razón Social (empresa, logo), Usuarios y Permisos, Productos (marca/categoría/subcategoría, código de barras, foto), Almacenes y localizaciones, Clientes (con cumpleaños — [lib/utils/cumpleanos.ts](lib/utils/cumpleanos.ts)), Proveedores, Cuentas Bancarias (con % comisión) y Previsualización de PDFs.
 
+### Centro de Aprendizaje
+La app incluye una sección de **Aprendizaje** (`/aprendizaje`, visible para todos los usuarios) con un tutorial por módulo: qué hace, qué no hace, paso a paso y dudas frecuentes, con buscador de temas. Cada usuario ve solo los tutoriales de los módulos a los que tiene permiso. El contenido vive versionado en [lib/aprendizaje/](lib/aprendizaje/) y **debe actualizarse en el mismo commit que cualquier función nueva** (checklist en [CLAUDE.md](CLAUDE.md)); si un módulo queda sin documentar, la página muestra un aviso a los administradores.
+
 ## Base de datos
 
 El esquema completo (tablas, vistas, relaciones) está documentado en [docs/DATABASE.md](docs/DATABASE.md). Los scripts SQL de migración están en [scripts/](scripts/) y se ejecutan en orden en el SQL Editor de Supabase.

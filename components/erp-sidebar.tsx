@@ -4,7 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/contexts/auth-context"
-import { Home, ChevronRight, LayoutDashboard, ShoppingCart, FileText, ClipboardList, CreditCard, Settings } from "lucide-react"
+import { Home, ChevronRight, LayoutDashboard, ShoppingCart, FileText, ClipboardList, CreditCard, Settings, GraduationCap } from "lucide-react"
 
 import {
   Sidebar,
@@ -154,6 +154,30 @@ export function ERPSidebar() {
                   </Collapsible>
                 )
               })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Seccion independiente: Centro de Aprendizaje. Visible para TODOS
+            los usuarios autenticados (no depende de permisos de modulo). */}
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-stone-500 uppercase text-xs tracking-wider font-medium">
+            Ayuda
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  tooltip="Aprendizaje"
+                  isActive={pathname === "/aprendizaje" || pathname.startsWith("/aprendizaje/")}
+                >
+                  <Link href="/aprendizaje">
+                    <GraduationCap className="h-4 w-4" />
+                    <span>Aprendizaje</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
