@@ -326,18 +326,130 @@ export async function registrarMovimientoCuenta(input: {
 
 export async function getMovimientosCuenta(
   cuenta_id: number,
-  limit = 200
+  opts: { desde?: string; hasta?: string; limit?: number } = {}
 ): Promise<{ data: CuentaMovimiento[]; error: string | null }> {
+  const { desde, hasta, limit = 200 } = opts
   const supabase = createClient()
   if (!supabase) return { data: [], error: "Cliente no disponible" }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("cuenta_movimientos")
     .select("*")
     .eq("cuenta_id", cuenta_id)
+  if (desde) query = query.gte("fecha", `${desde}T00:00:00`)
+  if (hasta) query = query.lte("fecha", `${hasta}T23:59:59`)
+
+  const { data, error } = await query
     .order("fecha", { ascending: false })
     .limit(limit)
 
   if (error) return { data: [], error: error.message }
   return { data: data || [], error: null }
+}
+
+/** Movimiento de cuenta enriquecido con el nombre de la cuenta (para la vista general). */
+export interface CuentaMovimientoConNombre extends CuentaMovimiento {
+  cuenta_nombre: string
+}
+
+/**
+ * Vista general de movimientos de TODAS las cuentas del tenant (o de una,
+ * si se pasa `cuenta_id`), con filtro por rango de fechas. Devuelve tambien
+ * los totales de ingresos y egresos del conjunto filtrado.
+ */
+export async function getMovimientosTodasLasCuentas(
+  opts: { desde?: string; hasta?: string; cuenta_id?: number; limit?: number } = {}
+): Promise<{
+  data: CuentaMovimientoConNombre[]
+  totalIngresos: number
+  totalEgresos: number
+  error: string | null
+}> {
+  const { desde, hasta, cuenta_id, limit = 1000 } = opts
+  const supabase = createClient()
+  if (!supabase) return { data: [], totalIngresos: 0, totalEgresos: 0, error: "Cliente no disponible" }
+
+  let query = supabase
+    .from("cuenta_movimientos")
+    .select("*, cuentas_config:cuenta_id (nombre)")
+  if (cuenta_id) query = query.eq("cuenta_id", cuenta_id)
+  if (desde) query = query.gte("fecha", `${desde}T00:00:00`)
+  if (hasta) query = query.lte("fecha", `${hasta}T23:59:59`)
+
+  const { data, error } = await query
+    .order("fecha", { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    if (isMissingTableError(error)) {
+      return { data: [], totalIngresos: 0, totalEgresos: 0, error: CUENTAS_FEATURE_PENDING }
+    }
+    return { data: [], totalIngresos: 0, totalEgresos: 0, error: error.message }
+  }
+
+  let totalIngresos = 0
+  let totalEgresos = 0
+  const rows: CuentaMovimientoConNombre[] = (data || []).map((m) => {
+    const cuenta = Array.isArray(m.cuentas_config) ? m.cuentas_config[0] : m.cuentas_config
+    const monto = Number(m.monto || 0)
+    if (m.tipo === "Ingreso") totalIngresos += monto
+    else totalEgresos += monto
+    return {
+      ...(m as CuentaMovimiento),
+      cuenta_nombre: (cuenta as { nombre?: string } | null)?.nombre || `Cuenta ${m.cuenta_id}`,
+    }
+  })
+
+  return {
+    data: rows,
+    totalIngresos: +totalIngresos.toFixed(2),
+    totalEgresos: +totalEgresos.toFixed(2),
+    error: null,
+  }
+}
+
+/**
+ * Registra una transferencia entre dos cuentas bancarias: un Egreso en la
+ * cuenta origen y un Ingreso en la destino, enlazados por `ref_tipo:'transferencia'`.
+ * No es atomico (limitacion REST); si el segundo movimiento falla, se informa
+ * para reconciliar manualmente.
+ */
+export async function transferirEntreCuentas(input: {
+  origen_id: number
+  destino_id: number
+  monto: number
+  concepto?: string
+}): Promise<{ error: string | null }> {
+  if (input.origen_id === input.destino_id) {
+    return { error: "La cuenta origen y destino no pueden ser la misma" }
+  }
+  if (!input.monto || input.monto <= 0) {
+    return { error: "El monto debe ser mayor a 0" }
+  }
+
+  const salida = await registrarMovimientoCuenta({
+    cuenta_id: input.origen_id,
+    tipo: "Egreso",
+    monto: input.monto,
+    concepto: input.concepto || `Transferencia a cuenta #${input.destino_id}`,
+    ref_tipo: "transferencia",
+    ref_id: input.destino_id,
+  })
+  if (salida.error) return { error: salida.error }
+
+  const entrada = await registrarMovimientoCuenta({
+    cuenta_id: input.destino_id,
+    tipo: "Ingreso",
+    monto: input.monto,
+    concepto: input.concepto || `Transferencia desde cuenta #${input.origen_id}`,
+    ref_tipo: "transferencia",
+    ref_id: input.origen_id,
+  })
+  if (entrada.error) {
+    return {
+      error: `Se descontó de la cuenta origen pero falló el ingreso a la destino: ${entrada.error}. Reconciliar manualmente.`,
+    }
+  }
+
+  return { error: null }
 }
