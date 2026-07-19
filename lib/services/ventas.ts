@@ -2,6 +2,7 @@ import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from '@/lib/services/tenant-stamp'
 import { registrarMovimientoCaja, getSesionAbierta } from '@/lib/services/caja-chica'
 import { registrarMovimientoCuenta } from '@/lib/services/cuentas'
+import { ajustarStock } from '@/lib/services/stock'
 
 // ==================== INTERFACES ====================
 
@@ -483,25 +484,9 @@ export async function crearVenta(
 
     // 3. Update stock and create inventory transactions (sello completo)
     for (const detalle of data.detalles) {
-      // Get current stock
-      const { data: prodData, error: prodReadError } = await supabase
-        .from('productos')
-        .select('stock_total')
-        .eq('id', detalle.producto_id)
-        .single()
-
-      if (prodReadError) continue
-
-      const nuevoStock = (prodData?.stock_total || 0) - detalle.cantidad
-
-      // Update product stock
-      await supabase
-        .from('productos')
-        .update({
-          stock_total: nuevoStock,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', detalle.producto_id)
+      // Descuenta el stock de forma ATOMICA (evita perdida de actualizaciones
+      // si dos ventas del mismo producto ocurren a la vez). Ver script 018.
+      await ajustarStock(supabase, detalle.producto_id, -detalle.cantidad)
 
       // Create inventory transaction
       await supabase
@@ -1608,25 +1593,15 @@ export async function eliminarVentaCompletamente(
     }
 
     for (const linea of detalles ?? []) {
-      // 1a. Devolver el stock al producto (suma de vuelta lo vendido).
-      // Filtramos por razon_social_id para no tocar productos de otra empresa.
-      const { data: prod } = await supabase
-        .from('productos')
-        .select('stock_total')
-        .eq('id', linea.producto_id)
-        .eq('razon_social_id', stamp.razon_social_id)
-        .single()
-
-      if (prod) {
-        await supabase
-          .from('productos')
-          .update({
-            stock_total: (prod.stock_total || 0) + (linea.cantidad || 0),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', linea.producto_id)
-          .eq('razon_social_id', stamp.razon_social_id)
-      }
+      // 1a. Devolver el stock al producto (suma de vuelta lo vendido) de forma
+      // ATOMICA. Acotado a la razon social activa para no tocar otra empresa
+      // (relevante solo en la ruta de respaldo; la RPC ya respeta RLS).
+      await ajustarStock(
+        supabase,
+        linea.producto_id,
+        linea.cantidad || 0,
+        stamp.razon_social_id
+      )
 
       // 1b. Borrar el movimiento de inventario de esta linea: se ubica por
       // referencia_id (= venta_id) + producto_id + tipo de salida, SIEMPRE

@@ -62,6 +62,65 @@ const chartConfig = {
   },
 }
 
+// Formato de moneda compartido (Lempiras). A nivel de modulo para poder
+// usarlo tanto en el componente como en la fila `FinancialLine`.
+function formatLps(value: number) {
+  return `L ${value.toLocaleString('es-HN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+// Fila del estado de resultados. Definida a nivel de modulo (NO dentro del
+// componente) para que no se recree en cada render — antes esto remontaba
+// toda la tabla financiera en cada actualizacion de estado.
+function FinancialLine({
+  label,
+  value,
+  isHeader = false,
+  isSubtotal = false,
+  isTotal = false,
+  isNegative = false,
+  indent = 0,
+}: {
+  label: string
+  value?: number
+  isHeader?: boolean
+  isSubtotal?: boolean
+  isTotal?: boolean
+  isNegative?: boolean
+  indent?: number
+}) {
+  return (
+    <div className={`
+      flex items-center justify-between py-2.5 px-4
+      ${isHeader ? 'bg-stone-100/50 border-b border-stone-200' : ''}
+      ${isSubtotal ? 'bg-amber-50/50 border-y border-amber-200/50 font-semibold' : ''}
+      ${isTotal ? 'bg-gradient-to-r from-amber-100/80 to-orange-100/60 border-y-2 border-amber-300/50' : ''}
+      ${!isHeader && !isSubtotal && !isTotal ? 'border-b border-stone-100' : ''}
+    `}>
+      <span
+        className={`
+          ${isHeader ? 'text-xs uppercase tracking-wider text-stone-500 font-medium' : ''}
+          ${isSubtotal || isTotal ? 'font-serif text-stone-800' : 'text-stone-600'}
+          ${isTotal ? 'text-lg' : ''}
+        `}
+        style={{ paddingLeft: indent * 16 }}
+      >
+        {label}
+      </span>
+      {value !== undefined && (
+        <span className={`
+          font-mono
+          ${isNegative ? 'text-red-600' : ''}
+          ${isSubtotal ? 'text-amber-800 font-semibold' : ''}
+          ${isTotal ? 'text-xl font-bold text-amber-900' : ''}
+          ${!isSubtotal && !isTotal && !isNegative ? 'text-stone-700' : ''}
+        `}>
+          {isNegative && value > 0 ? `(${formatLps(value)})` : formatLps(value)}
+        </span>
+      )}
+    </div>
+  )
+}
+
 export default function EstadoResultadosPage() {
   const { toast } = useToast()
   const now = new Date()
@@ -97,9 +156,7 @@ export default function EstadoResultadosPage() {
   }, [vista, anio, mes])
 
   // Format currency
-  const formatCurrency = (value: number) => {
-    return `L ${value.toLocaleString('es-HN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  }
+  const formatCurrency = formatLps
 
   // Generate PDF
   async function generatePDF() {
@@ -246,54 +303,6 @@ export default function EstadoResultadosPage() {
   }))
 
   // Render financial line
-  const FinancialLine = ({ 
-    label, 
-    value, 
-    isHeader = false, 
-    isSubtotal = false, 
-    isTotal = false,
-    isNegative = false,
-    indent = 0
-  }: { 
-    label: string
-    value?: number
-    isHeader?: boolean
-    isSubtotal?: boolean
-    isTotal?: boolean
-    isNegative?: boolean
-    indent?: number
-  }) => (
-    <div className={`
-      flex items-center justify-between py-2.5 px-4
-      ${isHeader ? 'bg-stone-100/50 border-b border-stone-200' : ''}
-      ${isSubtotal ? 'bg-amber-50/50 border-y border-amber-200/50 font-semibold' : ''}
-      ${isTotal ? 'bg-gradient-to-r from-amber-100/80 to-orange-100/60 border-y-2 border-amber-300/50' : ''}
-      ${!isHeader && !isSubtotal && !isTotal ? 'border-b border-stone-100' : ''}
-    `}>
-      <span 
-        className={`
-          ${isHeader ? 'text-xs uppercase tracking-wider text-stone-500 font-medium' : ''}
-          ${isSubtotal || isTotal ? 'font-serif text-stone-800' : 'text-stone-600'}
-          ${isTotal ? 'text-lg' : ''}
-        `}
-        style={{ paddingLeft: indent * 16 }}
-      >
-        {label}
-      </span>
-      {value !== undefined && (
-        <span className={`
-          font-mono
-          ${isNegative ? 'text-red-600' : ''}
-          ${isSubtotal ? 'text-amber-800 font-semibold' : ''}
-          ${isTotal ? 'text-xl font-bold text-amber-900' : ''}
-          ${!isSubtotal && !isTotal && !isNegative ? 'text-stone-700' : ''}
-        `}>
-          {isNegative && value > 0 ? `(${formatCurrency(value)})` : formatCurrency(value)}
-        </span>
-      )}
-    </div>
-  )
-
   const datos = vista === 'mes' ? datosMes : datosAcumulado
 
   return (

@@ -1,5 +1,6 @@
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from '@/lib/services/tenant-stamp'
+import { aplicarEntradaCompra } from '@/lib/services/stock'
 
 // ==================== INTERFACES ====================
 
@@ -438,37 +439,16 @@ export async function procesarRecepcion(data: RecepcionData): Promise<{ success:
 
       if (detError) return { success: false, error: detError.message }
 
-      // Get current product data
-      const { data: prodData, error: prodReadError } = await supabase
-        .from('productos')
-        .select('stock_total, costo_promedio')
-        .eq('id', item.producto_id)
-        .single()
-
-      if (prodReadError) return { success: false, error: prodReadError.message }
-
-      const stockActual = prodData?.stock_total || 0
-      const costoActual = prodData?.costo_promedio || 0
-      const cantRecibida = item.cantidad_recibida
-      const costoFinal = item.costo_final_local
-
-      // Calculate new weighted average cost
-      const nuevoStock = stockActual + cantRecibida
-      const nuevoCosto = nuevoStock > 0
-        ? ((stockActual * costoActual) + (cantRecibida * costoFinal)) / nuevoStock
-        : costoFinal
-
-      // Update product
-      const { error: prodUpdateError } = await supabase
-        .from('productos')
-        .update({
-          stock_total: nuevoStock,
-          costo_promedio: nuevoCosto,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', item.producto_id)
-
-      if (prodUpdateError) return { success: false, error: prodUpdateError.message }
+      // Entrada de mercancia: suma stock y recalcula costo promedio ponderado
+      // de forma ATOMICA (evita la condicion de carrera si dos recepciones del
+      // mismo producto ocurren a la vez). Ver lib/services/stock.ts + script 018.
+      const entrada = await aplicarEntradaCompra(
+        supabase,
+        item.producto_id,
+        item.cantidad_recibida,
+        item.costo_final_local
+      )
+      if (entrada.error) return { success: false, error: entrada.error }
 
       // Insert inventory transaction (sello completo: empresa + usuario
       // que procesa la recepcion, que puede diferir de quien creo la orden)

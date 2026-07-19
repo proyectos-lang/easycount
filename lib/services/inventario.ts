@@ -1,5 +1,6 @@
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from '@/lib/services/tenant-stamp'
+import { aplicarEntradaCompra } from '@/lib/services/stock'
 
 // ==================== INTERFACES ====================
 
@@ -611,16 +612,17 @@ export async function procesarIngresoManual(data: IngresoManualData): Promise<{ 
 
     if (transError) return { success: false, error: transError.message }
 
-    // Update product stock and cost
-    const { error: updateError } = await supabase
-      .from('productos')
-      .update({
-        stock_total: data.nuevo_stock,
-        costo_promedio: data.nuevo_costo
-      })
-      .eq('id', data.producto_id)
-
-    if (updateError) return { success: false, error: updateError.message }
+    // Suma stock y recalcula costo promedio ponderado de forma ATOMICA en el
+    // servidor. Se recalcula desde los valores reales de la fila (no desde el
+    // nuevo_stock/nuevo_costo que la pagina calculo con una lectura que pudo
+    // quedar obsoleta). Ver lib/services/stock.ts + script 018.
+    const entrada = await aplicarEntradaCompra(
+      supabase,
+      data.producto_id,
+      data.cantidad,
+      data.costo_unitario
+    )
+    if (entrada.error) return { success: false, error: entrada.error }
 
     return { success: true, error: null }
   } catch (err) {

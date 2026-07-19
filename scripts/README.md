@@ -22,6 +22,7 @@ SQL Editor de Supabase. Son en su mayoría idempotentes (`IF NOT EXISTS` /
 | 015 | `015-subcategorias.sql` | `subcategorias` |
 | 016 | `016-vista-historico-caja-chica.sql` | Vista `vista_historico_caja_chica` |
 | 017 | `017-rls-policies.sql` | **Políticas RLS de aislamiento multi-empresa** |
+| 018 | `018-funciones-stock-atomico.sql` | **Funciones atómicas de stock y costo promedio** |
 | — | `add-almacen-to-ventas-encabezado.sql` | Agrega `almacen_id` a ventas (aplicar tras 011) |
 
 > **Huecos 006–008:** la numeración salta de 005 a 009. No faltan migraciones;
@@ -42,3 +43,13 @@ El aislamiento entre empresas depende de las políticas del script **017**.
 Si recreas el proyecto o migras de entorno, **ejecuta 017** o los datos de
 todas las empresas quedarán mezclados. Antes de aplicarlo, respalda las
 políticas actuales (la consulta está documentada dentro del propio script).
+
+## Consistencia de stock (RPC)
+
+El script **018** crea las funciones `ajustar_stock` y `aplicar_entrada_compra`
+que actualizan `stock_total` y `costo_promedio` de forma atómica, evitando la
+pérdida de actualizaciones cuando dos ventas o recepciones del mismo producto
+ocurren a la vez. Mientras no lo apliques, la app usa una ruta de respaldo
+(lee-modifica-escribe, no concurrency-safe) que funciona igual pero sin la
+garantía atómica. En cuanto ejecutes el 018, la app empieza a usar las
+funciones automáticamente (sin cambios de código).
