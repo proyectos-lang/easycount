@@ -63,6 +63,7 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
       "Recalcula el costo promedio ponderado del producto con el costo final de la compra.",
       "Deja rastro en el kardex como 'Entrada Compra' vinculada a la orden.",
       "Marca la orden como Recibida cuando se completa.",
+      "Muestra un desglose explícito del prorrateo: cuánto de los costos de importación/impuestos/otros se asigna a cada producto (según su valor) y cómo se forma el costo final unitario, con total de control.",
     ],
     queNoHace: [
       "No crea órdenes (eso es Orden de Compra) ni recibe mercancía sin orden — para eso está Recepción por Factura o Ingreso Manual.",
@@ -77,6 +78,14 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
           "Elige el almacén y la localización donde entra la mercancía.",
           "Confirma las cantidades recibidas (por defecto, las ordenadas).",
           "Guarda: el stock sube, el costo promedio se actualiza y la orden queda Recibida.",
+        ],
+      },
+      {
+        titulo: "Entender el costo con importación (prorrateo)",
+        pasos: [
+          "Al recibir, ingresa los costos de importación, impuestos y otros costos en Lempiras.",
+          "Aparece la tabla 'Cómo se calcula el costo': cada producto muestra su valor, el % que representa del total, cuánto costo adicional se le asignó y el costo final unitario.",
+          "Los costos se reparten en proporción al valor de cada línea (más caro = recibe más costo). Verifica el total de control: valor de mercancía + costos adicionales = inventario recibido.",
         ],
       },
       {
@@ -112,6 +121,7 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
       "La IA (Gemini) lee la factura y extrae cada línea: nombre del producto, cantidad y costo unitario.",
       "Permite mapear cada línea extraída con un producto del catálogo (o crear el producto al vuelo).",
       "Ingresa el stock y actualiza el costo promedio, igual que una recepción normal.",
+      "Con costos de importación/impuestos/otros, muestra el mismo desglose explícito del prorrateo que la Recepción por OC.",
     ],
     queNoHace: [
       "No es infalible: la IA puede leer mal cantidades o precios en facturas borrosas — siempre revisa antes de confirmar.",

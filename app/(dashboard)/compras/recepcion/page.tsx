@@ -39,16 +39,18 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { 
-  type CompraEncabezado, 
+import {
+  type CompraEncabezado,
   type CompraDetalle,
+  type ProrrateoResultado,
   getCompras,
   getDetallesCompra,
   procesarRecepcion,
-  calcularProrrateo,
+  calcularProrrateoDetallado,
   deleteCompra,
   getCompraById
 } from "@/lib/services/compras"
+import { DesgloseProrrateo } from "@/components/recepcion/desglose-prorrateo"
 import { type Proveedor, getProveedores } from "@/lib/services/catalogos"
 import { getRazonSocialForPdf } from "@/lib/services/ventas"
 import { type Almacen, type Localizacion, getAlmacenes, getLocalizaciones } from "@/lib/services/catalogos"
@@ -84,6 +86,8 @@ export default function RecepcionPage() {
     cantidad: number
     costo_final_local: number
   }[]>([])
+  // Desglose detallado del prorrateo (para mostrarlo explicitamente).
+  const [prorrateo, setProrrateo] = useState<ProrrateoResultado | null>(null)
   
   const { toast } = useToast()
 
@@ -126,13 +130,23 @@ export default function RecepcionPage() {
       const costosAdicionales = formData.costos_importacion + formData.impuestos_compra + formData.otros_costos
       const tasa = selectedCompra.moneda === 'USD' ? formData.tasa_cambio : 1
       
-      const calculados = calcularProrrateo(
+      const detallado = calcularProrrateoDetallado(
         detalles,
         costosAdicionales,
         selectedCompra.moneda,
         tasa
       )
-      setCostosCalculados(calculados)
+      setProrrateo(detallado)
+      setCostosCalculados(
+        detallado.lineas.map((l) => ({
+          detalle_id: l.detalle_id,
+          producto_id: l.producto_id,
+          cantidad: l.cantidad,
+          costo_final_local: l.costo_final_unitario,
+        }))
+      )
+    } else {
+      setProrrateo(null)
     }
   }, [detalles, formData.costos_importacion, formData.impuestos_compra, formData.otros_costos, formData.tasa_cambio, selectedCompra])
 
@@ -612,6 +626,11 @@ export default function RecepcionPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Desglose explicito del prorrateo */}
+                {prorrateo && prorrateo.lineas.length > 0 && (
+                  <DesgloseProrrateo resultado={prorrateo} />
+                )}
 
                 <Separator />
 

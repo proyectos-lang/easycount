@@ -476,38 +476,119 @@ export async function procesarRecepcion(data: RecepcionData): Promise<{ success:
   }
 }
 
-// ==================== HELPERS ====================
+// ==================== HELPERS: PRORRATEO ====================
 
+/**
+ * Una linea del desglose del prorrateo, con TODOS los pasos intermedios
+ * explicitos para que el usuario vea exactamente como se calcula el costo.
+ */
+export interface ProrrateoLinea {
+  detalle_id: number
+  producto_id: number
+  producto_nombre?: string
+  cantidad: number
+  costo_unitario_origen: number
+  /** cantidad * costo_unitario_origen (en moneda de origen) */
+  valor_origen: number
+  /** valor_origen convertido a Lempiras (× tasa si es USD) */
+  valor_local: number
+  /** participacion de la linea en el subtotal (0..1) */
+  proporcion: number
+  /** costos adicionales asignados a esta linea = costosAdicionales × proporcion */
+  costos_asignados: number
+  /** valor_local + costos_asignados */
+  costo_total_linea: number
+  /** costo_total_linea / cantidad (el costo final que entra al inventario) */
+  costo_final_unitario: number
+}
+
+export interface ProrrateoResultado {
+  lineas: ProrrateoLinea[]
+  moneda: 'LPS' | 'USD'
+  tasaCambio: number
+  costosAdicionales: number
+  /** subtotal de la mercancia en moneda de origen */
+  subtotalOrigen: number
+  /** subtotal de la mercancia en Lempiras */
+  subtotalLocal: number
+  /** suma de costos asignados (debe cuadrar con costosAdicionales) */
+  totalCostosAsignados: number
+  /** subtotalLocal + costosAdicionales (valor total del inventario recibido) */
+  totalFinal: number
+}
+
+/**
+ * Prorrateo detallado: reparte los costos adicionales (importacion, impuestos,
+ * otros) entre las lineas EN PROPORCION a su valor, y devuelve cada paso del
+ * calculo para mostrarlo en pantalla.
+ *
+ * Formula por linea:
+ *   valor_local        = cantidad × costo_unit_origen × (USD ? tasa : 1)
+ *   proporcion         = valor_local / subtotal_local
+ *   costos_asignados   = costos_adicionales × proporcion
+ *   costo_final_unit   = (valor_local + costos_asignados) / cantidad
+ */
+export function calcularProrrateoDetallado(
+  detalles: CompraDetalle[],
+  costosAdicionales: number,
+  moneda: 'LPS' | 'USD',
+  tasaCambio: number
+): ProrrateoResultado {
+  const tasa = moneda === 'USD' ? tasaCambio : 1
+  const subtotalOrigen = detalles.reduce((acc, d) => acc + d.cantidad * d.costo_unitario_moneda_origen, 0)
+  const subtotalLocal = subtotalOrigen * tasa
+
+  let totalCostosAsignados = 0
+  const lineas: ProrrateoLinea[] = detalles.map((d) => {
+    const valorOrigen = d.cantidad * d.costo_unitario_moneda_origen
+    const valorLocal = valorOrigen * tasa
+    const proporcion = subtotalLocal > 0 ? valorLocal / subtotalLocal : 0
+    const costosAsignados = costosAdicionales * proporcion
+    const costoTotalLinea = valorLocal + costosAsignados
+    const costoFinalUnitario = d.cantidad > 0 ? costoTotalLinea / d.cantidad : 0
+    totalCostosAsignados += costosAsignados
+
+    return {
+      detalle_id: d.id!,
+      producto_id: d.producto_id,
+      producto_nombre: d.producto_nombre,
+      cantidad: d.cantidad,
+      costo_unitario_origen: d.costo_unitario_moneda_origen,
+      valor_origen: +valorOrigen.toFixed(2),
+      valor_local: +valorLocal.toFixed(2),
+      proporcion,
+      costos_asignados: +costosAsignados.toFixed(2),
+      costo_total_linea: +costoTotalLinea.toFixed(2),
+      costo_final_unitario: Math.round(costoFinalUnitario * 100) / 100,
+    }
+  })
+
+  return {
+    lineas,
+    moneda,
+    tasaCambio: tasa,
+    costosAdicionales: +costosAdicionales.toFixed(2),
+    subtotalOrigen: +subtotalOrigen.toFixed(2),
+    subtotalLocal: +subtotalLocal.toFixed(2),
+    totalCostosAsignados: +totalCostosAsignados.toFixed(2),
+    totalFinal: +(subtotalLocal + costosAdicionales).toFixed(2),
+  }
+}
+
+/**
+ * Version compacta (compatibilidad con los llamadores existentes): usa el
+ * calculo detallado y devuelve solo el costo final por linea.
+ */
 export function calcularProrrateo(
   detalles: CompraDetalle[],
   costosAdicionales: number,
   moneda: 'LPS' | 'USD',
   tasaCambio: number
 ): { detalle_id: number; producto_id: number; cantidad: number; costo_final_local: number }[] {
-  // Calculate subtotal of all items in origin currency
-  const subtotal = detalles.reduce((acc, d) => acc + (d.cantidad * d.costo_unitario_moneda_origen), 0)
-  
-  // Convert to LPS if USD
-  const subtotalLPS = moneda === 'USD' ? subtotal * tasaCambio : subtotal
-  const costosLPS = costosAdicionales // Already in LPS
-  
-  return detalles.map(d => {
-    const valorItemOriginal = d.cantidad * d.costo_unitario_moneda_origen
-    const valorItemLPS = moneda === 'USD' ? valorItemOriginal * tasaCambio : valorItemOriginal
-    
-    // Proportional share of additional costs
-    const proporcion = subtotalLPS > 0 ? valorItemLPS / subtotalLPS : 0
-    const costosProrrateados = costosLPS * proporcion
-    
-    // Final unit cost in local currency (LPS)
-    const costoFinalTotal = valorItemLPS + costosProrrateados
-    const costoFinalLocal = d.cantidad > 0 ? costoFinalTotal / d.cantidad : 0
-    
-    return {
-      detalle_id: d.id!,
-      producto_id: d.producto_id,
-      cantidad: d.cantidad,
-      costo_final_local: Math.round(costoFinalLocal * 100) / 100
-    }
-  })
+  return calcularProrrateoDetallado(detalles, costosAdicionales, moneda, tasaCambio).lineas.map((l) => ({
+    detalle_id: l.detalle_id,
+    producto_id: l.producto_id,
+    cantidad: l.cantidad,
+    costo_final_local: l.costo_final_unitario,
+  }))
 }

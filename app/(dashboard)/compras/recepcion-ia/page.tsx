@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { 
   PackageCheck, 
   Upload,
@@ -55,11 +55,12 @@ import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
-import { 
+import {
   procesarRecepcion,
-  calcularProrrateo,
+  calcularProrrateoDetallado,
   type CompraDetalle
 } from "@/lib/services/compras"
+import { DesgloseProrrateo } from "@/components/recepcion/desglose-prorrateo"
 import { type Proveedor, type Producto, getProveedores, getProductos } from "@/lib/services/catalogos"
 import { type Almacen, type Localizacion, getAlmacenes, getLocalizaciones } from "@/lib/services/catalogos"
 import { QuickCreateProductoDialog } from "@/components/recepcion/quick-create-producto-dialog"
@@ -174,6 +175,29 @@ export default function RecepcionIAPage() {
       }))
     }
   }, [costosImportacion, impuestosCompra, otrosCostos, tasaCambio, moneda])
+
+  // Desglose detallado del prorrateo (mismo helper que Recepcion por OC),
+  // derivado de las lineas actuales. Solo para MOSTRAR el calculo; el costo
+  // que se guarda sigue viviendo en cada linea (costoFinalLocal).
+  const prorrateoIA = useMemo(() => {
+    const conProducto = lineas.filter((l) => l.productoId != null && l.cantidad > 0)
+    if (conProducto.length === 0) return null
+    const detallesMap: CompraDetalle[] = conProducto.map((l) => ({
+      id: l.id,
+      compra_id: 0,
+      producto_id: l.productoId as number,
+      producto_nombre: l.productoNombre || l.nombreExtraido,
+      cantidad: l.cantidad,
+      costo_unitario_moneda_origen: l.costoOriginal,
+    }))
+    const tasa = moneda === "USD" ? tasaCambio : 1
+    return calcularProrrateoDetallado(
+      detallesMap,
+      costosImportacion + impuestosCompra + otrosCostos,
+      moneda,
+      tasa
+    )
+  }, [lineas, costosImportacion, impuestosCompra, otrosCostos, moneda, tasaCambio])
 
   // Handle file drop
   const handleDrop = (e: React.DragEvent) => {
@@ -790,6 +814,13 @@ export default function RecepcionIAPage() {
                     />
                   </div>
                 </div>
+
+                {/* Desglose explicito del prorrateo */}
+                {prorrateoIA && prorrateoIA.lineas.length > 0 && (
+                  <div className="mt-4">
+                    <DesgloseProrrateo resultado={prorrateoIA} />
+                  </div>
+                )}
 
                 {/* Destination */}
                 <Separator />
