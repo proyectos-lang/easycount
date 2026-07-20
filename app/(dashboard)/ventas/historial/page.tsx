@@ -49,6 +49,7 @@ import { useToast } from "@/hooks/use-toast"
 import { getClientes, getAlmacenes, getProductos, type Cliente, type Almacen, type Producto } from "@/lib/services/catalogos"
 import { getCuentas, type CuentaConfig } from "@/lib/services/cuentas"
 import { useCajaSesion } from "@/lib/hooks/use-caja-sesion"
+import { ImportarVentasDialog } from "./importar-ventas-dialog"
 import {
   getVentas,
   getDetallesVenta,
@@ -567,6 +568,11 @@ export default function HistorialVentasPage() {
 
         {/* ── Tab 1: Resumen de Facturas ── */}
         <TabsContent value="facturas" className="mt-4 space-y-4">
+          {/* Acciones */}
+          <div className="flex justify-end">
+            <ImportarVentasDialog onImported={loadData} />
+          </div>
+
           {/* Filtros */}
           <Card className="rounded-2xl shadow-sm border border-stone-200 bg-stone-50">
             <CardContent className="p-4">

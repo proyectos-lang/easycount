@@ -125,11 +125,13 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Reimprime la factura en PDF.",
       "Registra abonos (parciales o totales) a facturas con saldo pendiente: el botón verde de pago aparece directo en la fila. El efectivo entra a la caja chica y los pagos por banco a la cuenta que elijas.",
       "Pestaña 'Detalle por Producto': todas las líneas vendidas con costo y utilidad, exportable a Excel.",
+      "Importar ventas desde Excel: sube una plantilla (una línea por producto), el sistema agrupa por factura y crea cada venta con sus mismas transacciones (inventario, caja/banco).",
       "Elimina una venta por completo: devuelve el stock, borra los movimientos de caja/banco asociados y elimina la factura (pide confirmación).",
     ],
     queNoHace: [
       "No permite editar montos o productos de una factura guardada — solo eliminar completo o devolver parcial (módulo Devoluciones).",
       "La eliminación no es reversible: una vez confirmada, la factura desaparece.",
+      "La importación NO duplica facturas: si un número de factura ya existe, esa se omite. Los productos deben existir en el catálogo (se buscan por código de barras o nombre).",
     ],
     operaciones: [
       {
@@ -165,6 +167,16 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
           "Ve a la pestaña 'Detalle por Producto'.",
           "Aplica los filtros de fecha que necesites.",
           "Presiona 'Exportar': se descarga un .xlsx con columnas separadas (fecha, factura, cliente, producto, cantidades, costos y utilidad).",
+        ],
+      },
+      {
+        titulo: "Importar ventas desde un Excel",
+        pasos: [
+          "En 'Resumen de Facturas' presiona 'Importar ventas'.",
+          "Descarga la plantilla y llénala: una fila por producto, con la columna Factura como agrupador (varias filas con la misma factura = una sola venta).",
+          "En el diálogo elige el cliente (o crea 'Consumidor Final'), el almacén/localización, el método de pago (Banco con su cuenta, o Efectivo con caja abierta) y si aplica ISV.",
+          "Sube el archivo: verás un resumen (facturas, líneas, total) y avisos de facturas duplicadas o productos no encontrados.",
+          "Presiona 'Importar': cada factura se crea con las mismas transacciones que una venta normal (baja stock, y el dinero entra a la cuenta o caja elegida).",
         ],
       },
     ],
