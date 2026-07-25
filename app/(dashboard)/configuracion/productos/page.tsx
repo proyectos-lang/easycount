@@ -52,6 +52,8 @@ import {
   Marca,
   Categoria,
   Subcategoria,
+  type Almacen,
+  type Localizacion,
   getProductos,
   saveProducto,
   deleteProducto,
@@ -61,7 +63,10 @@ import {
   getCategorias,
   createCategoria,
   getSubcategorias,
+  getAlmacenes,
+  getLocalizaciones,
 } from "@/lib/services/catalogos"
+import { procesarIngresoManual } from "@/lib/services/inventario"
 import { useTenant } from "@/lib/hooks/use-tenant"
 import { ManageCategoriasDialog } from "@/components/productos/manage-categorias-dialog"
 
@@ -117,6 +122,17 @@ export default function ProductosConfigPage() {
   const [imagePreview, setImagePreview] = useState<string>("")
   const [uploadingImage, setUploadingImage] = useState(false)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
+
+  // Inventario inicial (SOLO al crear un producto nuevo): genera un ingreso
+  // manual al almacen/localizacion elegidos con la cantidad y costo indicados.
+  const [almacenes, setAlmacenes] = useState<Almacen[]>([])
+  const [localizacionesInicial, setLocalizacionesInicial] = useState<Localizacion[]>([])
+  const [invInicial, setInvInicial] = useState({
+    cantidad: 0,
+    costo_unitario: 0,
+    almacen_id: 0,
+    localizacion_id: 0,
+  })
   
   // Price calculator state
   const [showCalculator, setShowCalculator] = useState(false)
@@ -141,11 +157,12 @@ export default function ProductosConfigPage() {
   async function loadAll() {
     setLoading(true)
     try {
-      const [prodRes, marcaRes, catRes, subRes] = await Promise.all([
+      const [prodRes, marcaRes, catRes, subRes, almRes] = await Promise.all([
         getProductos(),
         getMarcas(),
         getCategorias(),
         getSubcategorias(),
+        getAlmacenes(),
       ])
       if (prodRes.error) {
         console.log('[Productos] error:', prodRes.error)
@@ -156,6 +173,7 @@ export default function ProductosConfigPage() {
       if (!marcaRes.error) setMarcas(marcaRes.data)
       if (!catRes.error) setCategorias(catRes.data)
       if (!subRes.error) setSubcategorias(subRes.data)
+      if (!almRes.error) setAlmacenes(almRes.data)
     } catch (err: any) {
       console.log('[Productos] excepcion:', err)
       toast({ title: "No se pudieron cargar los datos", description: err?.message || "Error de conexion", variant: "destructive" })
@@ -168,6 +186,19 @@ export default function ProductosConfigPage() {
     const { data } = await getSubcategorias()
     setSubcategorias(data)
   }
+
+  // Carga las localizaciones del almacen elegido para el inventario inicial.
+  useEffect(() => {
+    if (invInicial.almacen_id) {
+      getLocalizaciones(invInicial.almacen_id).then((res) => {
+        setLocalizacionesInicial(res.data)
+        setInvInicial((prev) => ({ ...prev, localizacion_id: 0 }))
+      })
+    } else {
+      setLocalizacionesInicial([])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invInicial.almacen_id])
 
   async function loadProductos() {
     const { data, error } = await getProductos()
@@ -266,6 +297,7 @@ export default function ProductosConfigPage() {
       categoria_id: null,
       subcategoria_id: null,
     })
+    setInvInicial({ cantidad: 0, costo_unitario: 0, almacen_id: 0, localizacion_id: 0 })
     setImagePreview("")
     setImageFile(null)
     setShowCalculator(false)
@@ -355,7 +387,14 @@ export default function ProductosConfigPage() {
     if (!formData.categoria_id) {
       errors.categoria_id = "La categoria es requerida"
     }
-    
+
+    // Inventario inicial (solo al crear): si se indica cantidad, exige
+    // almacen y localizacion para poder generar el ingreso.
+    if (!editingProducto && invInicial.cantidad > 0) {
+      if (!invInicial.almacen_id) errors.inv_almacen = "Selecciona el almacén del inventario inicial"
+      if (!invInicial.localizacion_id) errors.inv_localizacion = "Selecciona la localización"
+    }
+
     setValidationErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -383,16 +422,52 @@ export default function ProductosConfigPage() {
         : null,
     }
 
-    const { error } = await saveProducto(productoData, !editingProducto)
-    setSaving(false)
+    const { data: creado, error } = await saveProducto(productoData, !editingProducto)
 
     if (error) {
+      setSaving(false)
       toast({ title: "Error", description: error, variant: "destructive" })
-    } else {
-      toast({ title: "Exito", description: `Producto ${editingProducto ? "actualizado" : "creado"} correctamente` })
+      return
+    }
+
+    // Inventario inicial: genera un ingreso manual con la cantidad indicada.
+    // Solo al crear (no al editar) y si la cantidad es > 0.
+    if (!editingProducto && invInicial.cantidad > 0 && creado?.id) {
+      const ing = await procesarIngresoManual({
+        producto_id: creado.id,
+        almacen_id: invInicial.almacen_id,
+        localizacion_id: invInicial.localizacion_id,
+        cantidad: invInicial.cantidad,
+        costo_unitario: invInicial.costo_unitario,
+        observaciones: "Inventario inicial (creación de producto)",
+        stock_anterior: 0,
+        costo_anterior: 0,
+        nuevo_stock: invInicial.cantidad,
+        nuevo_costo: invInicial.costo_unitario,
+      })
+      setSaving(false)
+      if (ing.error) {
+        // El producto ya existe; solo fallo el ingreso inicial.
+        toast({
+          title: "Producto creado, sin inventario inicial",
+          description: `No se pudo registrar la cantidad inicial: ${ing.error}. Regístrala en Inventario → Ingreso Manual.`,
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Producto creado",
+          description: `Se ingresaron ${invInicial.cantidad} unidad(es) al inventario inicial.`,
+        })
+      }
       setDialogOpen(false)
       loadProductos()
+      return
     }
+
+    setSaving(false)
+    toast({ title: "Exito", description: `Producto ${editingProducto ? "actualizado" : "creado"} correctamente` })
+    setDialogOpen(false)
+    loadProductos()
   }
 
   async function handleDelete(producto: Producto) {
@@ -1012,6 +1087,99 @@ export default function ProductosConfigPage() {
                 <p className="text-sm text-destructive">{validationErrors.precio_venta_sugerido}</p>
               )}
             </div>
+
+            {/* Inventario inicial: SOLO al crear un producto nuevo */}
+            {!editingProducto && (
+              <div className="rounded-lg border border-sky-200 bg-sky-50/40 p-4 space-y-4">
+                <div>
+                  <p className="text-sm font-medium text-sky-900">Inventario inicial (opcional)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Indica la cantidad con la que arranca este producto. Se generará un
+                    ingreso manual al inventario en el almacén y localización que elijas.
+                    Déjalo en 0 si aún no tienes existencias.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="inv-cantidad">Cantidad inicial</Label>
+                    <Input
+                      id="inv-cantidad"
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="0"
+                      value={invInicial.cantidad || ""}
+                      onChange={(e) =>
+                        setInvInicial({ ...invInicial, cantidad: parseFloat(e.target.value) || 0 })
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="inv-costo">Costo unitario (LPS)</Label>
+                    <Input
+                      id="inv-costo"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={invInicial.costo_unitario || ""}
+                      onChange={(e) =>
+                        setInvInicial({ ...invInicial, costo_unitario: parseFloat(e.target.value) || 0 })
+                      }
+                    />
+                  </div>
+                </div>
+                {invInicial.cantidad > 0 && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="inv-almacen">Almacén</Label>
+                      <Select
+                        value={invInicial.almacen_id ? String(invInicial.almacen_id) : ""}
+                        onValueChange={(v) => {
+                          setInvInicial({ ...invInicial, almacen_id: Number(v) })
+                          setValidationErrors((prev) => ({ ...prev, inv_almacen: "" }))
+                        }}
+                      >
+                        <SelectTrigger id="inv-almacen" className={validationErrors.inv_almacen ? "border-destructive" : ""}>
+                          <SelectValue placeholder="Seleccionar" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {almacenes.map((a) => (
+                            <SelectItem key={a.id} value={String(a.id)}>{a.nombre}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {validationErrors.inv_almacen && (
+                        <p className="text-sm text-destructive">{validationErrors.inv_almacen}</p>
+                      )}
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="inv-localizacion">Localización</Label>
+                      <Select
+                        value={invInicial.localizacion_id ? String(invInicial.localizacion_id) : ""}
+                        onValueChange={(v) => {
+                          setInvInicial({ ...invInicial, localizacion_id: Number(v) })
+                          setValidationErrors((prev) => ({ ...prev, inv_localizacion: "" }))
+                        }}
+                        disabled={!invInicial.almacen_id}
+                      >
+                        <SelectTrigger id="inv-localizacion" className={validationErrors.inv_localizacion ? "border-destructive" : ""}>
+                          <SelectValue placeholder={invInicial.almacen_id ? "Seleccionar" : "Elige almacén primero"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {localizacionesInicial.map((l) => (
+                            <SelectItem key={l.id} value={String(l.id)}>{l.nombre}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {validationErrors.inv_localizacion && (
+                        <p className="text-sm text-destructive">{validationErrors.inv_localizacion}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Read-only Fields Section */}
             {editingProducto && (

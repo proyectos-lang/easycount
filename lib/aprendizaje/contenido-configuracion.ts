@@ -101,6 +101,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "Gestiona marcas, categorías y subcategorías desde el mismo módulo.",
       "Muestra el stock total y el costo promedio actuales (informativos).",
       "La foto se sube al almacenamiento de la nube y aparece en el catálogo de Nueva Venta.",
+      "Al crear un producto puedes indicar una cantidad inicial (con su costo, almacén y localización): el sistema genera automáticamente un ingreso manual al inventario para que arranque con existencias.",
     ],
     queNoHace: [
       "No modifica stock ni costo promedio a mano: esos los gobiernan las compras, ventas y ajustes de inventario.",
@@ -108,12 +109,13 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
     ],
     operaciones: [
       {
-        titulo: "Crear un producto",
+        titulo: "Crear un producto (con inventario inicial opcional)",
         pasos: [
           "Abre Configuración → Productos y presiona Nuevo Producto.",
           "Nombre, código de barras (puedes escanearlo), marca y categoría.",
           "Define el precio de venta sugerido y sube la foto si la tienes.",
-          "Guarda. El stock inicial se carga después por Compras o por Inventario → Ingreso Manual.",
+          "En 'Inventario inicial (opcional)' indica la cantidad y el costo unitario con que arranca; elige almacén y localización.",
+          "Guarda: se crea el producto y, si pusiste cantidad, se genera el ingreso al inventario automáticamente. Déjalo en 0 si aún no tienes existencias (las cargas luego por Compras o Ingreso Manual).",
         ],
       },
       {
@@ -128,7 +130,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       {
         pregunta: "¿Por qué no puedo editar el stock aquí?",
         respuesta:
-          "El stock es el resultado del kardex (compras − ventas ± ajustes). Editarlo a mano rompería la trazabilidad; usa Inventario → Ingreso Manual para ajustes.",
+          "El stock es el resultado del kardex (compras − ventas ± ajustes). Editarlo a mano rompería la trazabilidad. Al CREAR el producto sí puedes poner una cantidad inicial (genera un ingreso trazable); después los cambios se hacen por Compras o Inventario → Ingreso Manual.",
       },
     ],
     keywords: ["producto", "codigo de barras", "sku", "precio", "marca", "categoria", "foto", "catalogo"],
