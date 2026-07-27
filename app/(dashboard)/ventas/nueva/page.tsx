@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Minus, Trash2, Printer, FileText, ShoppingCart, User, Receipt, Warehouse, MapPin, AlertTriangle, UserPlus, Wallet, X, Landmark } from "lucide-react"
+import { Plus, Minus, Trash2, FileText, ShoppingCart, User, Receipt, Warehouse, MapPin, AlertTriangle, UserPlus, Wallet, X, Landmark } from "lucide-react"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -107,12 +107,6 @@ export default function NuevaVentaPage() {
   // con su cantidad exacta en esa localizacion. Vacio = sin localizacion.
   const [stockCatalogo, setStockCatalogo] = React.useState<Record<number, number>>({})
   const [loadingCatalogo, setLoadingCatalogo] = React.useState(false)
-  
-  const [lastVenta, setLastVenta] = React.useState<{
-    encabezado: VentaEncabezado
-    detalles: VentaDetalle[]
-  } | null>(null)
-  const [showPdfDialog, setShowPdfDialog] = React.useState(false)
   
   // Quick client creation
   const [showClienteDialog, setShowClienteDialog] = React.useState(false)
@@ -667,12 +661,15 @@ export default function NuevaVentaPage() {
         }))
       }
       
-      setLastVenta(ventaData)
-      
-      // Auto-generate and download PDF
+      // Genera y descarga el PDF de la factura.
       await generatePdfFromData(ventaData, selectedCliente)
-      
-      setShowPdfDialog(true)
+
+      // Confirma y deja el formulario en blanco para una nueva venta.
+      toast({
+        title: "Venta registrada",
+        description: `Factura ${ventaData.encabezado.numero_factura} · L ${(ventaData.encabezado.total_venta ?? 0).toFixed(2)}. PDF descargado.`,
+      })
+      resetForm()
     } catch (err) {
       toast({ title: "Error", description: "Error al guardar la venta", variant: "destructive" })
     } finally {
@@ -937,17 +934,9 @@ export default function NuevaVentaPage() {
     setDescuentoPct(0)
     setFecha(new Date().toISOString().split("T")[0])
     setStockPorLocalizacion({})
-    setLastVenta(null)
     // Recarga el correlativo y los catalogos para reflejar altas recientes
     // (nuevos clientes, productos, correlativo incrementado).
     loadData()
-  }
-
-  async function generatePdf() {
-    if (!lastVenta) return
-    await generatePdfFromData(lastVenta, selectedCliente)
-    setShowPdfDialog(false)
-    resetForm()
   }
 
   if (loading) {
@@ -1688,50 +1677,6 @@ export default function NuevaVentaPage() {
         </DialogContent>
       </Dialog>
 
-      {/* PDF Generation Dialog */}
-      <Dialog
-        open={showPdfDialog}
-        onOpenChange={(open) => {
-          // Al cerrar el dialog por cualquier via (X, ESC, clic fuera),
-          // limpiamos el formulario para dejar todo listo para una nueva venta.
-          if (!open) {
-            setShowPdfDialog(false)
-            resetForm()
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Factura Generada</DialogTitle>
-          </DialogHeader>
-          <div className="py-6 text-center">
-            <div className="mx-auto w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
-              <FileText className="h-8 w-8 text-green-600" />
-            </div>
-            <p className="text-xl font-semibold">
-              Factura {lastVenta?.encabezado.numero_factura}
-            </p>
-            <p className="text-muted-foreground mt-1">
-              creada exitosamente - PDF descargado
-            </p>
-            <p className="text-2xl font-bold text-primary mt-4">
-              L {(lastVenta?.encabezado.total_venta ?? 0).toFixed(2)}
-            </p>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-2">
-            <Button variant="outline" size="lg" onClick={() => {
-              setShowPdfDialog(false)
-              resetForm()
-            }}>
-              Nueva Venta
-            </Button>
-            <Button size="lg" onClick={generatePdf} className="gap-2">
-              <Printer className="h-4 w-4" />
-              Descargar PDF Nuevamente
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

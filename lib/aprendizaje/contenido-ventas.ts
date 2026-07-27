@@ -49,7 +49,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Aplica la comisión bancaria configurada en cada cuenta: registra el monto bruto que paga el cliente y el neto que entra al banco.",
       "El efectivo entra automáticamente a la caja chica abierta; lo de banco entra a la cuenta elegida.",
       "Descuenta el stock del almacén y deja rastro en el kardex de inventario.",
-      "Genera la factura en PDF al terminar.",
+      "Al terminar descarga la factura en PDF automáticamente y deja el formulario en blanco, listo para la siguiente venta.",
     ],
     queNoHace: [
       "No permite vender en efectivo sin una sesión de caja chica abierta (el sistema lo bloquea).",
@@ -65,7 +65,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
           "Busca cada producto en el catálogo y agrégalo; ajusta cantidades con los botones + / −.",
           "Si aplica, ingresa el descuento (%) y activa el impuesto.",
           "En el desglose de pago agrega una línea 'Efectivo' (o 'Banco' y elige la cuenta) por el total.",
-          "Verifica el total y presiona Guardar. Se genera la factura PDF.",
+          "Verifica el total y presiona Guardar. Se descarga la factura PDF y el formulario queda en blanco para la siguiente venta.",
         ],
       },
       {
