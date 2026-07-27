@@ -122,6 +122,63 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
     keywords: ["mover", "bodega", "transferir mercancia", "ubicacion", "localizacion"],
   },
   {
+    modulo: "Ajustes de Inventario",
+    titulo: "Ajustes de Inventario",
+    descripcion:
+      "Cuadra el inventario contra un conteo físico: escribe la cantidad real y el sistema genera las entradas/salidas para corregir, sin cambiar el costo.",
+    queHace: [
+      "Dos modos: ajustar un producto puntual, o contar una localización completa (lista todo el catálogo con su stock en esa localización).",
+      "Muestra la cantidad actual del sistema y te deja escribir la cantidad real contada.",
+      "Genera automáticamente un movimiento de 'Ajuste' por producto en el kardex: entrada si sobra, salida si falta.",
+      "Usa el costo promedio ACTUAL del producto en el movimiento, así el ajuste NO altera la valoración/costo promedio.",
+      "Guarda una bitácora con el motivo, el antes/después y quién hizo el ajuste (auditoría).",
+    ],
+    queNoHace: [
+      "No cambia el costo promedio del producto: solo corrige la cantidad.",
+      "No genera movimiento para los productos cuya cantidad real coincide con la del sistema (solo ajusta lo que difiere).",
+      "No es para ingresar mercancía nueva con costo (eso es Ingreso Manual o Compras); es para cuadrar existencias.",
+    ],
+    operaciones: [
+      {
+        titulo: "Ajustar un producto",
+        pasos: [
+          "Abre Inventario → Ajustes de Inventario.",
+          "Elige el almacén y la localización.",
+          "En 'Un producto', busca y selecciona el producto: verás su cantidad actual y su costo promedio.",
+          "Escribe la cantidad real contada. Aparece la diferencia (entrada o salida).",
+          "Escribe el motivo (opcional) y presiona 'Aplicar ajuste'; confirma el resumen.",
+        ],
+      },
+      {
+        titulo: "Contar una localización completa",
+        pasos: [
+          "Elige almacén y localización, y entra a la pestaña 'Localización completa'.",
+          "El sistema lista los productos con su stock actual; escribe la cantidad real de cada uno (usa el buscador para ubicarlos).",
+          "Solo las filas con diferencia se ajustarán. Revisa el resumen de entradas/salidas.",
+          "Motivo (opcional) y 'Aplicar ajuste' → confirma.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        pregunta: "¿El ajuste cambia el costo de mi producto?",
+        respuesta:
+          "No. El movimiento de ajuste usa el costo promedio actual, así la valoración no se distorsiona. Solo cambia la cantidad en existencia.",
+      },
+      {
+        pregunta: "Conté una localización y no pasó nada con varios productos.",
+        respuesta:
+          "Es lo esperado: solo se generan movimientos para los productos cuya cantidad real difiere de la del sistema. Los que ya cuadraban no se tocan.",
+      },
+      {
+        pregunta: "¿Dónde veo el ajuste después?",
+        respuesta:
+          "En Inventario → Historial de Transacciones aparece como movimiento 'Ajuste' (con la cantidad en + o −). El motivo y el antes/después quedan en la bitácora de ajustes.",
+      },
+    ],
+    keywords: ["ajuste", "conteo", "cuadrar", "inventario fisico", "merma", "faltante", "sobrante", "toma fisica"],
+  },
+  {
     modulo: "Valoracion",
     titulo: "Valoración de Inventario",
     descripcion:

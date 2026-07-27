@@ -374,6 +374,13 @@ Líneas del pedido: `id, razon_social_id, pedido_id (FK cascade), producto_id (F
 
 ---
 
+## Ajustes de Inventario (script 023)
+
+### `ajustes_inventario`
+Bitácora de ajustes por conteo físico (una fila por línea ajustada, no cabecera+detalle). El movimiento real vive en `transacciones_inventario` como `tipo_movimiento = 'Ajuste'`; esta tabla guarda el contexto de auditoría porque `transacciones_inventario` no tiene columna de motivo: `id, razon_social_id, producto_id (FK), almacen_id (FK), localizacion_id (FK), stock_anterior, stock_real, delta (= real − anterior; + entrada / − salida), costo_unitario (costo promedio congelado, informativo), motivo, usuario, created_at`. El ajuste **no altera** `productos.costo_promedio`.
+
+---
+
 ## Vistas
 
 ### `vista_stock_por_localizacion`

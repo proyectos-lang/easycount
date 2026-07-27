@@ -1,6 +1,6 @@
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from '@/lib/services/tenant-stamp'
-import { aplicarEntradaCompra } from '@/lib/services/stock'
+import { aplicarEntradaCompra, ajustarStock } from '@/lib/services/stock'
 
 // ==================== INTERFACES ====================
 
@@ -855,4 +855,118 @@ export async function procesarTrasladosMultiples(
     console.error('[Supabase] Error procesando traslados multiples:', err)
     return { success: false, error: 'Error de conexion', procesados: 0 }
   }
+}
+
+// ==================== AJUSTES DE INVENTARIO ====================
+
+/**
+ * Una linea de ajuste de inventario: el stock actual del sistema en una
+ * localizacion y la cantidad real contada. El sistema genera el movimiento
+ * de entrada/salida para cuadrar.
+ */
+export interface AjusteLineaInput {
+  producto_id: number
+  almacen_id: number
+  localizacion_id: number
+  /** stock que el sistema tiene hoy en esa localizacion */
+  stock_actual: number
+  /** cantidad real contada fisicamente */
+  stock_real: number
+  /** costo promedio actual del producto (se congela en el movimiento) */
+  costo_unitario: number
+  producto_nombre?: string
+}
+
+/** Linea de ajuste que efectivamente cambia (delta != 0). */
+export interface AjusteLineaCalculada extends AjusteLineaInput {
+  /** stock_real - stock_actual: positivo = entrada, negativo = salida */
+  delta: number
+}
+
+/** Marca la ausencia de la tabla de bitacora (script 023 no aplicado). */
+export const AJUSTES_FEATURE_PENDING =
+  'Bitacora de ajustes pendiente: aplica scripts/023-ajustes-inventario.sql'
+
+/**
+ * Helper PURO: de las lineas dadas, devuelve solo las que cambian (delta != 0)
+ * con su delta calculado. No toca la base — facil de testear.
+ */
+export function calcularLineasAjuste(lineas: AjusteLineaInput[]): AjusteLineaCalculada[] {
+  return lineas
+    .map((l) => ({ ...l, delta: +(l.stock_real - l.stock_actual).toFixed(2) }))
+    .filter((l) => l.delta !== 0)
+}
+
+/**
+ * Procesa un ajuste de inventario: por cada linea con diferencia genera un
+ * movimiento 'Ajuste' en el kardex (entrada o salida) usando el costo
+ * promedio ACTUAL (no altera el costo), y mueve el stock global con
+ * `ajustarStock` (que solo toca stock_total, nunca el costo).
+ *
+ * La bitacora en `ajustes_inventario` (motivo/antes/despues) es best-effort:
+ * si la tabla no existe todavia, el ajuste igual se aplica.
+ */
+export async function procesarAjusteInventario(
+  lineas: AjusteLineaInput[],
+  motivo?: string
+): Promise<{ success: boolean; procesados: number; error: string | null }> {
+  const cambios = calcularLineasAjuste(lineas)
+  if (cambios.length === 0) {
+    return { success: false, procesados: 0, error: 'No hay diferencias que ajustar' }
+  }
+
+  if (!isSupabaseConfigured()) {
+    return { success: false, procesados: 0, error: 'Supabase no configurado' }
+  }
+  const supabase = createClient()
+  if (!supabase) return { success: false, procesados: 0, error: 'Cliente no disponible' }
+
+  const stamp = await getTenantStamp(supabase)
+  if (!isValidStamp(stamp)) {
+    return { success: false, procesados: 0, error: SESION_INVALIDA_ERROR }
+  }
+
+  let procesados = 0
+  for (const l of cambios) {
+    // 1) Movimiento de kardex 'Ajuste' con el costo actual congelado.
+    const { error: movErr } = await supabase.from('transacciones_inventario').insert({
+      producto_id: l.producto_id,
+      almacen_id: l.almacen_id,
+      localizacion_id: l.localizacion_id,
+      tipo_movimiento: 'Ajuste',
+      cantidad: l.delta, // con signo: + entrada, - salida
+      costo_o_precio_unitario: l.costo_unitario,
+      ...stamp,
+    })
+    if (movErr) {
+      return {
+        success: false,
+        procesados,
+        error: `Error al registrar el ajuste de un producto: ${movErr.message}`,
+      }
+    }
+
+    // 2) Stock global (solo cantidad, NO costo).
+    const res = await ajustarStock(supabase, l.producto_id, l.delta, stamp.razon_social_id)
+    if (res.error) {
+      return { success: false, procesados, error: res.error }
+    }
+
+    // 3) Bitacora de auditoria (best-effort; ignora si la tabla no existe).
+    await supabase.from('ajustes_inventario').insert({
+      producto_id: l.producto_id,
+      almacen_id: l.almacen_id,
+      localizacion_id: l.localizacion_id,
+      stock_anterior: l.stock_actual,
+      stock_real: l.stock_real,
+      delta: l.delta,
+      costo_unitario: l.costo_unitario,
+      motivo: motivo || null,
+      ...stamp,
+    })
+
+    procesados++
+  }
+
+  return { success: true, procesados, error: null }
 }

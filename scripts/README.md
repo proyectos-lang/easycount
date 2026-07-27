@@ -27,6 +27,7 @@ SQL Editor de Supabase. Son en su mayoría idempotentes (`IF NOT EXISTS` /
 | 020 | `020-devoluciones.sql` | Devoluciones (notas de crédito): 2 tablas + RLS + módulo |
 | 021 | `021-pedidos-catalogo.sql` | Pedidos por Catálogo: 4 tablas + RLS + módulo |
 | 022 | `022-errores-log.sql` | Log de errores de la app (monitoreo, solo service role) |
+| 023 | `023-ajustes-inventario.sql` | Ajustes de Inventario: bitácora + RLS + módulo |
 | — | `add-almacen-to-ventas-encabezado.sql` | Agrega `almacen_id` a ventas (aplicar tras 011) |
 
 > **Huecos 006–008:** la numeración salta de 005 a 009. No faltan migraciones;
