@@ -215,25 +215,35 @@ export default function NuevaVentaPage() {
     if (filtradas.length === 1) {
       const locId = String(filtradas[0].id)
       setLocalizacionId(locId)
-      // Fetch stock for this localization
+      // Stock de las lineas para esta localizacion (el del catalogo lo
+      // maneja el useEffect de abajo, que tambien cubre la autoseleccion
+      // inicial cuando hay un solo almacen/localizacion).
       fetchStockForLineas(Number(locId))
-      fetchStockCatalogo(Number(locId))
     }
   }
 
   async function handleLocalizacionChange(newLocalizacionId: string) {
     setLocalizacionId(newLocalizacionId)
     if (newLocalizacionId) {
-      await Promise.all([
-        fetchStockForLineas(Number(newLocalizacionId)),
-        fetchStockCatalogo(Number(newLocalizacionId)),
-      ])
+      fetchStockForLineas(Number(newLocalizacionId))
     } else {
       setStockPorLocalizacion({})
       setStockCatalogo({})
       setLineas(prev => prev.map(l => ({ ...l, stock_disponible: 0 })))
     }
   }
+
+  // Carga el stock del catalogo cuando hay localizacion Y productos cargados.
+  // Clave: cubre la AUTOSELECCION inicial (un solo almacen/localizacion),
+  // donde antes el catalogo quedaba vacio porque no se disparaba la carga.
+  React.useEffect(() => {
+    if (localizacionId && productos.length > 0) {
+      fetchStockCatalogo(Number(localizacionId))
+    } else {
+      setStockCatalogo({})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localizacionId, productos])
 
   /**
    * Carga el stock de TODOS los productos del catalogo en una localizacion.
