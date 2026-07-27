@@ -127,9 +127,11 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Pestaña 'Detalle por Producto': todas las líneas vendidas con costo y utilidad, exportable a Excel.",
       "Importar ventas desde Excel: sube una plantilla (una línea por producto), el sistema agrupa por factura y crea cada venta con sus mismas transacciones (inventario, caja/banco).",
       "Elimina una venta por completo: devuelve el stock, borra los movimientos de caja/banco asociados y elimina la factura (pide confirmación).",
+      "Edita una venta (botón lápiz): cambia cantidades, productos, cliente o método de pago; el cambio se propaga a inventario, caja chica, cuentas bancarias y cuentas por cobrar, conservando el número de factura.",
     ],
     queNoHace: [
-      "No permite editar montos o productos de una factura guardada — solo eliminar completo o devolver parcial (módulo Devoluciones).",
+      "Al editar, no cambia el almacén ni la localización de la venta (para eso, elimínala y créala de nuevo).",
+      "No se puede editar una factura con devoluciones asociadas (anúlalas primero), ni editar con efectivo sin una caja chica abierta.",
       "La eliminación no es reversible: una vez confirmada, la factura desaparece.",
       "La importación NO duplica facturas: si un número de factura ya existe, esa se omite. Los productos deben existir en el catálogo (se buscan por código de barras o nombre).",
     ],
@@ -151,6 +153,16 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
           "El monto viene pre-llenado con el saldo total; edítalo si es un abono parcial.",
           "Elige el método: Efectivo (requiere caja abierta; entra a la caja), Banco (elige la cuenta; entra como ingreso) u Otro (solo baja el saldo, sin movimiento de dinero).",
           "Guarda: el saldo y el estado de la factura se actualizan, y el dinero queda en tesorería.",
+        ],
+      },
+      {
+        titulo: "Editar una venta",
+        pasos: [
+          "Ubica la factura y presiona el botón de lápiz (Editar).",
+          "Ajusta lo que necesites: cliente, productos (agregar/quitar/cantidad/precio), descuento, ISV y el desglose de método de pago.",
+          "Si cambias un pago de efectivo a banco (o al revés), el dinero se moverá solo entre la caja y la cuenta al guardar.",
+          "Escribe un motivo (opcional) y presiona Guardar; confirma el resumen.",
+          "El sistema revierte la venta original y la vuelve a aplicar con los datos nuevos; la factura conserva su número. Verifica el kardex, la caja y los bancos.",
         ],
       },
       {

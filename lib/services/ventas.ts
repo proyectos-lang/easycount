@@ -318,6 +318,36 @@ interface CrearVentaData {
   pagos_detalle?: PagoVentaDetalleInput[]
 }
 
+/**
+ * Deriva `valorpago` (suma de montos NETOS) y `estado_pago` a partir del
+ * desglose de pagos y el total de la venta. Funcion PURA — la comparten
+ * `crearVenta` y `editarVenta`, y es facil de testear.
+ *
+ *   neto por linea = monto_neto ?? monto_bruto * (1 - comision/100)
+ *   valorpago      = suma de netos (2 decimales)
+ *   estado_pago    = Pendiente (<=0) | Pagado (>= total) | Parcial
+ */
+export function derivarEstadoPago(
+  pagosDetalle: PagoVentaDetalleInput[],
+  totalVenta: number
+): { valorpago: number; estado_pago: 'Pendiente' | 'Parcial' | 'Pagado' } {
+  const valorpago = +pagosDetalle
+    .reduce((acc, p) => {
+      const bruto = Number(p.monto_bruto || 0)
+      const comision = Number(p.porcentaje_comision ?? 0)
+      const neto = p.monto_neto != null ? Number(p.monto_neto) : bruto * (1 - comision / 100)
+      return acc + neto
+    }, 0)
+    .toFixed(2)
+
+  let estado_pago: 'Pendiente' | 'Parcial' | 'Pagado'
+  if (valorpago <= 0) estado_pago = 'Pendiente'
+  else if (valorpago >= totalVenta - 0.005) estado_pago = 'Pagado'
+  else estado_pago = 'Parcial'
+
+  return { valorpago, estado_pago }
+}
+
 export async function crearVenta(
   data: CrearVentaData
 ): Promise<{ data: VentaEncabezado | null; error: string | null }> {
@@ -406,23 +436,9 @@ export async function crearVenta(
     let estadoPagoCalculado = data.encabezado.estado_pago
 
     if (pagosDetalle.length > 0) {
-      valorpagoCalculado = pagosDetalle.reduce((acc, p) => {
-        const bruto = Number(p.monto_bruto || 0)
-        const comision = Number(p.porcentaje_comision ?? 0)
-        const neto =
-          p.monto_neto != null
-            ? Number(p.monto_neto)
-            : bruto * (1 - comision / 100)
-        return acc + neto
-      }, 0)
-      valorpagoCalculado = +valorpagoCalculado.toFixed(2)
-      if (valorpagoCalculado <= 0) {
-        estadoPagoCalculado = 'Pendiente'
-      } else if (valorpagoCalculado >= totalVenta - 0.005) {
-        estadoPagoCalculado = 'Pagado'
-      } else {
-        estadoPagoCalculado = 'Parcial'
-      }
+      const derivado = derivarEstadoPago(pagosDetalle, totalVenta)
+      valorpagoCalculado = derivado.valorpago
+      estadoPagoCalculado = derivado.estado_pago
 
       // Validacion de seguridad: si hay Efectivo > 0, exige sesion de caja
       // abierta antes de tocar `ventas_encabezado` (no creamos venta sin
@@ -1623,6 +1639,101 @@ export async function getRazonSocialForPdf(): Promise<{
  * `razon_social_id = sesion`, de modo que una empresa jamas pueda borrar ni
  * alterar datos (ventas, inventario, productos, tesoreria) de otra.
  */
+/**
+ * Revierte TODOS los efectos colaterales de una venta SIN borrar el
+ * encabezado ni el detalle: devuelve el inventario, revierte la tesoreria
+ * (caja chica y bancos, incluyendo abonos posteriores que comparten
+ * `ref_tipo='venta'`) y borra los registros de pago. Lo comparten
+ * `eliminarVentaCompletamente` (que luego borra detalle+encabezado) y
+ * `editarVenta` (que luego re-aplica con los datos nuevos).
+ *
+ * `stamp` debe ser un TenantStamp valido; todo va acotado a su razon social.
+ */
+async function revertirEfectosVenta(
+  supabase: ReturnType<typeof createClient> & object,
+  ventaId: number,
+  stamp: { razon_social_id: number | null; usuario: string | null }
+): Promise<{ error: string | null }> {
+  // ----- 1. Revertir inventario por cada linea de la venta ---------------
+  const { data: detalles, error: detErr } = await supabase
+    .from('ventas_detalle')
+    .select('producto_id, cantidad')
+    .eq('venta_id', ventaId)
+    .eq('razon_social_id', stamp.razon_social_id)
+  if (detErr) return { error: detErr.message }
+
+  for (const linea of detalles ?? []) {
+    await ajustarStock(supabase, linea.producto_id, linea.cantidad || 0, stamp.razon_social_id)
+    await supabase
+      .from('transacciones_inventario')
+      .delete()
+      .eq('referencia_id', ventaId)
+      .eq('producto_id', linea.producto_id)
+      .eq('tipo_movimiento', 'Salida Venta')
+      .eq('razon_social_id', stamp.razon_social_id)
+  }
+  // Barrido de seguridad: cualquier 'Salida Venta' restante de esta venta.
+  await supabase
+    .from('transacciones_inventario')
+    .delete()
+    .eq('referencia_id', ventaId)
+    .eq('tipo_movimiento', 'Salida Venta')
+    .eq('razon_social_id', stamp.razon_social_id)
+
+  // ----- 2. Revertir tesoreria (bancos + caja) ---------------------------
+  const { data: movsCuenta } = await supabase
+    .from('cuenta_movimientos')
+    .select('cuenta_id, monto, tipo')
+    .eq('ref_tipo', 'venta')
+    .eq('ref_id', ventaId)
+    .eq('razon_social_id', stamp.razon_social_id)
+
+  for (const mc of movsCuenta ?? []) {
+    const { data: cuenta } = await supabase
+      .from('cuentas_config')
+      .select('saldo')
+      .eq('id', mc.cuenta_id)
+      .eq('razon_social_id', stamp.razon_social_id)
+      .single()
+    if (cuenta) {
+      const delta = mc.tipo === 'Ingreso' ? -Number(mc.monto || 0) : Number(mc.monto || 0)
+      await supabase
+        .from('cuentas_config')
+        .update({ saldo: +(Number(cuenta.saldo ?? 0) + delta).toFixed(2) })
+        .eq('id', mc.cuenta_id)
+        .eq('razon_social_id', stamp.razon_social_id)
+    }
+  }
+
+  await supabase
+    .from('cuenta_movimientos')
+    .delete()
+    .eq('ref_tipo', 'venta')
+    .eq('ref_id', ventaId)
+    .eq('razon_social_id', stamp.razon_social_id)
+
+  await supabase
+    .from('caja_chica_movimientos')
+    .delete()
+    .eq('ref_tipo', 'venta')
+    .eq('ref_id', ventaId)
+    .eq('razon_social_id', stamp.razon_social_id)
+
+  // ----- 3. Borrar registros de pago -------------------------------------
+  await supabase
+    .from('ventas_pagos_detalle')
+    .delete()
+    .eq('venta_id', ventaId)
+    .eq('razon_social_id', stamp.razon_social_id)
+  await supabase
+    .from('pagos_ventas')
+    .delete()
+    .eq('venta_id', ventaId)
+    .eq('razon_social_id', stamp.razon_social_id)
+
+  return { error: null }
+}
+
 export async function eliminarVentaCompletamente(
   ventaId: number
 ): Promise<{ error: string | null }> {
@@ -1636,8 +1747,6 @@ export async function eliminarVentaCompletamente(
     }
 
     // ----- 0. Verificar que la venta exista y pertenezca al tenant ---------
-    // Guard de aislamiento multi-empresa: solo borramos ventas de la razon
-    // social activa, evitando borrados cruzados entre tenants.
     const { data: venta, error: ventaErr } = await supabase
       .from('ventas_encabezado')
       .select('id, razon_social_id')
@@ -1651,111 +1760,9 @@ export async function eliminarVentaCompletamente(
       return { error: 'La venta no pertenece a la empresa activa' }
     }
 
-    // ----- 1. Revertir inventario por cada linea de la venta ---------------
-    // Relacion: ventas_detalle.venta_id  ===  transacciones_inventario.referencia_id
-    //           ventas_detalle.producto_id === transacciones_inventario.producto_id
-    // Para cada linea: devolvemos la cantidad al stock del producto y luego
-    // borramos su movimiento de inventario ('Salida Venta').
-    const { data: detalles, error: detErr } = await supabase
-      .from('ventas_detalle')
-      .select('producto_id, cantidad')
-      .eq('venta_id', ventaId)
-      .eq('razon_social_id', stamp.razon_social_id)
-
-    if (detErr) {
-      console.error('[eliminarVentaCompletamente] Error leyendo detalles:', detErr)
-      return { error: detErr.message }
-    }
-
-    for (const linea of detalles ?? []) {
-      // 1a. Devolver el stock al producto (suma de vuelta lo vendido) de forma
-      // ATOMICA. Acotado a la razon social activa para no tocar otra empresa
-      // (relevante solo en la ruta de respaldo; la RPC ya respeta RLS).
-      await ajustarStock(
-        supabase,
-        linea.producto_id,
-        linea.cantidad || 0,
-        stamp.razon_social_id
-      )
-
-      // 1b. Borrar el movimiento de inventario de esta linea: se ubica por
-      // referencia_id (= venta_id) + producto_id + tipo de salida, SIEMPRE
-      // acotado a la razon social activa.
-      await supabase
-        .from('transacciones_inventario')
-        .delete()
-        .eq('referencia_id', ventaId)
-        .eq('producto_id', linea.producto_id)
-        .eq('tipo_movimiento', 'Salida Venta')
-        .eq('razon_social_id', stamp.razon_social_id)
-    }
-
-    // Barrido de seguridad: cualquier movimiento de 'Salida Venta' restante
-    // ligado a esta venta (por si quedo alguno fuera del detalle), siempre de
-    // la razon social activa.
-    await supabase
-      .from('transacciones_inventario')
-      .delete()
-      .eq('referencia_id', ventaId)
-      .eq('tipo_movimiento', 'Salida Venta')
-      .eq('razon_social_id', stamp.razon_social_id)
-
-    // ----- 2. Revertir movimientos de tesoreria (caja chica y bancos) ------
-    // Estos movimientos se identifican por ref_tipo='venta' y ref_id=ventaId.
-    // Para bancos ademas ajustamos el saldo cacheado en cuentas_config.
-    const { data: movsCuenta } = await supabase
-      .from('cuenta_movimientos')
-      .select('cuenta_id, monto, tipo')
-      .eq('ref_tipo', 'venta')
-      .eq('ref_id', ventaId)
-      .eq('razon_social_id', stamp.razon_social_id)
-
-    for (const mc of movsCuenta ?? []) {
-      const { data: cuenta } = await supabase
-        .from('cuentas_config')
-        .select('saldo')
-        .eq('id', mc.cuenta_id)
-        .eq('razon_social_id', stamp.razon_social_id)
-        .single()
-      if (cuenta) {
-        // Revertimos el efecto: un Ingreso resta del saldo al eliminarse.
-        const delta = mc.tipo === 'Ingreso' ? -Number(mc.monto || 0) : Number(mc.monto || 0)
-        await supabase
-          .from('cuentas_config')
-          .update({ saldo: +(Number(cuenta.saldo ?? 0) + delta).toFixed(2) })
-          .eq('id', mc.cuenta_id)
-          .eq('razon_social_id', stamp.razon_social_id)
-      }
-    }
-
-    await supabase
-      .from('cuenta_movimientos')
-      .delete()
-      .eq('ref_tipo', 'venta')
-      .eq('ref_id', ventaId)
-      .eq('razon_social_id', stamp.razon_social_id)
-
-    // Caja chica: borramos los movimientos ligados a la venta. El saldo de
-    // caja se recalcula sobre la marcha (getSaldoActual suma movimientos),
-    // por lo que no requiere ajuste manual de un saldo cacheado.
-    await supabase
-      .from('caja_chica_movimientos')
-      .delete()
-      .eq('ref_tipo', 'venta')
-      .eq('ref_id', ventaId)
-      .eq('razon_social_id', stamp.razon_social_id)
-
-    // ----- 3. Borrar desglose de pagos -------------------------------------
-    await supabase
-      .from('ventas_pagos_detalle')
-      .delete()
-      .eq('venta_id', ventaId)
-      .eq('razon_social_id', stamp.razon_social_id)
-    await supabase
-      .from('pagos_ventas')
-      .delete()
-      .eq('venta_id', ventaId)
-      .eq('razon_social_id', stamp.razon_social_id)
+    // ----- 1-3. Revertir inventario, tesoreria y pagos ---------------------
+    const rev = await revertirEfectosVenta(supabase, ventaId, stamp)
+    if (rev.error) return { error: rev.error }
 
     // ----- 4. Borrar detalle y encabezado ----------------------------------
     const { error: delDetErr } = await supabase
@@ -1782,5 +1789,263 @@ export async function eliminarVentaCompletamente(
   } catch (err) {
     console.error('[eliminarVentaCompletamente] Exception:', err)
     return { error: 'No se pudo eliminar la venta' }
+  }
+}
+
+// ==================== EDITAR VENTA ====================
+
+/**
+ * Recupera el almacen y localizacion originales de una venta desde su
+ * movimiento de inventario ('Salida Venta'). `ventas_encabezado` guarda
+ * `almacen_id` pero NO `localizacion_id`, que vive en transacciones.
+ */
+export async function getLocalizacionVenta(
+  ventaId: number
+): Promise<{ almacen_id: number | null; localizacion_id: number | null }> {
+  const supabase = createClient()
+  if (!supabase) return { almacen_id: null, localizacion_id: null }
+  const { data } = await supabase
+    .from('transacciones_inventario')
+    .select('almacen_id, localizacion_id')
+    .eq('referencia_id', ventaId)
+    .eq('tipo_movimiento', 'Salida Venta')
+    .limit(1)
+    .maybeSingle()
+  return {
+    almacen_id: data?.almacen_id ?? null,
+    localizacion_id: data?.localizacion_id ?? null,
+  }
+}
+
+/**
+ * Desglose de pago inicial de una venta (`ventas_pagos_detalle`). Sirve para
+ * sembrar el formulario de edicion con los pagos originales.
+ */
+export async function getPagosDetalleVenta(
+  ventaId: number
+): Promise<{ data: PagoVentaDetalle[]; error: string | null }> {
+  if (!isSupabaseConfigured()) return { data: [], error: null }
+  const supabase = createClient()
+  if (!supabase) return { data: [], error: 'Cliente no disponible' }
+
+  const { data, error } = await supabase
+    .from('ventas_pagos_detalle')
+    .select('id, venta_id, metodo_pago, cuenta_id, monto_bruto, porcentaje_comision, monto_neto')
+    .eq('venta_id', ventaId)
+    .order('id', { ascending: true })
+
+  if (error) {
+    if (/does not exist|ventas_pagos_detalle/i.test(error.message)) return { data: [], error: null }
+    return { data: [], error: error.message }
+  }
+  return { data: (data || []) as PagoVentaDetalle[], error: null }
+}
+
+export interface EditarVentaData {
+  encabezado: {
+    cliente_id: number
+    aplica_impuesto: boolean
+    porcentaje_impuesto: number
+    descuento?: number
+    subtotal: number
+    impuesto_total: number
+    total_venta: number
+  }
+  detalles: Omit<VentaDetalle, 'id' | 'venta_id' | 'producto_nombre' | 'producto_codigo'>[]
+  pagos_detalle?: PagoVentaDetalleInput[]
+  motivo?: string
+}
+
+/**
+ * Edita una venta EN SU LUGAR (mismo venta_id y numero de factura),
+ * propagando el cambio a inventario, caja chica, cuentas bancarias y CxC.
+ *
+ * Estrategia reversar-y-recrear: revierte por completo los efectos de la
+ * venta actual (`revertirEfectosVenta`) y re-aplica con los datos nuevos,
+ * usando los MISMOS primitivos que `crearVenta`. Conserva el encabezado
+ * (no lo borra), asi las referencias externas (devoluciones, pedidos) no se
+ * rompen.
+ *
+ * Bloqueos: si la factura tiene devoluciones, o si lleva efectivo y no hay
+ * caja abierta. Reversa tambien los abonos posteriores (comparten
+ * ref_tipo='venta'); el usuario los vuelve a registrar si aplica.
+ */
+export async function editarVenta(
+  ventaId: number,
+  data: EditarVentaData
+): Promise<{ error: string | null }> {
+  if (!isSupabaseConfigured()) return { error: 'Supabase no configurado' }
+  const supabase = createClient()
+  if (!supabase) return { error: 'Cliente no disponible' }
+
+  try {
+    const stamp = await getTenantStamp(supabase)
+    if (!isValidStamp(stamp)) return { error: SESION_INVALIDA_ERROR }
+
+    // 0. La venta debe existir y ser del tenant.
+    const { data: venta, error: vErr } = await supabase
+      .from('ventas_encabezado')
+      .select('id, razon_social_id, numero_factura')
+      .eq('id', ventaId)
+      .single()
+    if (vErr || !venta) return { error: 'La venta no existe' }
+    if (venta.razon_social_id !== stamp.razon_social_id) {
+      return { error: 'La venta no pertenece a la empresa activa' }
+    }
+
+    // 1. Bloqueo: no editar si la factura tiene devoluciones (conflicto
+    //    logico: la devolucion ya reverso inventario/dinero de esta venta).
+    const { count: devCount, error: devErr } = await supabase
+      .from('devoluciones_encabezado')
+      .select('id', { count: 'exact', head: true })
+      .eq('venta_id', ventaId)
+    if (!devErr && (devCount || 0) > 0) {
+      return {
+        error: 'Esta factura tiene devoluciones asociadas. Anula la devolución o crea una venta nueva.',
+      }
+    }
+
+    const pagosDetalle = data.pagos_detalle ?? []
+
+    // 2. Si hay efectivo en el nuevo pago, exige caja abierta.
+    const efectivo = pagosDetalle
+      .filter((p) => p.metodo_pago === 'Efectivo')
+      .reduce((a, p) => a + Number(p.monto_bruto || 0), 0)
+    if (efectivo > 0) {
+      const { data: sesion, error: sesErr } = await getSesionAbierta()
+      if (!sesErr && !sesion?.id) {
+        return { error: 'Debe abrir caja antes de guardar una venta con efectivo' }
+      }
+    }
+
+    // 3. Snapshot ANTES (para bitacora) y localizacion original — ambos
+    //    ANTES de reversar (la reversion borra las transacciones).
+    const totalVenta = Number(data.encabezado.total_venta || 0)
+    const { valorpago, estado_pago } = derivarEstadoPago(pagosDetalle, totalVenta)
+    const { data: antesData } = await supabase
+      .from('ventas_encabezado')
+      .select('total_venta, valorpago, estado_pago, cliente_id')
+      .eq('id', ventaId)
+      .single()
+    const { almacen_id, localizacion_id } = await getLocalizacionVenta(ventaId)
+    if (localizacion_id == null || almacen_id == null) {
+      return { error: 'No se pudo determinar el almacén/localización de la venta original' }
+    }
+
+    // 4. Revertir todos los efectos actuales (inventario, tesoreria, pagos).
+    const rev = await revertirEfectosVenta(supabase, ventaId, stamp)
+    if (rev.error) return { error: `No se pudo revertir la venta original: ${rev.error}` }
+
+    // 5. Actualizar el encabezado (conserva numero_factura, fecha_venta, almacen).
+    const { error: updErr } = await supabase
+      .from('ventas_encabezado')
+      .update({
+        cliente_id: data.encabezado.cliente_id,
+        aplica_impuesto: data.encabezado.aplica_impuesto,
+        porcentaje_impuesto: data.encabezado.porcentaje_impuesto,
+        descuento: data.encabezado.descuento ?? 0,
+        subtotal: data.encabezado.subtotal,
+        impuesto_total: data.encabezado.impuesto_total,
+        total_venta: totalVenta,
+        valorpago,
+        estado_pago,
+      })
+      .eq('id', ventaId)
+      .eq('razon_social_id', stamp.razon_social_id)
+    if (updErr) return { error: updErr.message }
+
+    // 6. Reemplazar el detalle.
+    await supabase
+      .from('ventas_detalle')
+      .delete()
+      .eq('venta_id', ventaId)
+      .eq('razon_social_id', stamp.razon_social_id)
+    const { error: detInsErr } = await supabase.from('ventas_detalle').insert(
+      data.detalles.map((d) => ({ ...d, venta_id: ventaId, razon_social_id: stamp.razon_social_id }))
+    )
+    if (detInsErr) return { error: detInsErr.message }
+
+    // 7. Re-aplicar inventario (stock + kardex 'Salida Venta').
+    for (const d of data.detalles) {
+      await ajustarStock(supabase, d.producto_id, -d.cantidad, stamp.razon_social_id)
+      await supabase.from('transacciones_inventario').insert({
+        producto_id: d.producto_id,
+        almacen_id,
+        localizacion_id,
+        tipo_movimiento: 'Salida Venta',
+        cantidad: d.cantidad,
+        costo_o_precio_unitario: d.costo_promedio_momento,
+        referencia_id: ventaId,
+        ...stamp,
+      })
+    }
+
+    // 8. Re-aplicar desglose de pagos + tesoreria (mismos primitivos que crearVenta).
+    if (pagosDetalle.length > 0) {
+      const pagosRows = pagosDetalle.map((p) => {
+        const comision = Number(p.porcentaje_comision ?? 0)
+        const neto = p.monto_neto != null ? Number(p.monto_neto) : +(Number(p.monto_bruto) * (1 - comision / 100)).toFixed(2)
+        return {
+          venta_id: ventaId,
+          metodo_pago: p.metodo_pago,
+          cuenta_id: p.cuenta_id ?? null,
+          monto_bruto: Number(p.monto_bruto),
+          porcentaje_comision: comision,
+          monto_neto: neto,
+          razon_social_id: stamp.razon_social_id,
+          usuario: stamp.usuario,
+        }
+      })
+      const { error: pErr } = await supabase.from('ventas_pagos_detalle').insert(pagosRows)
+      if (pErr && !/does not exist|ventas_pagos_detalle/i.test(pErr.message)) {
+        return { error: pErr.message }
+      }
+
+      for (const p of pagosDetalle) {
+        const monto = Number(p.monto_bruto)
+        if (monto <= 0) continue
+        if (p.metodo_pago === 'Efectivo') {
+          await registrarMovimientoCaja({
+            tipo: 'Ingreso_Venta',
+            monto,
+            concepto: `Venta #${ventaId} (${venta.numero_factura}) [editada]`,
+            ref_tipo: 'venta',
+            ref_id: ventaId,
+          })
+        } else if ((p.metodo_pago === 'Banco' || p.metodo_pago === 'Link_Pago') && p.cuenta_id) {
+          const comision = Number(p.porcentaje_comision ?? 0)
+          const neto = p.monto_neto != null ? Number(p.monto_neto) : +(monto * (1 - comision / 100)).toFixed(2)
+          await registrarMovimientoCuenta({
+            cuenta_id: p.cuenta_id,
+            tipo: 'Ingreso',
+            monto: neto,
+            concepto: `Venta ${venta.numero_factura} (neto) [editada]`,
+            ref_tipo: 'venta',
+            ref_id: ventaId,
+          })
+        }
+      }
+    }
+
+    // 9. Bitacora (best-effort; ignora si la tabla no existe).
+    await supabase.from('ventas_ediciones').insert({
+      venta_id: ventaId,
+      numero_factura: venta.numero_factura,
+      motivo: data.motivo || null,
+      antes: antesData ?? null,
+      despues: {
+        total_venta: totalVenta,
+        valorpago,
+        estado_pago,
+        cliente_id: data.encabezado.cliente_id,
+        lineas: data.detalles.length,
+      },
+      ...stamp,
+    })
+
+    return { error: null }
+  } catch (err) {
+    console.error('[editarVenta] Exception:', err)
+    return { error: 'No se pudo editar la venta' }
   }
 }

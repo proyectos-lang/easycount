@@ -381,6 +381,13 @@ Bitácora de ajustes por conteo físico (una fila por línea ajustada, no cabece
 
 ---
 
+## Ediciones de ventas (script 024)
+
+### `ventas_ediciones`
+Bitácora de auditoría de la función "Editar venta" del Historial. La edición reversa-y-recrea los efectos de la venta (inventario, caja, bancos, CxC) **en su lugar** (mismo `venta_id` y número de factura). Columnas: `id, razon_social_id, venta_id (FK), numero_factura, usuario, motivo, antes JSONB, despues JSONB, created_at`. Best-effort: si la tabla no existe, la edición igual se aplica (solo no queda el historial). RLS de aislamiento por tenant.
+
+---
+
 ## Vistas
 
 ### `vista_stock_por_localizacion`

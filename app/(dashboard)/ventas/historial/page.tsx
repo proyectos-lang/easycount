@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { Eye, CreditCard, Download, FileSpreadsheet, CalendarIcon, Banknote, Wallet, Shuffle, Trash2, Loader2 } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Eye, CreditCard, Download, FileSpreadsheet, CalendarIcon, Banknote, Wallet, Shuffle, Trash2, Loader2, Pencil } from "lucide-react"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { exportToXlsx } from "@/lib/utils/export"
@@ -70,6 +71,7 @@ const PAGINA_VENTAS = 100
 
 export default function HistorialVentasPage() {
   const { toast } = useToast()
+  const router = useRouter()
 
   // --- Shared state ---
   const [loading, setLoading] = React.useState(true)
@@ -721,6 +723,14 @@ export default function HistorialVentasPage() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        className="h-8 w-8 text-sky-600 hover:text-sky-700 hover:bg-sky-50"
+                        onClick={() => router.push(`/ventas/editar/${venta.id}`)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
                         onClick={() => setVentaAEliminar(venta)}
                       >
@@ -798,6 +808,15 @@ export default function HistorialVentasPage() {
                             </Button>
                             <Button variant="ghost" size="icon" onClick={() => generatePdf(venta)} title="Descargar PDF">
                               <Download className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-sky-600 hover:text-sky-700 hover:bg-sky-50"
+                              onClick={() => router.push(`/ventas/editar/${venta.id}`)}
+                              title="Editar venta"
+                            >
+                              <Pencil className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="ghost"
