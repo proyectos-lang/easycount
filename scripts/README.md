@@ -29,6 +29,7 @@ SQL Editor de Supabase. Son en su mayoría idempotentes (`IF NOT EXISTS` /
 | 022 | `022-errores-log.sql` | Log de errores de la app (monitoreo, solo service role) |
 | 023 | `023-ajustes-inventario.sql` | Ajustes de Inventario: bitácora + RLS + módulo |
 | 024 | `024-ventas-ediciones.sql` | Bitácora de ediciones de ventas + RLS (opcional) |
+| 025 | `025-corregir-signo-salida-venta.sql` | Corrige el signo de `Salida Venta` en datos viejos (opcional, 1 vez) |
 | — | `add-almacen-to-ventas-encabezado.sql` | Agrega `almacen_id` a ventas (aplicar tras 011) |
 
 > **Huecos 006–008:** la numeración salta de 005 a 009. No faltan migraciones;

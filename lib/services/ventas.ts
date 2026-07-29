@@ -395,7 +395,10 @@ export async function crearVenta(
         almacen_id: data.almacen_id,
         localizacion_id: data.localizacion_id,
         tipo_movimiento: 'Salida Venta',
-        cantidad: detalle.cantidad,
+        // Salida = cantidad NEGATIVA (misma convencion que 'Traslado Salida').
+        // El stock por localizacion/almacen se calcula SUMANDO cantidad, asi
+        // la venta resta en vez de sumar.
+        cantidad: -detalle.cantidad,
         costo_o_precio_unitario: detalle.costo_promedio_momento,
         referencia_id: newVenta.id!,
         fecha: new Date().toISOString()
@@ -527,7 +530,11 @@ export async function crearVenta(
           almacen_id: data.almacen_id,
           localizacion_id: data.localizacion_id,
           tipo_movimiento: 'Salida Venta',
-          cantidad: detalle.cantidad,
+          // Salida = cantidad NEGATIVA (misma convencion que 'Traslado Salida').
+          // El stock por localizacion/almacen se calcula SUMANDO cantidad, asi
+          // la venta resta en vez de sumar. `stock_total` ya se decremento
+          // arriba con ajustarStock(-cantidad); esto solo corrige el kardex.
+          cantidad: -detalle.cantidad,
           costo_o_precio_unitario: detalle.costo_promedio_momento,
           referencia_id: ventaData.id,
           ...stamp
@@ -1973,7 +1980,8 @@ export async function editarVenta(
         almacen_id,
         localizacion_id,
         tipo_movimiento: 'Salida Venta',
-        cantidad: d.cantidad,
+        // Salida = cantidad NEGATIVA (misma convencion que 'Traslado Salida').
+        cantidad: -d.cantidad,
         costo_o_precio_unitario: d.costo_promedio_momento,
         referencia_id: ventaId,
         ...stamp,
