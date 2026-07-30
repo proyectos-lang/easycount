@@ -85,7 +85,7 @@ export default function LoginPage() {
     <main
       className="relative min-h-screen flex flex-col overflow-hidden"
       style={{
-        backgroundImage: `url('/login-hero.jpg')`,
+        backgroundImage: `url('/login-bg.png')`,
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
