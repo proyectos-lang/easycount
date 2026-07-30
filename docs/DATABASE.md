@@ -153,8 +153,8 @@ Encabezado de factura de venta.
 | `descuento` | numeric | % de descuento sobre el subtotal |
 | `subtotal` | numeric | default 0 — bruto antes de descuento |
 | `impuesto_total` | numeric | default 0 — sobre (subtotal − descuento) |
-| `total_venta` | numeric | default 0 — subtotal − descuento + impuesto |
-| `valorpago` | numeric | default 0 — total abonado acumulado; `saldo = total_venta − valorpago` |
+| `total_venta` | numeric | default 0 — **BRUTO** (subtotal − descuento + ISV): lo que factura/paga el cliente. La comisión bancaria NO lo reduce (es un costo aparte). Coincide con la suma de las líneas de `ventas_detalle`. Ver script 027. |
+| `valorpago` | numeric | default 0 — pagado acumulado en **bruto** (`Σ monto_bruto`); `saldo = total_venta − valorpago` |
 | `estado_pago` | text | `Pendiente` / `Parcial` / `Pagado` |
 | `razon_social_id` | bigint | FK tenant |
 | `usuario` | text | vendedor |

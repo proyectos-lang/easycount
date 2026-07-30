@@ -157,9 +157,13 @@ export async function getVentas(
 
 /**
  * Totales agregados del listado de facturas sobre TODAS las ventas que cumplen
- * los filtros (no solo la pagina cargada). Se usa para el total de columna del
- * encabezado del Historial, de modo que coincida con la suma del detalle por
- * producto. Suma `total_venta` (con ISV) y el saldo pendiente.
+ * los filtros (no solo la pagina cargada), para el encabezado del Historial.
+ *
+ * `totalVentas` se calcula desde las LINEAS (`ventas_detalle`) con la MISMA
+ * formula del "Detalle por Producto" (cantidad * precio * (1-descuento%) *
+ * (1+ISV%) = total BRUTO facturado), de modo que ambas pestanas dan
+ * EXACTAMENTE lo mismo. `totalSaldo` se calcula desde el encabezado
+ * (total_venta - valorpago, ambos brutos tras el script 027).
  */
 export async function getVentasResumenTotales(filtros: {
   fechaInicio?: string
@@ -180,19 +184,50 @@ export async function getVentasResumenTotales(filtros: {
   if (!supabase) return { totalVentas: 0, totalSaldo: 0, count: 0, error: 'Cliente no disponible' }
 
   try {
-    let query = supabase.from('ventas_encabezado').select('total_venta, valorpago')
-    if (filtros.fechaInicio) query = query.gte('fecha_venta', `${filtros.fechaInicio}T00:00:00`)
-    if (filtros.fechaFin) query = query.lte('fecha_venta', `${filtros.fechaFin}T23:59:59`)
-    if (filtros.clienteId != null) query = query.eq('cliente_id', filtros.clienteId)
-    if (filtros.almacenId != null) query = query.eq('almacen_id', filtros.almacenId)
-    if (filtros.estadoPago) query = query.eq('estado_pago', filtros.estadoPago)
+    // --- Total BRUTO desde las lineas (join !inner al encabezado para filtrar
+    //     por los mismos criterios del Resumen). Misma formula que total_linea
+    //     de getDetalleAnalitico -> cuadra exacto con el Detalle por Producto.
+    let qLineas = supabase
+      .from('ventas_detalle')
+      .select(
+        'cantidad, precio_unitario, ventas_encabezado!inner(descuento, aplica_impuesto, porcentaje_impuesto, cliente_id, almacen_id, estado_pago, fecha_venta)'
+      )
+    if (filtros.fechaInicio) qLineas = qLineas.gte('ventas_encabezado.fecha_venta', `${filtros.fechaInicio}T00:00:00`)
+    if (filtros.fechaFin) qLineas = qLineas.lte('ventas_encabezado.fecha_venta', `${filtros.fechaFin}T23:59:59`)
+    if (filtros.clienteId != null) qLineas = qLineas.eq('ventas_encabezado.cliente_id', filtros.clienteId)
+    if (filtros.almacenId != null) qLineas = qLineas.eq('ventas_encabezado.almacen_id', filtros.almacenId)
+    if (filtros.estadoPago) qLineas = qLineas.eq('ventas_encabezado.estado_pago', filtros.estadoPago)
 
-    const { data, error } = await query
-    if (error) return { totalVentas: 0, totalSaldo: 0, count: 0, error: error.message }
+    const { data: lineas, error: errLineas } = await qLineas
+    if (errLineas) return { totalVentas: 0, totalSaldo: 0, count: 0, error: errLineas.message }
 
-    const rows = data || []
-    const totalVentas = rows.reduce((a, v) => a + Number(v.total_venta || 0), 0)
-    const totalSaldo = rows.reduce((a, v) => a + Math.max(0, Number(v.total_venta || 0) - Number(v.valorpago || 0)), 0)
+    const totalVentas = +(lineas || [])
+      .reduce((acc, d) => {
+        const ve = (Array.isArray(d.ventas_encabezado) ? d.ventas_encabezado[0] : d.ventas_encabezado) as {
+          descuento?: number; aplica_impuesto?: boolean; porcentaje_impuesto?: number
+        } | null
+        const desc = Number(ve?.descuento || 0)
+        const isv = ve?.aplica_impuesto ? Number(ve?.porcentaje_impuesto || 0) : 0
+        return acc + Number(d.cantidad || 0) * Number(d.precio_unitario || 0) * (1 - desc / 100) * (1 + isv / 100)
+      }, 0)
+      .toFixed(2)
+
+    // --- Saldo pendiente desde el encabezado (invoice-level).
+    let qEnc = supabase.from('ventas_encabezado').select('total_venta, valorpago')
+    if (filtros.fechaInicio) qEnc = qEnc.gte('fecha_venta', `${filtros.fechaInicio}T00:00:00`)
+    if (filtros.fechaFin) qEnc = qEnc.lte('fecha_venta', `${filtros.fechaFin}T23:59:59`)
+    if (filtros.clienteId != null) qEnc = qEnc.eq('cliente_id', filtros.clienteId)
+    if (filtros.almacenId != null) qEnc = qEnc.eq('almacen_id', filtros.almacenId)
+    if (filtros.estadoPago) qEnc = qEnc.eq('estado_pago', filtros.estadoPago)
+
+    const { data: encs, error: errEnc } = await qEnc
+    if (errEnc) return { totalVentas, totalSaldo: 0, count: 0, error: errEnc.message }
+
+    const rows = encs || []
+    const totalSaldo = +rows
+      .reduce((a, v) => a + Math.max(0, Number(v.total_venta || 0) - Number(v.valorpago || 0)), 0)
+      .toFixed(2)
+
     return { totalVentas, totalSaldo, count: rows.length, error: null }
   } catch (err) {
     console.error('[Supabase] Error obteniendo totales de ventas:', err)
@@ -391,13 +426,12 @@ export function derivarEstadoPago(
   pagosDetalle: PagoVentaDetalleInput[],
   totalVenta: number
 ): { valorpago: number; estado_pago: 'Pendiente' | 'Parcial' | 'Pagado' } {
+  // `valorpago` = pagado en BRUTO (lo que entrega el cliente), para cuadrar
+  // con `total_venta` que tambien se persiste en BRUTO. La comision bancaria
+  // es un costo del comercio: no reduce la venta ni la deuda del cliente
+  // (saldo = total_venta - valorpago, ambos brutos).
   const valorpago = +pagosDetalle
-    .reduce((acc, p) => {
-      const bruto = Number(p.monto_bruto || 0)
-      const comision = Number(p.porcentaje_comision ?? 0)
-      const neto = p.monto_neto != null ? Number(p.monto_neto) : bruto * (1 - comision / 100)
-      return acc + neto
-    }, 0)
+    .reduce((acc, p) => acc + Number(p.monto_bruto || 0), 0)
     .toFixed(2)
 
   let estado_pago: 'Pendiente' | 'Parcial' | 'Pagado'

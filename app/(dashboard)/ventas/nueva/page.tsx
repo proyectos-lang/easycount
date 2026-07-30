@@ -581,16 +581,18 @@ export default function NuevaVentaPage() {
       return
     }
 
-    // Derivamos `valorpago` y `estado_pago` desde el NETO (lo que netea
-    // el comercio). `total_venta` tambien se persiste como neto. Asi el
-    // estado_pago refleja la cobertura real del valor recibido vs el
-    // valor registrado de la venta. Para pagos sin comision (efectivo),
-    // monto_neto === monto_bruto y el resultado es identico al legacy.
-    const valorpago = sumaPagosNetoR
+    // Derivamos `valorpago` y `estado_pago` desde el BRUTO (lo que paga el
+    // cliente). `total_venta` tambien se persiste en BRUTO. La comision
+    // bancaria es un costo del comercio: NO reduce la venta ni la deuda del
+    // cliente. Asi saldo = total_venta - valorpago (ambos brutos).
+    const sumaPagosBrutoR = +pagosDetalle
+      .reduce((acc, p) => acc + Number(p.monto_bruto || 0), 0)
+      .toFixed(2)
+    const valorpago = sumaPagosBrutoR
     const estadoPago: "Pendiente" | "Parcial" | "Pagado" =
       valorpago <= 0
         ? "Pendiente"
-        : valorpago >= totalNeto - 0.005
+        : valorpago >= total - 0.005
           ? "Pagado"
           : "Parcial"
 
@@ -608,11 +610,11 @@ export default function NuevaVentaPage() {
         descuento: descuentoPctSafe,
         subtotal,
         impuesto_total: isv,
-        // Persistimos el NETO: lo que efectivamente recibe el comercio
-        // despues de comisiones bancarias del desglose de pagos. Asi los
-        // reportes financieros (utilidad, cierre diario, etc.) reflejan
-        // el ingreso real, no el cobro bruto al cliente.
-        total_venta: totalNeto,
+        // Persistimos el BRUTO (subtotal - descuento + ISV): la venta real
+        // que factura/paga el cliente. La comision bancaria NO reduce la
+        // venta; es un costo aparte. Asi el "total de venta" cuadra con la
+        // suma de las lineas de producto en el Historial.
+        total_venta: total,
         estado_pago: estadoPago,
         valorpago,
       }
@@ -1460,15 +1462,15 @@ export default function NuevaVentaPage() {
                     </p>
                   )
                 }
-                if (sumaPagosNetoR === 0) {
+                if (sumBrutoR === 0) {
                   return <p className="text-red-700 font-medium">Estado: Pendiente</p>
                 }
-                if (sumaPagosNetoR >= totalNeto - 0.005) {
+                if (sumBrutoR >= totalBrutoR - 0.005) {
                   return <p className="text-emerald-700 font-medium">Estado: Pagado</p>
                 }
                 return (
                   <p className="text-amber-700 font-medium">
-                    Estado: Parcial - Saldo L {(totalNeto - sumaPagosNetoR).toFixed(2)}
+                    Estado: Parcial - Saldo L {(totalBrutoR - sumBrutoR).toFixed(2)}
                   </p>
                 )
               })()}
@@ -1506,27 +1508,25 @@ export default function NuevaVentaPage() {
               <span className="text-muted-foreground">ISV (15%)</span>
               <span>L {isv.toFixed(2)}</span>
             </div>
-            {totalComisionesR > 0 && (
-              <>
-                <div className="flex justify-between text-xs md:text-sm">
-                  <span className="text-muted-foreground">Total cobrado</span>
-                  <span>L {total.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-xs md:text-sm">
-                  <span className="text-muted-foreground">Comision bancaria</span>
-                  <span className="text-destructive">- L {totalComisionesR.toFixed(2)}</span>
-                </div>
-              </>
-            )}
             <Separator />
             <div className="flex justify-between items-baseline">
-              <span className="text-base md:text-lg font-semibold">
-                Total{totalComisionesR > 0 ? " neto" : ""}
-              </span>
+              <span className="text-base md:text-lg font-semibold">Total</span>
               <span className="text-2xl md:text-3xl font-bold text-primary">
-                L {totalNeto.toFixed(2)}
+                L {total.toFixed(2)}
               </span>
             </div>
+            {totalComisionesR > 0 && (
+              <div className="space-y-0.5 pt-1 text-[11px] text-muted-foreground">
+                <div className="flex justify-between">
+                  <span>Comision bancaria</span>
+                  <span className="text-destructive">- L {totalComisionesR.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Neto a recibir</span>
+                  <span>L {totalNeto.toFixed(2)}</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}

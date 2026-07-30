@@ -238,7 +238,8 @@ export default function EditarVentaPage({ params }: { params: Promise<{ id: stri
         descuento: descPct,
         subtotal: +subtotal.toFixed(2),
         impuesto_total: +isv.toFixed(2),
-        total_venta: totalNeto,
+        // BRUTO (lo que paga el cliente); la comision es costo aparte.
+        total_venta: total,
       },
       detalles: lineas.map((l) => ({
         producto_id: l.producto_id,
@@ -256,7 +257,7 @@ export default function EditarVentaPage({ params }: { params: Promise<{ id: stri
       toast({ title: "Error", description: res.error, variant: "destructive" })
       return
     }
-    toast({ title: "Venta actualizada", description: `Factura ${numeroFactura} · nuevo total ${formatCurrency(totalNeto)}` })
+    toast({ title: "Venta actualizada", description: `Factura ${numeroFactura} · nuevo total ${formatCurrency(total)}` })
     router.push("/ventas/historial")
   }
 
@@ -435,10 +436,15 @@ export default function EditarVentaPage({ params }: { params: Promise<{ id: stri
             <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
             {descPct > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Descuento {descPct}%</span><span>− {formatCurrency(subtotal * descPct / 100)}</span></div>}
             {aplicaIsv && <div className="flex justify-between"><span className="text-muted-foreground">ISV 15%</span><span>{formatCurrency(isv)}</span></div>}
-            {totalComisiones > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Comisiones</span><span>− {formatCurrency(totalComisiones)}</span></div>}
             <div className="flex justify-between font-bold text-base border-t pt-1">
-              <span>Total {totalComisiones > 0 ? "neto" : ""}</span><span>{formatCurrency(totalNeto)}</span>
+              <span>Total</span><span>{formatCurrency(total)}</span>
             </div>
+            {totalComisiones > 0 && (
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Comisión bancaria (neto a recibir {formatCurrency(totalNeto)})</span>
+                <span className="text-destructive">− {formatCurrency(totalComisiones)}</span>
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">Total anterior: {formatCurrency(totalAnterior)}</p>
           </div>
 
@@ -463,7 +469,7 @@ export default function EditarVentaPage({ params }: { params: Promise<{ id: stri
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm">
                 <p>Se revertirán los efectos de la venta original y se re-aplicarán con los datos nuevos (inventario, caja, bancos, cuentas por cobrar).</p>
-                <p>Total: <strong>{formatCurrency(totalAnterior)}</strong> → <strong>{formatCurrency(totalNeto)}</strong>. La factura conserva el número {numeroFactura}.</p>
+                <p>Total: <strong>{formatCurrency(totalAnterior)}</strong> → <strong>{formatCurrency(total)}</strong>. La factura conserva el número {numeroFactura}.</p>
                 {abonosCount > 0 && <p className="text-amber-700">Se revertirán {abonosCount} abono(s); regístralos de nuevo si aplica.</p>}
               </div>
             </AlertDialogDescription>

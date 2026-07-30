@@ -319,9 +319,11 @@ export async function importarVentas(
         descuento: 0,
         subtotal,
         impuesto_total: impuesto,
-        total_venta: totalNeto,
+        // BRUTO (lo que paga el cliente). La comision es costo aparte; el
+        // neto real recibido se refleja en el movimiento de banco.
+        total_venta: totalBruto,
         estado_pago: "Pagado",
-        valorpago: totalNeto,
+        valorpago: totalBruto,
       },
       detalles,
       almacen_id: opciones.almacen_id,
