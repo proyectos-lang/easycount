@@ -252,6 +252,20 @@ export default function HistorialVentasPage() {
     })
   }, [detallesAnaliticos, filtroClienteId, filtroProductoId, filtroAlmacenId, clientes, productos, almacenes])
 
+  // --- Totales de columna (respetan los filtros aplicados) ---
+  const totalColumnaVentas = React.useMemo(
+    () => ventasFiltradas.reduce((acc, v) => acc + (v.total_venta ?? 0), 0),
+    [ventasFiltradas]
+  )
+  const totalColumnaSaldo = React.useMemo(
+    () => ventasFiltradas.reduce((acc, v) => acc + Math.max(0, (v.total_venta ?? 0) - (v.valorpago ?? 0)), 0),
+    [ventasFiltradas]
+  )
+  const totalColumnaDetalle = React.useMemo(
+    () => detalleFiltrado.reduce((acc, d) => acc + d.cantidad * d.precio_unitario, 0),
+    [detalleFiltrado]
+  )
+
   // --- Actions ---
   async function viewDetalle(venta: VentaEncabezado) {
     setSelectedVenta(venta)
@@ -353,6 +367,7 @@ export default function HistorialVentasPage() {
       "SKU": d.producto_sku,
       "Cant.": d.cantidad,
       "Precio Unit. (L)": d.precio_unitario.toFixed(2),
+      "Total (L)": (d.cantidad * d.precio_unitario).toFixed(2),
       "Costo Unit. (L)": d.costo_promedio_momento.toFixed(2),
       "Utilidad Bruta (L)": d.utilidad_linea.toFixed(2),
       "Bodega": d.almacen_nombre,
@@ -360,7 +375,7 @@ export default function HistorialVentasPage() {
     exportToXlsx(rows, {
       sheetName: "Detalle por Producto",
       filename: "Detalle_Ventas",
-      colWidths: [12, 14, 22, 28, 14, 8, 16, 16, 18, 16],
+      colWidths: [12, 14, 22, 28, 14, 8, 16, 16, 16, 18, 16],
     })
     toast({ title: "Exportado", description: "Archivo Excel generado correctamente" })
   }
@@ -671,93 +686,27 @@ export default function HistorialVentasPage() {
             </CardContent>
           </Card>
 
-          {/* Mobile */}
-          <div className="block md:hidden space-y-3">
-            {ventasFiltradas.length === 0 ? (
-              <Card className="p-8 text-center text-muted-foreground rounded-2xl">No hay ventas registradas</Card>
-            ) : ventasFiltradas.map(venta => {
-              const saldo = (venta.total_venta ?? 0) - (venta.valorpago ?? 0)
-              const saldoColor =
-                saldo <= 0
-                  ? "text-emerald-600"
-                  : saldo < (venta.total_venta ?? 0)
-                    ? "text-amber-600"
-                    : "text-red-600"
-              return (
-                <Card key={venta.id} className="p-4 rounded-2xl shadow-sm border border-stone-200">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <p className="font-mono font-medium text-primary">{venta.numero_factura}</p>
-                      <p className="text-xs text-muted-foreground">{venta.fecha_venta?.split('T')[0] || ''}</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      {getEstadoBadge(venta.estado_pago)}
-                      {getMetodoPagoBadge(venta.id)}
-                    </div>
-                  </div>
-                  <p className="text-sm truncate mb-2">{venta.cliente_nombre}</p>
-                  <div className="flex justify-between items-center gap-3">
-                    <div className="min-w-0">
-                      <p className="font-bold text-base leading-tight">L {(venta.total_venta ?? 0).toFixed(2)}</p>
-                      <p className={`text-xs font-medium ${saldoColor}`}>
-                        Saldo: L {Math.max(0, saldo).toFixed(2)}
-                      </p>
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      {saldo > 0.005 && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                          onClick={() => openPagoDialog(venta)}
-                        >
-                          <Banknote className="h-4 w-4" />
-                        </Button>
-                      )}
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => viewDetalle(venta)}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => generatePdf(venta)}>
-                        <Download className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-sky-600 hover:text-sky-700 hover:bg-sky-50"
-                        onClick={() => router.push(`/ventas/editar/${venta.id}`)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                        onClick={() => setVentaAEliminar(venta)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              )
-            })}
-          </div>
-
-          {/* Desktop */}
-          <Card className="hidden md:block rounded-2xl shadow-sm border border-stone-200">
+          {/* Listado (tabla en todos los dispositivos; scroll horizontal en movil) */}
+          <Card className="rounded-2xl shadow-sm border border-stone-200">
             <CardContent className="p-0 overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-stone-50 border-b border-stone-200">
-                    <TableHead className="font-semibold text-stone-700">N° Factura</TableHead>
-                    <TableHead className="font-semibold text-stone-700">Fecha</TableHead>
-                    <TableHead className="font-semibold text-stone-700">Cliente</TableHead>
-                    <TableHead className="font-semibold text-stone-700">Almacen</TableHead>
-                    <TableHead className="font-semibold text-stone-700 text-right">Total</TableHead>
-                    <TableHead className="font-semibold text-stone-700 text-right">Saldo Pendiente</TableHead>
-                    <TableHead className="font-semibold text-stone-700">Estado Pago</TableHead>
-                    <TableHead className="font-semibold text-stone-700">Metodo</TableHead>
-                    <TableHead className="font-semibold text-stone-700 text-right">Acciones</TableHead>
+                    <TableHead className="font-semibold text-stone-700 whitespace-nowrap">N° Factura</TableHead>
+                    <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Fecha</TableHead>
+                    <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Cliente</TableHead>
+                    <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Almacen</TableHead>
+                    <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
+                      <div>Total</div>
+                      <div className="text-xs font-bold text-stone-900">L {totalColumnaVentas.toFixed(2)}</div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
+                      <div>Saldo Pendiente</div>
+                      <div className="text-xs font-bold text-stone-900">L {totalColumnaSaldo.toFixed(2)}</div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Estado Pago</TableHead>
+                    <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Metodo</TableHead>
+                    <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -772,13 +721,13 @@ export default function HistorialVentasPage() {
                     const saldo = (venta.total_venta ?? 0) - (venta.valorpago ?? 0)
                     return (
                       <TableRow key={venta.id} className="hover:bg-stone-50/50">
-                        <TableCell className="font-mono font-medium">{venta.numero_factura}</TableCell>
-                        <TableCell>{venta.fecha_venta?.split('T')[0] || ''}</TableCell>
-                        <TableCell>{venta.cliente_nombre}</TableCell>
-                        <TableCell className="text-muted-foreground">{venta.almacen_nombre || '-'}</TableCell>
-                        <TableCell className="text-right font-medium">L {(venta.total_venta ?? 0).toFixed(2)}</TableCell>
+                        <TableCell className="font-mono font-medium whitespace-nowrap">{venta.numero_factura}</TableCell>
+                        <TableCell className="whitespace-nowrap">{venta.fecha_venta?.split('T')[0] || ''}</TableCell>
+                        <TableCell className="whitespace-nowrap">{venta.cliente_nombre}</TableCell>
+                        <TableCell className="text-muted-foreground whitespace-nowrap">{venta.almacen_nombre || '-'}</TableCell>
+                        <TableCell className="text-right font-medium whitespace-nowrap">L {(venta.total_venta ?? 0).toFixed(2)}</TableCell>
                         <TableCell
-                          className={`text-right font-medium ${
+                          className={`text-right font-medium whitespace-nowrap ${
                             saldo <= 0
                               ? "text-emerald-600"
                               : saldo < (venta.total_venta ?? 0)
@@ -1005,6 +954,10 @@ export default function HistorialVentasPage() {
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">SKU</TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">Cant.</TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">Precio Unit.</TableHead>
+                    <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
+                      <div>Total</div>
+                      <div className="text-xs font-bold text-stone-900">L {totalColumnaDetalle.toFixed(2)}</div>
+                    </TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">Costo Unit.</TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">Utilidad Bruta</TableHead>
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Bodega</TableHead>
@@ -1014,14 +967,14 @@ export default function HistorialVentasPage() {
                   {loadingAnalitico ? (
                     [...Array(5)].map((_, i) => (
                       <TableRow key={i}>
-                        {[...Array(10)].map((_, j) => (
+                        {[...Array(11)].map((_, j) => (
                           <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                         ))}
                       </TableRow>
                     ))
                   ) : detalleFiltrado.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center text-muted-foreground py-10">
+                      <TableCell colSpan={11} className="text-center text-muted-foreground py-10">
                         {analiticoLoaded ? "No hay registros para los filtros aplicados" : "Cargando datos..."}
                       </TableCell>
                     </TableRow>
@@ -1034,6 +987,7 @@ export default function HistorialVentasPage() {
                       <TableCell className="text-muted-foreground whitespace-nowrap">{d.producto_sku}</TableCell>
                       <TableCell className="text-right">{d.cantidad}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">L {d.precio_unitario.toFixed(2)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap font-medium">L {(d.cantidad * d.precio_unitario).toFixed(2)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap text-muted-foreground">L {d.costo_promedio_momento.toFixed(2)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">
                         <Badge className={d.utilidad_linea >= 0 ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : "bg-red-100 text-red-800 hover:bg-red-100"}>
