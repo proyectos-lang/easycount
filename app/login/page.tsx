@@ -85,7 +85,7 @@ export default function LoginPage() {
     <main
       className="relative min-h-screen flex flex-col overflow-hidden"
       style={{
-        backgroundImage: `url('https://hebbkx1anhila5yf.public.blob.vercel-storage.com/IMG_5385-1v02bKvtjuY9N5MFzK8Mc65DTNkmN4.png')`,
+        backgroundImage: `url('/login-hero.jpg')`,
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
@@ -154,7 +154,7 @@ export default function LoginPage() {
             {/* Logo + cabecera */}
             <div className="mb-5 space-y-2">
               <img
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/IMG_5365-c5fxbRQfBGwK1uj6MpIRuiHtoWnfdE.jpeg"
+                src="/easycount-logo-login.jpeg"
                 alt="EasyCount"
                 className="w-full h-auto object-contain mx-auto block"
                 style={{ maxHeight: "64px" }}

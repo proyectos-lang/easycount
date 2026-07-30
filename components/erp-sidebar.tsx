@@ -77,7 +77,7 @@ export function ERPSidebar() {
             />
           ) : (
             <img
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/WhatsApp%20Image%202026-04-22%20at%208.57.20%20PM-RKsyYHvftfuejI9wKhhcuYBQcQXMWp.jpeg"
+              src="/easycount-logo.jpeg"
               alt="EasyCount"
               className="h-12 w-auto max-w-[160px] object-contain transition-opacity duration-300 group-hover:opacity-80"
             />
