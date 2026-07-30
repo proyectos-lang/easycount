@@ -155,6 +155,51 @@ export async function getVentas(
   }
 }
 
+/**
+ * Totales agregados del listado de facturas sobre TODAS las ventas que cumplen
+ * los filtros (no solo la pagina cargada). Se usa para el total de columna del
+ * encabezado del Historial, de modo que coincida con la suma del detalle por
+ * producto. Suma `total_venta` (con ISV) y el saldo pendiente.
+ */
+export async function getVentasResumenTotales(filtros: {
+  fechaInicio?: string
+  fechaFin?: string
+  clienteId?: number | null
+  almacenId?: number | null
+  estadoPago?: string | null
+} = {}): Promise<{ totalVentas: number; totalSaldo: number; count: number; error: string | null }> {
+  if (!isSupabaseConfigured()) {
+    const saved = localStorage.getItem('ventas_encabezado')
+    const todas: VentaEncabezado[] = saved ? JSON.parse(saved) : []
+    const totalVentas = todas.reduce((a, v) => a + (v.total_venta ?? 0), 0)
+    const totalSaldo = todas.reduce((a, v) => a + Math.max(0, (v.total_venta ?? 0) - (v.valorpago ?? 0)), 0)
+    return { totalVentas, totalSaldo, count: todas.length, error: null }
+  }
+
+  const supabase = createClient()
+  if (!supabase) return { totalVentas: 0, totalSaldo: 0, count: 0, error: 'Cliente no disponible' }
+
+  try {
+    let query = supabase.from('ventas_encabezado').select('total_venta, valorpago')
+    if (filtros.fechaInicio) query = query.gte('fecha_venta', `${filtros.fechaInicio}T00:00:00`)
+    if (filtros.fechaFin) query = query.lte('fecha_venta', `${filtros.fechaFin}T23:59:59`)
+    if (filtros.clienteId != null) query = query.eq('cliente_id', filtros.clienteId)
+    if (filtros.almacenId != null) query = query.eq('almacen_id', filtros.almacenId)
+    if (filtros.estadoPago) query = query.eq('estado_pago', filtros.estadoPago)
+
+    const { data, error } = await query
+    if (error) return { totalVentas: 0, totalSaldo: 0, count: 0, error: error.message }
+
+    const rows = data || []
+    const totalVentas = rows.reduce((a, v) => a + Number(v.total_venta || 0), 0)
+    const totalSaldo = rows.reduce((a, v) => a + Math.max(0, Number(v.total_venta || 0) - Number(v.valorpago || 0)), 0)
+    return { totalVentas, totalSaldo, count: rows.length, error: null }
+  } catch (err) {
+    console.error('[Supabase] Error obteniendo totales de ventas:', err)
+    return { totalVentas: 0, totalSaldo: 0, count: 0, error: 'Error de conexion' }
+  }
+}
+
 export async function getVentaById(id: number): Promise<{ data: VentaEncabezado | null; error: string | null }> {
   if (!isSupabaseConfigured()) {
     const saved = localStorage.getItem('ventas_encabezado')
@@ -232,6 +277,13 @@ export interface VentaDetalleAnalitico {
   precio_unitario: number
   costo_promedio_momento: number
   utilidad_linea: number
+  /**
+   * Total de venta de la linea CON ISV y neto del descuento de la factura
+   * (contribucion de esta linea al `total_venta` del encabezado). Se calcula
+   * como cantidad * precio_unitario * (1 - descuento%) * (1 + isv%), asi la
+   * suma de la columna coincide con la suma de `total_venta` del Resumen.
+   */
+  total_linea: number
   almacen_nombre: string
 }
 
@@ -258,6 +310,9 @@ export async function getDetalleAnalitico(
           fecha_venta,
           numero_factura,
           almacen_id,
+          aplica_impuesto,
+          porcentaje_impuesto,
+          descuento,
           clientes ( nombre ),
           almacenes ( nombre )
         ),
@@ -289,6 +344,11 @@ export async function getDetalleAnalitico(
           precio_unitario: d.precio_unitario || 0,
           costo_promedio_momento: d.costo_promedio_momento || 0,
           utilidad_linea: d.utilidad_linea || 0,
+          total_linea:
+            (d.cantidad || 0) *
+            (d.precio_unitario || 0) *
+            (1 - Number(ve?.descuento || 0) / 100) *
+            (1 + (ve?.aplica_impuesto ? Number(ve?.porcentaje_impuesto || 0) : 0) / 100),
           almacen_nombre: ve?.almacenes?.nombre || '',
         }
       })

@@ -53,6 +53,7 @@ import { useCajaSesion } from "@/lib/hooks/use-caja-sesion"
 import { ImportarVentasDialog } from "./importar-ventas-dialog"
 import {
   getVentas,
+  getVentasResumenTotales,
   getDetallesVenta,
   getPagosVenta,
   registrarPago,
@@ -252,19 +253,44 @@ export default function HistorialVentasPage() {
     })
   }, [detallesAnaliticos, filtroClienteId, filtroProductoId, filtroAlmacenId, clientes, productos, almacenes])
 
-  // --- Totales de columna (respetan los filtros aplicados) ---
-  const totalColumnaVentas = React.useMemo(
-    () => ventasFiltradas.reduce((acc, v) => acc + (v.total_venta ?? 0), 0),
-    [ventasFiltradas]
-  )
-  const totalColumnaSaldo = React.useMemo(
-    () => ventasFiltradas.reduce((acc, v) => acc + Math.max(0, (v.total_venta ?? 0) - (v.valorpago ?? 0)), 0),
-    [ventasFiltradas]
-  )
+  // --- Totales de columna del Detalle por Producto (respetan filtros; el
+  //     detalle carga TODAS las ventas, asi que la suma es del universo). ---
   const totalColumnaDetalle = React.useMemo(
+    () => detalleFiltrado.reduce((acc, d) => acc + d.total_linea, 0),
+    [detalleFiltrado]
+  )
+  const utilidadColumnaDetalle = React.useMemo(
+    () => detalleFiltrado.reduce((acc, d) => acc + d.utilidad_linea, 0),
+    [detalleFiltrado]
+  )
+  // Base neta (sin ISV) para el margen bruto = Σ cantidad * precio_unitario.
+  const ingresoNetoDetalle = React.useMemo(
     () => detalleFiltrado.reduce((acc, d) => acc + d.cantidad * d.precio_unitario, 0),
     [detalleFiltrado]
   )
+  const margenColumnaDetalle = ingresoNetoDetalle > 0 ? (utilidadColumnaDetalle / ingresoNetoDetalle) * 100 : 0
+
+  // --- Totales del Resumen de Facturas: se calculan en el SERVIDOR sobre
+  //     TODAS las facturas que cumplen los filtros (no solo la pagina
+  //     cargada), para que cuadren con el total del Detalle por Producto. ---
+  const [resumenTotales, setResumenTotales] = React.useState({ totalVentas: 0, totalSaldo: 0 })
+
+  React.useEffect(() => {
+    let cancelado = false
+    getVentasResumenTotales({
+      fechaInicio: filtroFechaInicioFacturas || undefined,
+      fechaFin: filtroFechaFinFacturas || undefined,
+      clienteId: filtroClienteIdFacturas ? Number(filtroClienteIdFacturas) : undefined,
+      almacenId: filtroAlmacenIdFacturas ? Number(filtroAlmacenIdFacturas) : undefined,
+      estadoPago: filtroEstadoPago || undefined,
+    }).then((r) => {
+      if (cancelado) return
+      setResumenTotales({ totalVentas: r.totalVentas, totalSaldo: r.totalSaldo })
+    })
+    return () => { cancelado = true }
+    // `ventas` en deps: refresca los totales tras crear/editar/eliminar/abonar
+    // (loadData reemplaza el array) sin depender de que cambien los filtros.
+  }, [filtroFechaInicioFacturas, filtroFechaFinFacturas, filtroClienteIdFacturas, filtroAlmacenIdFacturas, filtroEstadoPago, ventas])
 
   // --- Actions ---
   async function viewDetalle(venta: VentaEncabezado) {
@@ -367,15 +393,19 @@ export default function HistorialVentasPage() {
       "SKU": d.producto_sku,
       "Cant.": d.cantidad,
       "Precio Unit. (L)": d.precio_unitario.toFixed(2),
-      "Total (L)": (d.cantidad * d.precio_unitario).toFixed(2),
+      "Total (L)": d.total_linea.toFixed(2),
       "Costo Unit. (L)": d.costo_promedio_momento.toFixed(2),
       "Utilidad Bruta (L)": d.utilidad_linea.toFixed(2),
+      "Margen %": (() => {
+        const base = d.cantidad * d.precio_unitario
+        return base > 0 ? ((d.utilidad_linea / base) * 100).toFixed(1) : "0.0"
+      })(),
       "Bodega": d.almacen_nombre,
     }))
     exportToXlsx(rows, {
       sheetName: "Detalle por Producto",
       filename: "Detalle_Ventas",
-      colWidths: [12, 14, 22, 28, 14, 8, 16, 16, 16, 18, 16],
+      colWidths: [12, 14, 22, 28, 14, 8, 16, 16, 16, 18, 10, 16],
     })
     toast({ title: "Exportado", description: "Archivo Excel generado correctamente" })
   }
@@ -698,11 +728,11 @@ export default function HistorialVentasPage() {
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Almacen</TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
                       <div>Total</div>
-                      <div className="text-xs font-bold text-stone-900">L {totalColumnaVentas.toFixed(2)}</div>
+                      <div className="text-xs font-bold text-stone-900">L {resumenTotales.totalVentas.toFixed(2)}</div>
                     </TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
                       <div>Saldo Pendiente</div>
-                      <div className="text-xs font-bold text-stone-900">L {totalColumnaSaldo.toFixed(2)}</div>
+                      <div className="text-xs font-bold text-stone-900">L {resumenTotales.totalSaldo.toFixed(2)}</div>
                     </TableHead>
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Estado Pago</TableHead>
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Metodo</TableHead>
@@ -821,7 +851,8 @@ export default function HistorialVentasPage() {
                 <div>
                   <p className="text-stone-500 text-xs mb-1">Utilidad Total</p>
                   <p className="font-semibold text-emerald-700 text-lg">
-                    L {detalleFiltrado.reduce((a, d) => a + d.utilidad_linea, 0).toFixed(2)}
+                    L {utilidadColumnaDetalle.toFixed(2)}
+                    <span className="text-sm font-medium text-emerald-600 ml-1">({margenColumnaDetalle.toFixed(1)}%)</span>
                   </p>
                 </div>
               </div>
@@ -959,7 +990,12 @@ export default function HistorialVentasPage() {
                       <div className="text-xs font-bold text-stone-900">L {totalColumnaDetalle.toFixed(2)}</div>
                     </TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">Costo Unit.</TableHead>
-                    <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">Utilidad Bruta</TableHead>
+                    <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
+                      <div>Utilidad Bruta</div>
+                      <div className="text-xs font-bold text-emerald-700">
+                        L {utilidadColumnaDetalle.toFixed(2)} ({margenColumnaDetalle.toFixed(1)}%)
+                      </div>
+                    </TableHead>
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Bodega</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -987,12 +1023,20 @@ export default function HistorialVentasPage() {
                       <TableCell className="text-muted-foreground whitespace-nowrap">{d.producto_sku}</TableCell>
                       <TableCell className="text-right">{d.cantidad}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">L {d.precio_unitario.toFixed(2)}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap font-medium">L {(d.cantidad * d.precio_unitario).toFixed(2)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap font-medium">L {d.total_linea.toFixed(2)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap text-muted-foreground">L {d.costo_promedio_momento.toFixed(2)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">
-                        <Badge className={d.utilidad_linea >= 0 ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : "bg-red-100 text-red-800 hover:bg-red-100"}>
-                          L {d.utilidad_linea.toFixed(2)}
-                        </Badge>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Badge className={d.utilidad_linea >= 0 ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : "bg-red-100 text-red-800 hover:bg-red-100"}>
+                            L {d.utilidad_linea.toFixed(2)}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground w-12 text-right">
+                            {(() => {
+                              const base = d.cantidad * d.precio_unitario
+                              return base > 0 ? `${((d.utilidad_linea / base) * 100).toFixed(1)}%` : "—"
+                            })()}
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">{d.almacen_nombre}</TableCell>
                     </TableRow>
