@@ -179,6 +179,64 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
     keywords: ["ajuste", "conteo", "cuadrar", "inventario fisico", "merma", "faltante", "sobrante", "toma fisica"],
   },
   {
+    modulo: "Ajuste de Costo",
+    titulo: "Ajuste de Costo",
+    descripcion:
+      "Cambia manualmente el costo unitario de un producto y, opcionalmente, recalcula el costo de sus ventas pasadas en un intervalo de fechas.",
+    queHace: [
+      "Fija un nuevo costo promedio para un producto (por si el costo de compra se capturó mal o cambió de proveedor).",
+      "Al cambiar el costo, la valoración de inventario (Inventario → Valoración) se actualiza de inmediato, porque se calcula como stock × costo promedio.",
+      "Opcionalmente recalcula el costo CONGELADO de las ventas del producto en un rango de fechas: reescribe el costo y la utilidad de cada línea de venta, el costo del kardex y el de las devoluciones del período.",
+      "Muestra una vista previa del impacto antes de aplicar: nuevo valor de inventario, cuántas ventas se afectan y cómo cambia el CMV y la utilidad del rango.",
+      "Guarda una bitácora con el costo anterior/nuevo, el rango, las ventas afectadas y el motivo (auditoría).",
+    ],
+    queNoHace: [
+      "No recalcula un promedio ponderado histórico: aplica el nuevo costo PLANO a todas las ventas del intervalo. Si en el período hubo compras a distintos costos, esa variación legítima se uniforma al nuevo costo.",
+      "No deja un movimiento en el kardex por el cambio de costo (el kardex registra movimiento de cantidad, no de costo); la auditoría vive en la bitácora de ajustes de costo.",
+      "No cambia cantidades ni stock: para eso están Ingreso Manual, Traslados o Ajustes de Inventario.",
+      "Si no activas el recálculo, el historial de ventas y el CMV pasado quedan intactos (solo cambia la valoración actual).",
+    ],
+    operaciones: [
+      {
+        titulo: "Cambiar solo el costo actual",
+        pasos: [
+          "Abre Inventario → Ajuste de Costo.",
+          "Busca y selecciona el producto: verás su costo promedio y stock actuales.",
+          "Escribe el nuevo costo unitario. La tarjeta muestra el nuevo valor de inventario.",
+          "Deja SIN marcar 'Recalcular ventas'. Escribe un motivo (opcional) y 'Aplicar cambio de costo'; confirma.",
+        ],
+      },
+      {
+        titulo: "Cambiar el costo y recalcular ventas de un período",
+        pasos: [
+          "Selecciona el producto y escribe el nuevo costo.",
+          "Marca 'Recalcular ventas en un intervalo' y elige las fechas Desde y Hasta.",
+          "Revisa la vista previa: ventas afectadas, CMV antes→después y cambio en la utilidad.",
+          "Escribe el motivo y 'Aplicar cambio de costo'. En la confirmación verás la advertencia de que se reescribe el CMV histórico; confirma.",
+          "Verifica en Finanzas → Estado de Resultados del período que el CMV y el margen cambiaron.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        pregunta: "¿Por qué mi estado de resultados de meses pasados no cambió?",
+        respuesta:
+          "El costo de las ventas se congela al vender. Cambiar el costo actual solo afecta la valoración de inventario. Para corregir el CMV/margen histórico debes activar 'Recalcular ventas' y elegir el rango de fechas.",
+      },
+      {
+        pregunta: "¿Qué costo les queda a las ventas del rango?",
+        respuesta:
+          "El nuevo costo, plano: todas las ventas del intervalo quedan con el mismo costo unitario. Si en ese período compraste a precios distintos, esa diferencia se uniforma. Úsalo cuando el costo estaba mal y quieres corregirlo parejo.",
+      },
+      {
+        pregunta: "¿Se puede deshacer?",
+        respuesta:
+          "No hay un botón de deshacer, pero puedes volver a correr el ajuste con el costo anterior y el mismo rango. La bitácora guarda el costo anterior de cada operación.",
+      },
+    ],
+    keywords: ["costo", "costo unitario", "costo promedio", "recalcular costo", "cmv", "margen", "corregir costo", "valoracion"],
+  },
+  {
     modulo: "Valoracion",
     titulo: "Valoración de Inventario",
     descripcion:

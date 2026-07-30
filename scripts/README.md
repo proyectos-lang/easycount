@@ -30,6 +30,7 @@ SQL Editor de Supabase. Son en su mayoría idempotentes (`IF NOT EXISTS` /
 | 023 | `023-ajustes-inventario.sql` | Ajustes de Inventario: bitácora + RLS + módulo |
 | 024 | `024-ventas-ediciones.sql` | Bitácora de ediciones de ventas + RLS (opcional) |
 | 025 | `025-corregir-signo-salida-venta.sql` | Corrige el signo de `Salida Venta` en datos viejos (opcional, 1 vez) |
+| 026 | `026-ajuste-costo.sql` | Ajuste de Costo: bitácora + RPC `fijar_costo_promedio`/`recalcular_costo_ventas` + RLS + módulo |
 | — | `add-almacen-to-ventas-encabezado.sql` | Agrega `almacen_id` a ventas (aplicar tras 011) |
 
 > **Huecos 006–008:** la numeración salta de 005 a 009. No faltan migraciones;
@@ -60,3 +61,11 @@ ocurren a la vez. Mientras no lo apliques, la app usa una ruta de respaldo
 (lee-modifica-escribe, no concurrency-safe) que funciona igual pero sin la
 garantía atómica. En cuanto ejecutes el 018, la app empieza a usar las
 funciones automáticamente (sin cambios de código).
+
+El script **026** agrega `fijar_costo_promedio` (SET absoluto del costo, para el
+módulo Ajuste de Costo) y `recalcular_costo_ventas` (reescribe el costo
+congelado de las ventas de un producto en un rango, de forma **transaccional**:
+los tres UPDATE —`ventas_detalle`, `transacciones_inventario`,
+`devoluciones_detalle`— corren todo-o-nada en el servidor). Sin el 026, el
+módulo funciona en modo degradado: fallback JS best-effort (no atómico) y sin
+bitácora.
