@@ -171,17 +171,17 @@ export async function getVentasResumenTotales(filtros: {
   clienteId?: number | null
   almacenId?: number | null
   estadoPago?: string | null
-} = {}): Promise<{ totalVentas: number; totalSaldo: number; count: number; error: string | null }> {
+} = {}): Promise<{ totalVentas: number; totalSaldo: number; totalComisiones: number; count: number; error: string | null }> {
   if (!isSupabaseConfigured()) {
     const saved = localStorage.getItem('ventas_encabezado')
     const todas: VentaEncabezado[] = saved ? JSON.parse(saved) : []
     const totalVentas = todas.reduce((a, v) => a + (v.total_venta ?? 0), 0)
     const totalSaldo = todas.reduce((a, v) => a + Math.max(0, (v.total_venta ?? 0) - (v.valorpago ?? 0)), 0)
-    return { totalVentas, totalSaldo, count: todas.length, error: null }
+    return { totalVentas, totalSaldo, totalComisiones: 0, count: todas.length, error: null }
   }
 
   const supabase = createClient()
-  if (!supabase) return { totalVentas: 0, totalSaldo: 0, count: 0, error: 'Cliente no disponible' }
+  if (!supabase) return { totalVentas: 0, totalSaldo: 0, totalComisiones: 0, count: 0, error: 'Cliente no disponible' }
 
   try {
     // --- Total BRUTO desde las lineas (join !inner al encabezado para filtrar
@@ -199,7 +199,7 @@ export async function getVentasResumenTotales(filtros: {
     if (filtros.estadoPago) qLineas = qLineas.eq('ventas_encabezado.estado_pago', filtros.estadoPago)
 
     const { data: lineas, error: errLineas } = await qLineas
-    if (errLineas) return { totalVentas: 0, totalSaldo: 0, count: 0, error: errLineas.message }
+    if (errLineas) return { totalVentas: 0, totalSaldo: 0, totalComisiones: 0, count: 0, error: errLineas.message }
 
     const totalVentas = +(lineas || [])
       .reduce((acc, d) => {
@@ -221,17 +221,37 @@ export async function getVentasResumenTotales(filtros: {
     if (filtros.estadoPago) qEnc = qEnc.eq('estado_pago', filtros.estadoPago)
 
     const { data: encs, error: errEnc } = await qEnc
-    if (errEnc) return { totalVentas, totalSaldo: 0, count: 0, error: errEnc.message }
+    if (errEnc) return { totalVentas, totalSaldo: 0, totalComisiones: 0, count: 0, error: errEnc.message }
 
     const rows = encs || []
     const totalSaldo = +rows
       .reduce((a, v) => a + Math.max(0, Number(v.total_venta || 0) - Number(v.valorpago || 0)), 0)
       .toFixed(2)
 
-    return { totalVentas, totalSaldo, count: rows.length, error: null }
+    // --- Comisiones bancarias del conjunto filtrado (desde ventas_pagos_detalle
+    //     con join !inner al encabezado, mismos filtros). = Σ monto_bruto*%/100.
+    //     Resiliente: si la tabla no existe (migracion 011 pendiente) -> 0.
+    let totalComisiones = 0
+    let qCom = supabase
+      .from('ventas_pagos_detalle')
+      .select('monto_bruto, porcentaje_comision, ventas_encabezado!inner(cliente_id, almacen_id, estado_pago, fecha_venta)')
+    if (filtros.fechaInicio) qCom = qCom.gte('ventas_encabezado.fecha_venta', `${filtros.fechaInicio}T00:00:00`)
+    if (filtros.fechaFin) qCom = qCom.lte('ventas_encabezado.fecha_venta', `${filtros.fechaFin}T23:59:59`)
+    if (filtros.clienteId != null) qCom = qCom.eq('ventas_encabezado.cliente_id', filtros.clienteId)
+    if (filtros.almacenId != null) qCom = qCom.eq('ventas_encabezado.almacen_id', filtros.almacenId)
+    if (filtros.estadoPago) qCom = qCom.eq('ventas_encabezado.estado_pago', filtros.estadoPago)
+
+    const { data: pagos, error: errCom } = await qCom
+    if (!errCom) {
+      totalComisiones = +(pagos || [])
+        .reduce((acc, p) => acc + Number(p.monto_bruto || 0) * (Number(p.porcentaje_comision || 0) / 100), 0)
+        .toFixed(2)
+    }
+
+    return { totalVentas, totalSaldo, totalComisiones, count: rows.length, error: null }
   } catch (err) {
     console.error('[Supabase] Error obteniendo totales de ventas:', err)
-    return { totalVentas: 0, totalSaldo: 0, count: 0, error: 'Error de conexion' }
+    return { totalVentas: 0, totalSaldo: 0, totalComisiones: 0, count: 0, error: 'Error de conexion' }
   }
 }
 
@@ -303,6 +323,8 @@ export async function getDetallesVenta(ventaId: number): Promise<{ data: VentaDe
 }
 
 export interface VentaDetalleAnalitico {
+  /** venta_id del encabezado (para unir metodo de pago / comision). */
+  venta_id: number
   fecha_venta: string
   numero_factura: string
   cliente_nombre: string
@@ -337,6 +359,7 @@ export async function getDetalleAnalitico(
     let query = supabase
       .from('ventas_detalle')
       .select(`
+        venta_id,
         cantidad,
         precio_unitario,
         costo_promedio_momento,
@@ -370,6 +393,7 @@ export async function getDetalleAnalitico(
       .map(d => {
         const ve = d.ventas_encabezado as any
         return {
+          venta_id: (d as any).venta_id || 0,
           fecha_venta: ve?.fecha_venta || '',
           numero_factura: ve?.numero_factura || '',
           cliente_nombre: ve?.clientes?.nombre || '',

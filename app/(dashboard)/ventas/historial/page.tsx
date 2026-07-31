@@ -56,6 +56,7 @@ import {
   getVentasResumenTotales,
   getDetallesVenta,
   getPagosVenta,
+  getPagosDetalleVenta,
   registrarPago,
   eliminarVentaCompletamente,
   getRazonSocialForPdf,
@@ -63,9 +64,10 @@ import {
   type VentaEncabezado,
   type VentaDetalle,
   type PagoVenta,
+  type PagoVentaDetalle,
   type VentaDetalleAnalitico,
 } from "@/lib/services/ventas"
-import { getMetodosPagoPorVenta } from "@/lib/services/ventas-analytics"
+import { getMetodosPagoPorVenta, getComisionesPorVenta, type ComisionVenta } from "@/lib/services/ventas-analytics"
 
 /** Tamano de pagina del listado de facturas (paginacion server-side). */
 const PAGINA_VENTAS = 100
@@ -86,6 +88,12 @@ export default function HistorialVentasPage() {
    * 011 esta pendiente, queda vacio y la columna muestra fallback "—".
    */
   const [metodosPago, setMetodosPago] = React.useState<Map<number, string>>(new Map())
+  /**
+   * Map<venta_id, ComisionVenta>. Comision bancaria agregada por venta (para
+   * auditoria). Se puebla en batch junto a `metodosPago`. Ventas sin comision
+   * no entran en el Map (la columna muestra "—").
+   */
+  const [comisionesPorVenta, setComisionesPorVenta] = React.useState<Map<number, ComisionVenta>>(new Map())
 
   // --- Resumen de Facturas tab filters ---
   const [filtroFechaInicioFacturas, setFiltroFechaInicioFacturas] = React.useState("")
@@ -110,6 +118,8 @@ export default function HistorialVentasPage() {
   const [selectedVenta, setSelectedVenta] = React.useState<VentaEncabezado | null>(null)
   const [detalles, setDetalles] = React.useState<VentaDetalle[]>([])
   const [pagos, setPagos] = React.useState<PagoVenta[]>([])
+  // Desglose de pago de la factura (ventas_pagos_detalle) para auditoria de comision.
+  const [pagosDetalle, setPagosDetalle] = React.useState<PagoVentaDetalle[]>([])
   const [showDetalleDialog, setShowDetalleDialog] = React.useState(false)
 
   // --- Pago dialog ---
@@ -149,14 +159,19 @@ export default function HistorialVentasPage() {
       setAlmacenes(almacenesRes.data)
       setProductos(productosRes.data)
 
-      // Una sola query batch para clasificar el metodo de pago de cada venta
-      // visible. Aprovecha el Map<id, label> que regresa el helper.
+      // Queries batch para clasificar el metodo de pago y la comision de cada
+      // venta visible (Map<id, ...> que regresan los helpers).
       const ids = ventasRes.data.map(v => v.id!).filter((id): id is number => id != null)
       if (ids.length > 0) {
-        const { data: mapa } = await getMetodosPagoPorVenta(ids)
-        setMetodosPago(mapa)
+        const [{ data: mapaMet }, { data: mapaCom }] = await Promise.all([
+          getMetodosPagoPorVenta(ids),
+          getComisionesPorVenta(ids),
+        ])
+        setMetodosPago(mapaMet)
+        setComisionesPorVenta(mapaCom)
       } else {
         setMetodosPago(new Map())
+        setComisionesPorVenta(new Map())
       }
     } catch {
       toast({ title: "Error", description: "No se pudieron cargar las ventas", variant: "destructive" })
@@ -182,10 +197,18 @@ export default function HistorialVentasPage() {
 
       const ids = nuevas.map(v => v.id!).filter((id): id is number => id != null)
       if (ids.length > 0) {
-        const { data: mapa } = await getMetodosPagoPorVenta(ids)
+        const [{ data: mapaMet }, { data: mapaCom }] = await Promise.all([
+          getMetodosPagoPorVenta(ids),
+          getComisionesPorVenta(ids),
+        ])
         setMetodosPago(prev => {
           const merged = new Map(prev)
-          mapa.forEach((v, k) => merged.set(k, v))
+          mapaMet.forEach((v, k) => merged.set(k, v))
+          return merged
+        })
+        setComisionesPorVenta(prev => {
+          const merged = new Map(prev)
+          mapaCom.forEach((v, k) => merged.set(k, v))
           return merged
         })
       }
@@ -207,6 +230,19 @@ export default function HistorialVentasPage() {
       }
       setDetallesAnaliticos(data)
       setAnaliticoLoaded(true)
+
+      // Metodo de pago + comision por venta para las nuevas columnas del
+      // Detalle. Se mergean en los Maps (no reemplazan) para no perder lo que
+      // ya cargo la pestana Resumen.
+      const idsDetalle = Array.from(new Set(data.map(d => d.venta_id).filter(Boolean)))
+      if (idsDetalle.length > 0) {
+        const [{ data: mapaMet }, { data: mapaCom }] = await Promise.all([
+          getMetodosPagoPorVenta(idsDetalle),
+          getComisionesPorVenta(idsDetalle),
+        ])
+        setMetodosPago(prev => new Map([...prev, ...mapaMet]))
+        setComisionesPorVenta(prev => new Map([...prev, ...mapaCom]))
+      }
     } catch {
       toast({ title: "Error", description: "No se pudieron cargar los detalles", variant: "destructive" })
     } finally {
@@ -270,10 +306,35 @@ export default function HistorialVentasPage() {
   )
   const margenColumnaDetalle = ingresoNetoDetalle > 0 ? (utilidadColumnaDetalle / ingresoNetoDetalle) * 100 : 0
 
+  // --- Comision por linea del Detalle (prorrateo) ---
+  // La comision es de la FACTURA (por forma de pago); se reparte entre sus
+  // lineas segun el peso de cada linea en el total de su factura.
+  const totalLineasPorVenta = React.useMemo(() => {
+    const m = new Map<number, number>()
+    for (const d of detalleFiltrado) m.set(d.venta_id, (m.get(d.venta_id) ?? 0) + d.total_linea)
+    return m
+  }, [detalleFiltrado])
+  // Subtotal AUTORITATIVO de la columna Comision: suma la comision real de cada
+  // venta presente (no la suma de celdas prorrateadas, que arrastra redondeo).
+  const comisionColumnaDetalle = React.useMemo(() => {
+    let s = 0
+    for (const id of totalLineasPorVenta.keys()) s += comisionesPorVenta.get(id)?.comision ?? 0
+    return s
+  }, [totalLineasPorVenta, comisionesPorVenta])
+
+  // Comision asignada a una linea (o null si su factura no tiene comision).
+  function comisionLinea(d: VentaDetalleAnalitico): { pct: number; valor: number } | null {
+    const c = comisionesPorVenta.get(d.venta_id)
+    if (!c || c.comision <= 0) return null
+    const totalVenta = totalLineasPorVenta.get(d.venta_id) ?? 0
+    const peso = totalVenta > 0 ? d.total_linea / totalVenta : 0
+    return { pct: c.pct, valor: c.comision * peso }
+  }
+
   // --- Totales del Resumen de Facturas: se calculan en el SERVIDOR sobre
   //     TODAS las facturas que cumplen los filtros (no solo la pagina
   //     cargada), para que cuadren con el total del Detalle por Producto. ---
-  const [resumenTotales, setResumenTotales] = React.useState({ totalVentas: 0, totalSaldo: 0 })
+  const [resumenTotales, setResumenTotales] = React.useState({ totalVentas: 0, totalSaldo: 0, totalComisiones: 0 })
 
   React.useEffect(() => {
     let cancelado = false
@@ -285,7 +346,7 @@ export default function HistorialVentasPage() {
       estadoPago: filtroEstadoPago || undefined,
     }).then((r) => {
       if (cancelado) return
-      setResumenTotales({ totalVentas: r.totalVentas, totalSaldo: r.totalSaldo })
+      setResumenTotales({ totalVentas: r.totalVentas, totalSaldo: r.totalSaldo, totalComisiones: r.totalComisiones })
     })
     return () => { cancelado = true }
     // `ventas` en deps: refresca los totales tras crear/editar/eliminar/abonar
@@ -296,12 +357,19 @@ export default function HistorialVentasPage() {
   async function viewDetalle(venta: VentaEncabezado) {
     setSelectedVenta(venta)
     setShowDetalleDialog(true)
-    const [detallesRes, pagosRes] = await Promise.all([
+    setPagosDetalle([])
+    // Cuentas para resolver el nombre del banco en el desglose de pago.
+    if (cuentas.length === 0) {
+      getCuentas().then((r) => setCuentas((r.data || []).filter((c) => c.activo !== false)))
+    }
+    const [detallesRes, pagosRes, pagosDetRes] = await Promise.all([
       getDetallesVenta(venta.id!),
       getPagosVenta(venta.id!),
+      getPagosDetalleVenta(venta.id!),
     ])
     setDetalles(detallesRes.data)
     setPagos(pagosRes.data)
+    setPagosDetalle(pagosDetRes.data)
   }
 
   function openPagoDialog(venta: VentaEncabezado) {
@@ -385,27 +453,33 @@ export default function HistorialVentasPage() {
       toast({ title: "Sin datos", description: "No hay registros para exportar", variant: "destructive" })
       return
     }
-    const rows: Record<string, unknown>[] = detalleFiltrado.map(d => ({
-      "Fecha": d.fecha_venta?.split('T')[0] || "",
-      "N° Factura": d.numero_factura,
-      "Cliente": d.cliente_nombre,
-      "Producto": d.producto_nombre,
-      "SKU": d.producto_sku,
-      "Cant.": d.cantidad,
-      "Precio Unit. (L)": d.precio_unitario.toFixed(2),
-      "Total (L)": d.total_linea.toFixed(2),
-      "Costo Unit. (L)": d.costo_promedio_momento.toFixed(2),
-      "Utilidad Bruta (L)": d.utilidad_linea.toFixed(2),
-      "Margen %": (() => {
-        const base = d.cantidad * d.precio_unitario
-        return base > 0 ? ((d.utilidad_linea / base) * 100).toFixed(1) : "0.0"
-      })(),
-      "Bodega": d.almacen_nombre,
-    }))
+    const rows: Record<string, unknown>[] = detalleFiltrado.map(d => {
+      const com = comisionLinea(d)
+      return {
+        "Fecha": d.fecha_venta?.split('T')[0] || "",
+        "N° Factura": d.numero_factura,
+        "Cliente": d.cliente_nombre,
+        "Método": metodosPago.get(d.venta_id) ?? "—",
+        "Producto": d.producto_nombre,
+        "SKU": d.producto_sku,
+        "Cant.": d.cantidad,
+        "Precio Unit. (L)": d.precio_unitario.toFixed(2),
+        "Total (L)": d.total_linea.toFixed(2),
+        "Comisión %": com ? com.pct.toFixed(2) : "0.00",
+        "Comisión (L)": com ? com.valor.toFixed(2) : "0.00",
+        "Costo Unit. (L)": d.costo_promedio_momento.toFixed(2),
+        "Utilidad Bruta (L)": d.utilidad_linea.toFixed(2),
+        "Margen %": (() => {
+          const base = d.cantidad * d.precio_unitario
+          return base > 0 ? ((d.utilidad_linea / base) * 100).toFixed(1) : "0.0"
+        })(),
+        "Bodega": d.almacen_nombre,
+      }
+    })
     exportToXlsx(rows, {
       sheetName: "Detalle por Producto",
       filename: "Detalle_Ventas",
-      colWidths: [12, 14, 22, 28, 14, 8, 16, 16, 16, 18, 10, 16],
+      colWidths: [12, 14, 22, 12, 28, 14, 8, 16, 16, 12, 14, 16, 18, 10, 16],
     })
     toast({ title: "Exportado", description: "Archivo Excel generado correctamente" })
   }
@@ -736,13 +810,17 @@ export default function HistorialVentasPage() {
                     </TableHead>
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Estado Pago</TableHead>
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Metodo</TableHead>
+                    <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
+                      <div>Comisión</div>
+                      <div className="text-xs font-bold text-stone-900">L {resumenTotales.totalComisiones.toFixed(2)}</div>
+                    </TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {ventasFiltradas.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-muted-foreground py-10">
+                      <TableCell colSpan={10} className="text-center text-muted-foreground py-10">
                         No hay ventas para mostrar
                       </TableCell>
                     </TableRow>
@@ -769,6 +847,16 @@ export default function HistorialVentasPage() {
                         </TableCell>
                         <TableCell>{getEstadoBadge(venta.estado_pago)}</TableCell>
                         <TableCell>{getMetodoPagoBadge(venta.id)}</TableCell>
+                        <TableCell className="text-right whitespace-nowrap">
+                          {(() => {
+                            const c = venta.id != null ? comisionesPorVenta.get(venta.id) : undefined
+                            return c && c.comision > 0 ? (
+                              <span className="text-amber-700">{c.pct.toFixed(2)}% · L {c.comision.toFixed(2)}</span>
+                            ) : (
+                              <span className="text-stone-400">—</span>
+                            )
+                          })()}
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
                             {saldo > 0.005 && (
@@ -981,6 +1069,7 @@ export default function HistorialVentasPage() {
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Fecha</TableHead>
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">N° Factura</TableHead>
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Cliente</TableHead>
+                    <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Método</TableHead>
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Producto</TableHead>
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">SKU</TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">Cant.</TableHead>
@@ -988,6 +1077,10 @@ export default function HistorialVentasPage() {
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
                       <div>Total</div>
                       <div className="text-xs font-bold text-stone-900">L {totalColumnaDetalle.toFixed(2)}</div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
+                      <div>Comisión</div>
+                      <div className="text-xs font-bold text-amber-700">L {comisionColumnaDetalle.toFixed(2)}</div>
                     </TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">Costo Unit.</TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
@@ -1003,14 +1096,14 @@ export default function HistorialVentasPage() {
                   {loadingAnalitico ? (
                     [...Array(5)].map((_, i) => (
                       <TableRow key={i}>
-                        {[...Array(11)].map((_, j) => (
+                        {[...Array(13)].map((_, j) => (
                           <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                         ))}
                       </TableRow>
                     ))
                   ) : detalleFiltrado.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={11} className="text-center text-muted-foreground py-10">
+                      <TableCell colSpan={13} className="text-center text-muted-foreground py-10">
                         {analiticoLoaded ? "No hay registros para los filtros aplicados" : "Cargando datos..."}
                       </TableCell>
                     </TableRow>
@@ -1019,11 +1112,22 @@ export default function HistorialVentasPage() {
                       <TableCell className="whitespace-nowrap">{d.fecha_venta?.split('T')[0] || ''}</TableCell>
                       <TableCell className="font-mono whitespace-nowrap">{d.numero_factura}</TableCell>
                       <TableCell className="whitespace-nowrap">{d.cliente_nombre}</TableCell>
+                      <TableCell className="whitespace-nowrap">{getMetodoPagoBadge(d.venta_id)}</TableCell>
                       <TableCell className="font-medium whitespace-nowrap">{d.producto_nombre}</TableCell>
                       <TableCell className="text-muted-foreground whitespace-nowrap">{d.producto_sku}</TableCell>
                       <TableCell className="text-right">{d.cantidad}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">L {d.precio_unitario.toFixed(2)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap font-medium">L {d.total_linea.toFixed(2)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        {(() => {
+                          const c = comisionLinea(d)
+                          return c ? (
+                            <span className="text-amber-700">{c.pct.toFixed(2)}% · L {c.valor.toFixed(2)}</span>
+                          ) : (
+                            <span className="text-stone-400">—</span>
+                          )
+                        })()}
+                      </TableCell>
                       <TableCell className="text-right whitespace-nowrap text-muted-foreground">L {d.costo_promedio_momento.toFixed(2)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
@@ -1105,6 +1209,56 @@ export default function HistorialVentasPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Desglose de pago (auditoria de comision) */}
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-2">Desglose de pago</h4>
+                {pagosDetalle.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Sin desglose de pago registrado</p>
+                ) : (
+                  <div className="border rounded-md overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="whitespace-nowrap">Método</TableHead>
+                          <TableHead className="whitespace-nowrap">Banco / Cuenta</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Bruto</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">% Com.</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Comisión</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Neto</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pagosDetalle.map(p => {
+                          const bruto = Number(p.monto_bruto || 0)
+                          const pct = Number(p.porcentaje_comision || 0)
+                          const comision = +(bruto * (pct / 100)).toFixed(2)
+                          const neto = p.monto_neto != null ? Number(p.monto_neto) : +(bruto - comision).toFixed(2)
+                          const metodoLabel = p.metodo_pago === "Link_Pago" ? "Link de Pago" : p.metodo_pago
+                          const bancoNombre = p.cuenta_id != null ? (cuentas.find(c => c.id === p.cuenta_id)?.nombre ?? "—") : "—"
+                          return (
+                            <TableRow key={p.id}>
+                              <TableCell className="whitespace-nowrap">{metodoLabel}</TableCell>
+                              <TableCell className="whitespace-nowrap text-muted-foreground">{bancoNombre}</TableCell>
+                              <TableCell className="text-right whitespace-nowrap">L {bruto.toFixed(2)}</TableCell>
+                              <TableCell className="text-right whitespace-nowrap">{pct.toFixed(2)}%</TableCell>
+                              <TableCell className={`text-right whitespace-nowrap ${comision > 0 ? "text-amber-700" : "text-muted-foreground"}`}>L {comision.toFixed(2)}</TableCell>
+                              <TableCell className="text-right whitespace-nowrap">L {neto.toFixed(2)}</TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                    <div className="flex justify-between text-sm font-medium border-t px-3 py-2 bg-muted/40">
+                      <span>Total comisión de la factura</span>
+                      <span className="text-amber-700">
+                        L {pagosDetalle.reduce((a, p) => a + Number(p.monto_bruto || 0) * (Number(p.porcentaje_comision || 0) / 100), 0).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="border-t pt-4">
                 <h4 className="font-medium mb-2">Pagos Registrados</h4>
                 {pagos.length === 0 ? (

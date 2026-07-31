@@ -282,3 +282,77 @@ export async function getMetodosPagoPorVenta(
     return { data: empty, error: "Error de conexion" }
   }
 }
+
+/** Comision bancaria agregada de UNA venta (suma de sus lineas de pago). */
+export interface ComisionVenta {
+  /** Suma de monto_bruto de la venta. */
+  bruto: number
+  /** Comision total = Σ monto_bruto * porcentaje_comision / 100. */
+  comision: number
+  /** % combinado (blended) de la venta = comision / bruto * 100. */
+  pct: number
+  /** bruto - comision (lo que efectivamente entra). */
+  neto: number
+}
+
+/**
+ * Devuelve un Map<venta_id, ComisionVenta> con la comision bancaria agregada de
+ * cada venta, para auditoria en el Historial. La comision se deriva del % del
+ * banco (`monto_bruto * porcentaje_comision / 100`), mas robusto que
+ * `monto_bruto - monto_neto`. Ventas a credito puro / sin comision no entran en
+ * el Map (la UI cae a "—"). Resiliente: si la tabla no existe -> Map vacio.
+ */
+export async function getComisionesPorVenta(
+  ventaIds: number[]
+): Promise<{ data: Map<number, ComisionVenta>; error: string | null }> {
+  const empty = new Map<number, ComisionVenta>()
+  if (ventaIds.length === 0) return { data: empty, error: null }
+
+  if (!isSupabaseConfigured()) return { data: empty, error: null }
+  const supabase = createClient()
+  if (!supabase) return { data: empty, error: null }
+
+  try {
+    const { data, error } = await supabase
+      .from("ventas_pagos_detalle")
+      .select("venta_id, monto_bruto, porcentaje_comision")
+      .in("venta_id", ventaIds)
+
+    if (error) {
+      if (/does not exist|ventas_pagos_detalle/i.test(error.message)) {
+        return { data: empty, error: null }
+      }
+      return { data: empty, error: error.message }
+    }
+
+    type Row = { venta_id: number; monto_bruto: number | null; porcentaje_comision: number | null }
+    const acc = new Map<number, { bruto: number; comision: number }>()
+    for (const r of (data || []) as Row[]) {
+      const bruto = Number(r.monto_bruto) || 0
+      const pct = Number(r.porcentaje_comision) || 0
+      const cur = acc.get(r.venta_id) || { bruto: 0, comision: 0 }
+      cur.bruto += bruto
+      cur.comision += bruto * (pct / 100)
+      acc.set(r.venta_id, cur)
+    }
+
+    const out = new Map<number, ComisionVenta>()
+    for (const [id, v] of acc) {
+      const bruto = +v.bruto.toFixed(2)
+      const comision = +v.comision.toFixed(2)
+      // Solo interesa cuando hay comision real (auditoria). Sin comision -> "—".
+      if (comision <= 0) continue
+      out.set(id, {
+        bruto,
+        comision,
+        pct: bruto > 0 ? +((comision / bruto) * 100).toFixed(2) : 0,
+        neto: +(bruto - comision).toFixed(2),
+      })
+    }
+
+    return { data: out, error: null }
+  } catch (err) {
+    console.error("[getComisionesPorVenta] error:", err)
+    return { data: empty, error: "Error de conexion" }
+  }
+}
