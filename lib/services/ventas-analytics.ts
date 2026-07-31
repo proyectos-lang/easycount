@@ -120,7 +120,7 @@ export async function getPagosResumen(
       .select(`
         metodo_pago,
         monto_bruto,
-        monto_neto,
+        porcentaje_comision,
         cuentas_config(nombre)
       `)
       .in("venta_id", ventaIds)
@@ -133,16 +133,16 @@ export async function getPagosResumen(
     }
 
     let totalBruto = 0
-    let totalNeto = 0
+    let totalComisiones = 0
     const acc = new Map<
       string,
-      { metodo_pago: string; bruto: number; neto: number; count: number }
+      { metodo_pago: string; bruto: number; comision: number; count: number }
     >()
 
     type Row = {
       metodo_pago: string
       monto_bruto: number | null
-      monto_neto: number | null
+      porcentaje_comision: number | null
       // La columna real en `cuentas_config` es `nombre` (no `banco`).
       cuentas_config?: { nombre?: string } | null
     }
@@ -151,7 +151,11 @@ export async function getPagosResumen(
       const metodo = raw.metodo_pago
       const banco = raw.cuentas_config?.nombre
       const bruto = Number(raw.monto_bruto) || 0
-      const neto = Number(raw.monto_neto) || 0
+      // La comision se deriva del % del banco aplicado a la linea (fuente de
+      // verdad). Es mas robusto que `monto_bruto - monto_neto`, que quedaba en
+      // 0 cuando `monto_neto` se persistio igual al bruto en datos historicos.
+      const pct = Number(raw.porcentaje_comision) || 0
+      const comision = +(bruto * (pct / 100)).toFixed(2)
 
       // Etiqueta amigable: el cliente del Pie chart distingue bancos reales.
       let label: string
@@ -162,11 +166,11 @@ export async function getPagosResumen(
       else label = "Otro"
 
       totalBruto += bruto
-      totalNeto += neto
+      totalComisiones += comision
 
-      const cur = acc.get(label) || { metodo_pago: metodo, bruto: 0, neto: 0, count: 0 }
+      const cur = acc.get(label) || { metodo_pago: metodo, bruto: 0, comision: 0, count: 0 }
       cur.bruto += bruto
-      cur.neto += neto
+      cur.comision += comision
       cur.count += 1
       acc.set(label, cur)
     }
@@ -176,17 +180,18 @@ export async function getPagosResumen(
         label,
         metodo_pago: v.metodo_pago,
         bruto: +v.bruto.toFixed(2),
-        neto: +v.neto.toFixed(2),
-        comision: +(v.bruto - v.neto).toFixed(2),
+        neto: +(v.bruto - v.comision).toFixed(2),
+        comision: +v.comision.toFixed(2),
         count: v.count,
       }))
       .sort((a, b) => b.bruto - a.bruto)
 
+    const totalComisionesR = +totalComisiones.toFixed(2)
     return {
       data: {
         totalBruto: +totalBruto.toFixed(2),
-        totalNeto: +totalNeto.toFixed(2),
-        totalComisiones: +(totalBruto - totalNeto).toFixed(2),
+        totalNeto: +(totalBruto - totalComisionesR).toFixed(2),
+        totalComisiones: totalComisionesR,
         porMetodo,
       },
       error: null,
