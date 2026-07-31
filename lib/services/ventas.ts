@@ -4,6 +4,19 @@ import { registrarMovimientoCaja, getSesionAbierta } from '@/lib/services/caja-c
 import { registrarMovimientoCuenta } from '@/lib/services/cuentas'
 import { ajustarStock } from '@/lib/services/stock'
 
+/**
+ * True SOLO si el error es "la relacion/tabla no existe" (migracion pendiente):
+ * Postgres 42P01 o PostgREST PGRST205/"could not find the table"/"schema cache".
+ * NO matchea por el nombre de la tabla suelto, para no tragar errores REALES
+ * (violacion de RLS, constraint, FK) como si la tabla faltara — esos deben
+ * surgir para no perder el desglose de pago en silencio.
+ */
+function esTablaInexistente(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false
+  if (err.code === '42P01' || err.code === 'PGRST205') return true
+  return /relation .* does not exist|could not find the table|schema cache/i.test(err.message || '')
+}
+
 // ==================== INTERFACES ====================
 
 export interface VentaEncabezado {
@@ -690,17 +703,19 @@ export async function crearVenta(
         .insert(pagosRows)
 
       if (pagosErr) {
-        if (/does not exist|ventas_pagos_detalle/i.test(pagosErr.message)) {
+        if (esTablaInexistente(pagosErr)) {
           console.warn(
             '[crearVenta] Tabla `ventas_pagos_detalle` no existe. ' +
               'Aplica scripts/011-tesoreria-caja-chica.sql para activar el desglose multi-metodo.'
           )
-          // Modo degradado: continua a registrar caja/cuentas igualmente.
+          // Modo degradado SOLO si la tabla falta: continua a registrar caja/cuentas.
         } else {
-          // Error real: rollback minimo del encabezado para no dejar venta huerfana.
+          // Error REAL (RLS, constraint, FK): NO degradar en silencio. Rollback
+          // del encabezado y superficie el error para no perder el desglose de
+          // pago (metodo/comision) que se necesita para auditoria.
           await supabase.from('ventas_detalle').delete().eq('venta_id', ventaData.id)
           await supabase.from('ventas_encabezado').delete().eq('id', ventaData.id)
-          return { data: null, error: pagosErr.message }
+          return { data: null, error: `No se pudo guardar el desglose de pago: ${pagosErr.message}` }
         }
       }
     }
@@ -1960,7 +1975,7 @@ export async function getPagosDetalleVenta(
     .order('id', { ascending: true })
 
   if (error) {
-    if (/does not exist|ventas_pagos_detalle/i.test(error.message)) return { data: [], error: null }
+    if (esTablaInexistente(error)) return { data: [], error: null }
     return { data: [], error: error.message }
   }
   return { data: (data || []) as PagoVentaDetalle[], error: null }
@@ -2123,8 +2138,8 @@ export async function editarVenta(
         }
       })
       const { error: pErr } = await supabase.from('ventas_pagos_detalle').insert(pagosRows)
-      if (pErr && !/does not exist|ventas_pagos_detalle/i.test(pErr.message)) {
-        return { error: pErr.message }
+      if (pErr && !esTablaInexistente(pErr)) {
+        return { error: `No se pudo guardar el desglose de pago: ${pErr.message}` }
       }
 
       for (const p of pagosDetalle) {
