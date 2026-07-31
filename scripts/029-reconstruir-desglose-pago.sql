@@ -9,7 +9,8 @@
 --   * Banco / Link de pago -> `cuenta_movimientos` del PAGO INICIAL de la venta
 --     (concepto "Venta ... (neto)", guardan el NETO que entro al banco). El
 --     metodo sale de `cuentas_config.tipo` y el % de `cuentas_config
---     .porcentaje_comision`. Se reconstruye el bruto: bruto = neto/(1-%/100),
+--     .comision_porcentaje` (nombre real de la columna en la BD). Se
+--     reconstruye el bruto: bruto = neto/(1-%/100),
 --     comision = bruto - neto.
 --   * Efectivo -> `caja_chica_movimientos` tipo 'Ingreso_Venta' (guardan el
 --     BRUTO; sin comision).
@@ -46,8 +47,8 @@ WITH recon AS (
          cm.razon_social_id  AS razon_social_id,
          cc.tipo             AS metodo_pago,
          cm.cuenta_id        AS cuenta_id,
-         ROUND(cm.monto / (1 - LEAST(cc.porcentaje_comision, 99.99) / 100.0), 2) AS monto_bruto,
-         cc.porcentaje_comision AS porcentaje_comision,
+         ROUND(cm.monto / (1 - LEAST(cc.comision_porcentaje, 99.99) / 100.0), 2) AS monto_bruto,
+         cc.comision_porcentaje AS porcentaje_comision,
          cm.monto            AS monto_neto
   FROM public.cuenta_movimientos cm
   JOIN public.cuentas_config cc ON cc.id = cm.cuenta_id
@@ -96,8 +97,8 @@ WITH recon AS (
          cm.razon_social_id  AS razon_social_id,
          cc.tipo             AS metodo_pago,
          cm.cuenta_id        AS cuenta_id,
-         ROUND(cm.monto / (1 - LEAST(cc.porcentaje_comision, 99.99) / 100.0), 2) AS monto_bruto,
-         cc.porcentaje_comision AS porcentaje_comision,
+         ROUND(cm.monto / (1 - LEAST(cc.comision_porcentaje, 99.99) / 100.0), 2) AS monto_bruto,
+         cc.comision_porcentaje AS porcentaje_comision,
          cm.monto            AS monto_neto
   FROM public.cuenta_movimientos cm
   JOIN public.cuentas_config cc ON cc.id = cm.cuenta_id
