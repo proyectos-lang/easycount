@@ -149,32 +149,39 @@ export default function RecepcionIAPage() {
     }
   }, [almacenId])
 
-  // Recalculate costs when values change
+  // Firma de las lineas (solo los campos que afectan el costo). Se usa como
+  // dependencia del efecto de abajo para que el costo final se recalcule TAMBIEN
+  // cuando se agregan/editan lineas (cantidad, costo, producto), no solo cuando
+  // se cambian los costos extra. Excluye `costoFinalLocal` (lo que el efecto
+  // escribe) para no entrar en loop infinito.
+  const lineasCostoSig = lineas.map(l => `${l.id}:${l.productoId ?? ''}:${l.cantidad}:${l.costoOriginal}`).join('|')
+
+  // Recalcula el costo final (prorrateo) de cada linea. Con costos extra = 0 el
+  // resultado es igual al costo de compra (en LPS), asi el usuario ve el calculo
+  // desde el inicio.
   useEffect(() => {
-    if (lineas.length > 0) {
+    setLineas(prev => {
+      if (prev.length === 0) return prev
       const costosAdicionales = costosImportacion + impuestosCompra + otrosCostos
       const tasa = moneda === 'USD' ? tasaCambio : 1
-      
-      // Calculate subtotal
-      const subtotal = lineas.reduce((acc, l) => acc + (l.cantidad * l.costoOriginal), 0)
+      const subtotal = prev.reduce((acc, l) => acc + (l.cantidad * l.costoOriginal), 0)
       const subtotalLPS = moneda === 'USD' ? subtotal * tasa : subtotal
-      
-      // Update each line with prorated costs
-      setLineas(prev => prev.map(l => {
-        const valorItemOriginal = l.cantidad * l.costoOriginal
-        const valorItemLPS = moneda === 'USD' ? valorItemOriginal * tasa : valorItemOriginal
+
+      let cambio = false
+      const next = prev.map(l => {
+        const valorItemLPS = moneda === 'USD' ? l.cantidad * l.costoOriginal * tasa : l.cantidad * l.costoOriginal
         const proporcion = subtotalLPS > 0 ? valorItemLPS / subtotalLPS : 0
-        const costosProrrateados = costosAdicionales * proporcion
-        const costoFinalTotal = valorItemLPS + costosProrrateados
+        const costoFinalTotal = valorItemLPS + costosAdicionales * proporcion
         const costoFinalLocal = l.cantidad > 0 ? costoFinalTotal / l.cantidad : 0
-        
-        return {
-          ...l,
-          costoFinalLocal: Math.round(costoFinalLocal * 100) / 100
-        }
-      }))
-    }
-  }, [costosImportacion, impuestosCompra, otrosCostos, tasaCambio, moneda])
+        const rounded = Math.round(costoFinalLocal * 100) / 100
+        if (l.costoFinalLocal === rounded) return l
+        cambio = true
+        return { ...l, costoFinalLocal: rounded }
+      })
+      return cambio ? next : prev
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [costosImportacion, impuestosCompra, otrosCostos, tasaCambio, moneda, lineasCostoSig])
 
   // Desglose detallado del prorrateo (mismo helper que Recepcion por OC),
   // derivado de las lineas actuales. Solo para MOSTRAR el calculo; el costo

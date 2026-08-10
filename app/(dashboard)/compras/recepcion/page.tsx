@@ -533,7 +533,7 @@ export default function RecepcionPage() {
                           <div>
                             <p className="text-muted-foreground">Costo final</p>
                             <p className="font-medium text-primary">
-                              {costosCalculados[idx] ? formatCurrency(costosCalculados[idx].costo_final_local, 'LPS') : '-'}
+                              {formatCurrency(costosCalculados[idx]?.costo_final_local ?? (d.costo_unitario_moneda_origen * (selectedCompra!.moneda === 'USD' ? formData.tasa_cambio : 1)), 'LPS')}
                             </p>
                           </div>
                         </div>
@@ -565,10 +565,7 @@ export default function RecepcionPage() {
                             {formatCurrency(d.costo_unitario_moneda_origen, selectedCompra!.moneda)}
                           </TableCell>
                           <TableCell className="text-right font-medium">
-                            {costosCalculados[idx]
-                              ? formatCurrency(costosCalculados[idx].costo_final_local, 'LPS')
-                              : '-'
-                            }
+                            {formatCurrency(costosCalculados[idx]?.costo_final_local ?? (d.costo_unitario_moneda_origen * (selectedCompra!.moneda === 'USD' ? formData.tasa_cambio : 1)), 'LPS')}
                           </TableCell>
                         </TableRow>
                       ))}
