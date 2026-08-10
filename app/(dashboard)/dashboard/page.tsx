@@ -293,13 +293,16 @@ export default function DashboardPage() {
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis dataKey="name" className="text-xs" />
                   <YAxis className="text-xs" tickFormatter={(v) => `L${v}`} />
-                  <Tooltip 
-                    formatter={(value: number) => [formatCurrency(value), '']}
-                    contentStyle={{ 
+                  <Tooltip
+                    formatter={(value: number, name) => [formatCurrency(value), name]}
+                    cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
+                    contentStyle={{
                       backgroundColor: 'hsl(var(--card))',
                       border: '1px solid hsl(var(--border))',
                       borderRadius: '8px'
                     }}
+                    itemStyle={{ color: 'hsl(var(--foreground))' }}
+                    labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600 }}
                   />
                   <Legend />
                   <Bar dataKey="Ventas" fill="#5D7B6F" radius={[6, 6, 0, 0]} />

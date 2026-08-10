@@ -2,6 +2,29 @@ import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from '@/lib/services/tenant-stamp'
 import { aplicarEntradaCompra, ajustarStock } from '@/lib/services/stock'
 
+/**
+ * PostgREST corta cada `.select()` en 1000 filas. Este helper pagina con
+ * `.range()` hasta traerlas todas (necesario para valoracion: productos y,
+ * sobre todo, `transacciones_inventario` suelen superar 1000 filas).
+ */
+type RangeableQuery = {
+  range: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
+}
+async function fetchAllRows<T>(buildQuery: () => RangeableQuery): Promise<{ data: T[]; error: string | null }> {
+  const PAGE = 1000
+  let from = 0
+  const acc: T[] = []
+  for (let guard = 0; guard < 500; guard++) {
+    const { data, error } = await buildQuery().range(from, from + PAGE - 1)
+    if (error) return { data: acc, error: error.message }
+    const rows = (data || []) as T[]
+    acc.push(...rows)
+    if (rows.length < PAGE) break
+    from += PAGE
+  }
+  return { data: acc, error: null }
+}
+
 // ==================== INTERFACES ====================
 
 export interface TransaccionInventario {
@@ -188,21 +211,25 @@ export async function getValoracionInventarioExtendida(): Promise<{ data: Produc
   const supabase = createClient()
   if (!supabase) return { data: [], error: 'Cliente no disponible' }
 
+  type ProdRow = { id: number; nombre: string; codigo_barras: string | null; stock_total: number | null; costo_promedio: number | null; precio_venta_sugerido: number | null }
+  type TransRow = { producto_id: number; almacen_id: number; cantidad: number | null; tipo_movimiento: string; fecha: string | null; almacenes: { nombre?: string } | { nombre?: string }[] | null }
+
   try {
-    // Get products with prices
-    const { data: productos, error: prodError } = await supabase
-      .from('productos')
-      .select('id, nombre, codigo_barras, stock_total, costo_promedio, precio_venta_sugerido')
-      .order('nombre', { ascending: true })
+    // Productos y transacciones via bucle por rangos (superan el tope de 1000).
+    const { data: productos, error: prodError } = await fetchAllRows<ProdRow>(() =>
+      supabase
+        .from('productos')
+        .select('id, nombre, codigo_barras, stock_total, costo_promedio, precio_venta_sugerido')
+        .order('nombre', { ascending: true })
+    )
+    if (prodError) return { data: [], error: prodError }
 
-    if (prodError) return { data: [], error: prodError.message }
-
-    // Get all transactions grouped by product and almacen
-    const { data: transacciones, error: transError } = await supabase
-      .from('transacciones_inventario')
-      .select('producto_id, almacen_id, cantidad, tipo_movimiento, fecha, almacenes(nombre)')
-
-    if (transError) return { data: [], error: transError.message }
+    const { data: transacciones, error: transError } = await fetchAllRows<TransRow>(() =>
+      supabase
+        .from('transacciones_inventario')
+        .select('producto_id, almacen_id, cantidad, tipo_movimiento, fecha, almacenes(nombre)')
+    )
+    if (transError) return { data: [], error: transError }
 
     const now = new Date()
 
@@ -333,22 +360,26 @@ export async function getValoracionPorAlmacen(almacenId: number): Promise<{ data
   const supabase = createClient()
   if (!supabase) return { data: [], error: 'Cliente no disponible' }
 
+  type ProdRowA = { id: number; nombre: string; codigo_barras: string | null; costo_promedio: number | null; precio_venta_sugerido: number | null }
+  type TransRowA = { producto_id: number; cantidad: number | null; tipo_movimiento: string; fecha: string | null }
+
   try {
-    // Get products with prices
-    const { data: productos, error: prodError } = await supabase
-      .from('productos')
-      .select('id, nombre, codigo_barras, costo_promedio, precio_venta_sugerido')
-      .order('nombre', { ascending: true })
+    // Productos y transacciones via bucle por rangos (superan el tope de 1000).
+    const { data: productos, error: prodError } = await fetchAllRows<ProdRowA>(() =>
+      supabase
+        .from('productos')
+        .select('id, nombre, codigo_barras, costo_promedio, precio_venta_sugerido')
+        .order('nombre', { ascending: true })
+    )
+    if (prodError) return { data: [], error: prodError }
 
-    if (prodError) return { data: [], error: prodError.message }
-
-    // Get transactions only for this almacen
-    const { data: transacciones, error: transError } = await supabase
-      .from('transacciones_inventario')
-      .select('producto_id, cantidad, tipo_movimiento, fecha')
-      .eq('almacen_id', almacenId)
-
-    if (transError) return { data: [], error: transError.message }
+    const { data: transacciones, error: transError } = await fetchAllRows<TransRowA>(() =>
+      supabase
+        .from('transacciones_inventario')
+        .select('producto_id, cantidad, tipo_movimiento, fecha')
+        .eq('almacen_id', almacenId)
+    )
+    if (transError) return { data: [], error: transError }
 
     // Get almacen name
     const { data: almacenData } = await supabase

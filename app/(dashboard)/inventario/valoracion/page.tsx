@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { Skeleton } from "@/components/ui/skeleton"
+import { TablePaginator } from "@/components/ui/table-paginator"
 import {
   Table,
   TableBody,
@@ -74,6 +75,9 @@ export default function ValoracionPage() {
   const [estadoFiltro, setEstadoFiltro] = React.useState<EstadoInventario>("todos")
   const [rotacionFiltro, setRotacionFiltro] = React.useState<RotacionFiltro>("todos")
   const [expandedRows, setExpandedRows] = React.useState<Set<number>>(new Set())
+  // Paginacion client-side (50/100/1000).
+  const [pageSize, setPageSize] = React.useState(100)
+  const [pageIndex, setPageIndex] = React.useState(0)
 
   // Initial load - almacenes only
   React.useEffect(() => {
@@ -143,6 +147,17 @@ export default function ValoracionPage() {
       return matchesSearch && matchesEstado && matchesAlmacen && matchesRotacion
     })
   }, [productos, searchTerm, estadoFiltro, almacenFiltro, rotacionFiltro])
+
+  // Slice paginado (los totales/footer siguen sobre productosFiltrados completo).
+  const productosPaginados = React.useMemo(
+    () => productosFiltrados.slice(pageIndex * pageSize, pageIndex * pageSize + pageSize),
+    [productosFiltrados, pageIndex, pageSize]
+  )
+  // Reset de pagina al cambiar filtros o tamano.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  React.useEffect(() => { setPageIndex(0); setExpandedRows(new Set()) }, [
+    searchTerm, estadoFiltro, almacenFiltro, rotacionFiltro, pageSize,
+  ])
 
   const totales = React.useMemo(() => {
     const totalUnidades = productosFiltrados.reduce((acc, p) => acc + p.stock_total, 0)
@@ -654,7 +669,7 @@ export default function ValoracionPage() {
             <>
               {/* Mobile Card View */}
               <div className="block lg:hidden divide-y">
-                {productosFiltrados.map((p) => (
+                {productosPaginados.map((p) => (
                   <Collapsible key={p.id}>
                     <div className="p-4">
                       <div className="flex items-start justify-between gap-2 mb-2">
@@ -742,10 +757,10 @@ export default function ValoracionPage() {
               </div>
 
               {/* Desktop Table */}
-              <div className="hidden lg:block overflow-x-auto">
+              <div className="hidden lg:block overflow-x-auto overflow-y-auto max-h-[70vh]">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-amber-50/50">
+                    <TableRow className="bg-amber-50/50 [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-amber-50">
                       <TableHead className="w-8"></TableHead>
                       <TableHead>Codigo</TableHead>
                       <TableHead>Producto</TableHead>
@@ -803,7 +818,7 @@ export default function ValoracionPage() {
                     )}
                     
                     {/* Data Rows */}
-                    {!loadingTable && productosFiltrados.map((p) => (
+                    {!loadingTable && productosPaginados.map((p) => (
                       <React.Fragment key={p.id}>
                         <TableRow 
                           className={`cursor-pointer hover:bg-orange-50/30 transition-colors ${expandedRows.has(p.id) ? 'bg-amber-50/40' : ''}`}
@@ -902,7 +917,16 @@ export default function ValoracionPage() {
                   </TableBody>
                 </Table>
               </div>
-              
+
+              <TablePaginator
+                pageIndex={pageIndex}
+                pageSize={pageSize}
+                totalItems={productosFiltrados.length}
+                onPageIndexChange={setPageIndex}
+                onPageSizeChange={setPageSize}
+                className="border-t"
+              />
+
               {/* Totals Footer */}
               <div className="p-4 md:p-6 border-t bg-muted/20">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

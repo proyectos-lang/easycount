@@ -6,6 +6,8 @@ import { Eye, CreditCard, Download, FileSpreadsheet, CalendarIcon, Banknote, Wal
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { exportToXlsx } from "@/lib/utils/export"
+import { formatCurrency, formatNumber } from "@/lib/utils/format"
+import { TablePaginator } from "@/components/ui/table-paginator"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -53,7 +55,6 @@ import { useCajaSesion } from "@/lib/hooks/use-caja-sesion"
 import { ImportarVentasDialog } from "./importar-ventas-dialog"
 import {
   getVentas,
-  getVentasResumenTotales,
   getDetallesVenta,
   getPagosVenta,
   getPagosDetalleVenta,
@@ -68,9 +69,6 @@ import {
   type VentaDetalleAnalitico,
 } from "@/lib/services/ventas"
 import { getMetodosPagoPorVenta, getComisionesPorVenta, type ComisionVenta } from "@/lib/services/ventas-analytics"
-
-/** Tamano de pagina del listado de facturas (paginacion server-side). */
-const PAGINA_VENTAS = 100
 
 export default function HistorialVentasPage() {
   const { toast } = useToast()
@@ -130,10 +128,13 @@ export default function HistorialVentasPage() {
   const [cuentas, setCuentas] = React.useState<CuentaConfig[]>([])
   const { sesion: cajaSesion } = useCajaSesion()
 
-  // Paginacion server-side del listado de facturas.
-  const [totalVentas, setTotalVentas] = React.useState(0)
-  const [cargandoMas, setCargandoMas] = React.useState(false)
   const [savingPago, setSavingPago] = React.useState(false)
+
+  // --- Paginacion client-side (50/100/1000) por pestana ---
+  const [pageSizeResumen, setPageSizeResumen] = React.useState(100)
+  const [pageIndexResumen, setPageIndexResumen] = React.useState(0)
+  const [pageSizeDetalle, setPageSizeDetalle] = React.useState(100)
+  const [pageIndexDetalle, setPageIndexDetalle] = React.useState(0)
 
   // --- Eliminar venta (alert dialog) ---
   const [ventaAEliminar, setVentaAEliminar] = React.useState<VentaEncabezado | null>(null)
@@ -147,20 +148,20 @@ export default function HistorialVentasPage() {
     setLoading(true)
     try {
       const [ventasRes, clientesRes, almacenesRes, productosRes] = await Promise.all([
-        // Paginado: carga inicial de PAGINA_VENTAS facturas mas recientes.
-        getVentas({ limit: PAGINA_VENTAS, offset: 0 }),
+        // Carga TODAS las facturas (bucle por rangos en el servicio) para poder
+        // paginar client-side por hojas de 50/100/1000.
+        getVentas(),
         getClientes(),
         getAlmacenes(),
         getProductos()
       ])
       setVentas(ventasRes.data)
-      setTotalVentas(ventasRes.total)
       setClientes(clientesRes.data)
       setAlmacenes(almacenesRes.data)
       setProductos(productosRes.data)
 
-      // Queries batch para clasificar el metodo de pago y la comision de cada
-      // venta visible (Map<id, ...> que regresan los helpers).
+      // Batch (chunked en el servicio) para el metodo de pago y la comision de
+      // TODAS las ventas.
       const ids = ventasRes.data.map(v => v.id!).filter((id): id is number => id != null)
       if (ids.length > 0) {
         const [{ data: mapaMet }, { data: mapaCom }] = await Promise.all([
@@ -177,43 +178,6 @@ export default function HistorialVentasPage() {
       toast({ title: "Error", description: "No se pudieron cargar las ventas", variant: "destructive" })
     } finally {
       setLoading(false)
-    }
-  }
-
-  /** Trae la siguiente pagina de facturas y la agrega a la lista. */
-  async function cargarMasVentas() {
-    setCargandoMas(true)
-    try {
-      const res = await getVentas({ limit: PAGINA_VENTAS, offset: ventas.length })
-      if (res.error) {
-        toast({ title: "Error", description: res.error, variant: "destructive" })
-        return
-      }
-      // Evita duplicados si entraron ventas nuevas entre cargas.
-      const existentes = new Set(ventas.map(v => v.id))
-      const nuevas = res.data.filter(v => !existentes.has(v.id))
-      setVentas(prev => [...prev, ...nuevas])
-      setTotalVentas(res.total)
-
-      const ids = nuevas.map(v => v.id!).filter((id): id is number => id != null)
-      if (ids.length > 0) {
-        const [{ data: mapaMet }, { data: mapaCom }] = await Promise.all([
-          getMetodosPagoPorVenta(ids),
-          getComisionesPorVenta(ids),
-        ])
-        setMetodosPago(prev => {
-          const merged = new Map(prev)
-          mapaMet.forEach((v, k) => merged.set(k, v))
-          return merged
-        })
-        setComisionesPorVenta(prev => {
-          const merged = new Map(prev)
-          mapaCom.forEach((v, k) => merged.set(k, v))
-          return merged
-        })
-      }
-    } finally {
-      setCargandoMas(false)
     }
   }
 
@@ -331,27 +295,48 @@ export default function HistorialVentasPage() {
     return { pct: c.pct, valor: c.comision * peso }
   }
 
-  // --- Totales del Resumen de Facturas: se calculan en el SERVIDOR sobre
-  //     TODAS las facturas que cumplen los filtros (no solo la pagina
-  //     cargada), para que cuadren con el total del Detalle por Producto. ---
-  const [resumenTotales, setResumenTotales] = React.useState({ totalVentas: 0, totalSaldo: 0, totalComisiones: 0 })
+  // --- Totales del Resumen (client-side sobre TODO el set filtrado, no la
+  //     pagina). Como `total_venta` quedo homologado a bruto (script 027),
+  //     Σ total_venta == Σ total_linea del Detalle, asi ambas pestanas cuadran. ---
+  const resumenTotales = React.useMemo(() => {
+    let totalVentas = 0, totalSaldo = 0, totalComisiones = 0
+    for (const v of ventasFiltradas) {
+      const total = v.total_venta ?? 0
+      totalVentas += total
+      totalSaldo += Math.max(0, total - (v.valorpago ?? 0))
+      totalComisiones += v.id != null ? comisionesPorVenta.get(v.id)?.comision ?? 0 : 0
+    }
+    return {
+      totalVentas: +totalVentas.toFixed(2),
+      totalSaldo: +totalSaldo.toFixed(2),
+      totalComisiones: +totalComisiones.toFixed(2),
+      totalSubtotal: +(totalVentas - totalComisiones).toFixed(2),
+    }
+  }, [ventasFiltradas, comisionesPorVenta])
 
-  React.useEffect(() => {
-    let cancelado = false
-    getVentasResumenTotales({
-      fechaInicio: filtroFechaInicioFacturas || undefined,
-      fechaFin: filtroFechaFinFacturas || undefined,
-      clienteId: filtroClienteIdFacturas ? Number(filtroClienteIdFacturas) : undefined,
-      almacenId: filtroAlmacenIdFacturas ? Number(filtroAlmacenIdFacturas) : undefined,
-      estadoPago: filtroEstadoPago || undefined,
-    }).then((r) => {
-      if (cancelado) return
-      setResumenTotales({ totalVentas: r.totalVentas, totalSaldo: r.totalSaldo, totalComisiones: r.totalComisiones })
-    })
-    return () => { cancelado = true }
-    // `ventas` en deps: refresca los totales tras crear/editar/eliminar/abonar
-    // (loadData reemplaza el array) sin depender de que cambien los filtros.
-  }, [filtroFechaInicioFacturas, filtroFechaFinFacturas, filtroClienteIdFacturas, filtroAlmacenIdFacturas, filtroEstadoPago, ventas])
+  // Subtotal (Total - Comision) del encabezado del Detalle.
+  const subtotalColumnaDetalle = totalColumnaDetalle - comisionColumnaDetalle
+
+  // --- Slices de paginacion client-side ---
+  const ventasPaginadas = React.useMemo(
+    () => ventasFiltradas.slice(pageIndexResumen * pageSizeResumen, pageIndexResumen * pageSizeResumen + pageSizeResumen),
+    [ventasFiltradas, pageIndexResumen, pageSizeResumen]
+  )
+  const detallePaginado = React.useMemo(
+    () => detalleFiltrado.slice(pageIndexDetalle * pageSizeDetalle, pageIndexDetalle * pageSizeDetalle + pageSizeDetalle),
+    [detalleFiltrado, pageIndexDetalle, pageSizeDetalle]
+  )
+
+  // Reset de pagina al cambiar filtros o tamano de pagina.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  React.useEffect(() => { setPageIndexResumen(0) }, [
+    filtroFechaInicioFacturas, filtroFechaFinFacturas, filtroClienteIdFacturas,
+    filtroAlmacenIdFacturas, filtroEstadoPago, pageSizeResumen,
+  ])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  React.useEffect(() => { setPageIndexDetalle(0) }, [
+    filtroClienteId, filtroProductoId, filtroAlmacenId, detallesAnaliticos, pageSizeDetalle,
+  ])
 
   // --- Actions ---
   async function viewDetalle(venta: VentaEncabezado) {
@@ -480,6 +465,39 @@ export default function HistorialVentasPage() {
       sheetName: "Detalle por Producto",
       filename: "Detalle_Ventas",
       colWidths: [12, 14, 22, 12, 28, 14, 8, 16, 16, 12, 14, 16, 18, 10, 16],
+    })
+    toast({ title: "Exportado", description: "Archivo Excel generado correctamente" })
+  }
+
+  /** Exporta la pestana Resumen de Facturas (todo el set filtrado, con valores numericos). */
+  function exportToExcelResumen() {
+    if (ventasFiltradas.length === 0) {
+      toast({ title: "Sin datos", description: "No hay facturas para exportar", variant: "destructive" })
+      return
+    }
+    const rows: Record<string, unknown>[] = ventasFiltradas.map(v => {
+      const total = +(v.total_venta ?? 0).toFixed(2)
+      const c = v.id != null ? comisionesPorVenta.get(v.id) : undefined
+      const comision = +(c?.comision ?? 0).toFixed(2)
+      const saldo = +Math.max(0, (v.total_venta ?? 0) - (v.valorpago ?? 0)).toFixed(2)
+      return {
+        "N° Factura": v.numero_factura,
+        "Fecha": v.fecha_venta?.split('T')[0] || "",
+        "Cliente": v.cliente_nombre,
+        "Almacen": v.almacen_nombre || "",
+        "Total (L)": total,
+        "Comisión %": +(c?.pct ?? 0).toFixed(2),
+        "Comisión (L)": comision,
+        "Subtotal (L)": +(total - comision).toFixed(2),
+        "Saldo Pendiente (L)": saldo,
+        "Estado Pago": v.estado_pago,
+        "Metodo": v.id != null ? (metodosPago.get(v.id) ?? "—") : "—",
+      }
+    })
+    exportToXlsx(rows, {
+      sheetName: "Resumen de Facturas",
+      filename: "Resumen_Ventas",
+      colWidths: [14, 12, 24, 16, 14, 10, 14, 14, 16, 12, 12],
     })
     toast({ title: "Exportado", description: "Archivo Excel generado correctamente" })
   }
@@ -690,7 +708,15 @@ export default function HistorialVentasPage() {
         {/* ── Tab 1: Resumen de Facturas ── */}
         <TabsContent value="facturas" className="mt-4 space-y-4">
           {/* Acciones */}
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button
+              className="gap-2 bg-stone-800 hover:bg-stone-900 text-white"
+              onClick={exportToExcelResumen}
+              disabled={ventasFiltradas.length === 0}
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Exportar
+            </Button>
             <ImportarVentasDialog onImported={loadData} />
           </div>
 
@@ -802,38 +828,53 @@ export default function HistorialVentasPage() {
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Almacen</TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
                       <div>Total</div>
-                      <div className="text-xs font-bold text-stone-900">L {resumenTotales.totalVentas.toFixed(2)}</div>
+                      <div className="text-xs font-bold text-stone-900">{formatCurrency(resumenTotales.totalVentas)}</div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
+                      <div>Comisión</div>
+                      <div className="text-xs font-bold text-amber-700">{formatCurrency(resumenTotales.totalComisiones)}</div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
+                      <div>Subtotal</div>
+                      <div className="text-xs font-bold text-stone-900">{formatCurrency(resumenTotales.totalSubtotal)}</div>
                     </TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
                       <div>Saldo Pendiente</div>
-                      <div className="text-xs font-bold text-stone-900">L {resumenTotales.totalSaldo.toFixed(2)}</div>
+                      <div className="text-xs font-bold text-stone-900">{formatCurrency(resumenTotales.totalSaldo)}</div>
                     </TableHead>
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Estado Pago</TableHead>
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Metodo</TableHead>
-                    <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
-                      <div>Comisión</div>
-                      <div className="text-xs font-bold text-stone-900">L {resumenTotales.totalComisiones.toFixed(2)}</div>
-                    </TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {ventasFiltradas.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center text-muted-foreground py-10">
+                      <TableCell colSpan={11} className="text-center text-muted-foreground py-10">
                         No hay ventas para mostrar
                       </TableCell>
                     </TableRow>
-                  ) : ventasFiltradas.map(venta => {
+                  ) : ventasPaginadas.map(venta => {
                     // Saldo = total_venta - valorpago (COALESCE a 0)
                     const saldo = (venta.total_venta ?? 0) - (venta.valorpago ?? 0)
+                    const comisionVenta = venta.id != null ? comisionesPorVenta.get(venta.id) : undefined
+                    const comisionVal = comisionVenta?.comision ?? 0
+                    const subtotalVal = (venta.total_venta ?? 0) - comisionVal
                     return (
                       <TableRow key={venta.id} className="hover:bg-stone-50/50">
                         <TableCell className="font-mono font-medium whitespace-nowrap">{venta.numero_factura}</TableCell>
                         <TableCell className="whitespace-nowrap">{venta.fecha_venta?.split('T')[0] || ''}</TableCell>
                         <TableCell className="whitespace-nowrap">{venta.cliente_nombre}</TableCell>
                         <TableCell className="text-muted-foreground whitespace-nowrap">{venta.almacen_nombre || '-'}</TableCell>
-                        <TableCell className="text-right font-medium whitespace-nowrap">L {(venta.total_venta ?? 0).toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-medium whitespace-nowrap">{formatCurrency(venta.total_venta ?? 0)}</TableCell>
+                        <TableCell className="text-right whitespace-nowrap">
+                          {comisionVenta && comisionVal > 0 ? (
+                            <span className="text-amber-700">{comisionVenta.pct.toFixed(2)}% · {formatCurrency(comisionVal)}</span>
+                          ) : (
+                            <span className="text-stone-400">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-medium whitespace-nowrap">{formatCurrency(subtotalVal)}</TableCell>
                         <TableCell
                           className={`text-right font-medium whitespace-nowrap ${
                             saldo <= 0
@@ -843,20 +884,10 @@ export default function HistorialVentasPage() {
                                 : "text-red-600"
                           }`}
                         >
-                          L {Math.max(0, saldo).toFixed(2)}
+                          {formatCurrency(Math.max(0, saldo))}
                         </TableCell>
                         <TableCell>{getEstadoBadge(venta.estado_pago)}</TableCell>
                         <TableCell>{getMetodoPagoBadge(venta.id)}</TableCell>
-                        <TableCell className="text-right whitespace-nowrap">
-                          {(() => {
-                            const c = venta.id != null ? comisionesPorVenta.get(venta.id) : undefined
-                            return c && c.comision > 0 ? (
-                              <span className="text-amber-700">{c.pct.toFixed(2)}% · L {c.comision.toFixed(2)}</span>
-                            ) : (
-                              <span className="text-stone-400">—</span>
-                            )
-                          })()}
-                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
                             {saldo > 0.005 && (
@@ -902,17 +933,15 @@ export default function HistorialVentasPage() {
                 </TableBody>
               </Table>
             </CardContent>
+            <TablePaginator
+              pageIndex={pageIndexResumen}
+              pageSize={pageSizeResumen}
+              totalItems={ventasFiltradas.length}
+              onPageIndexChange={setPageIndexResumen}
+              onPageSizeChange={setPageSizeResumen}
+              className="border-t border-stone-200"
+            />
           </Card>
-
-          {/* Paginacion: cargar mas facturas del servidor */}
-          {!loading && ventas.length < totalVentas && (
-            <div className="flex justify-center pt-2">
-              <Button variant="outline" onClick={cargarMasVentas} disabled={cargandoMas} className="gap-2">
-                {cargandoMas ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Cargar más facturas ({ventas.length} de {totalVentas})
-              </Button>
-            </div>
-          )}
         </TabsContent>
 
         {/* ── Tab 2: Detalle por Producto ── */}
@@ -928,18 +957,18 @@ export default function HistorialVentasPage() {
                 </div>
                 <div>
                   <p className="text-stone-500 text-xs mb-1">Unidades Vendidas</p>
-                  <p className="font-semibold text-stone-800 text-lg">{detalleFiltrado.reduce((a, d) => a + d.cantidad, 0)}</p>
+                  <p className="font-semibold text-stone-800 text-lg">{formatNumber(detalleFiltrado.reduce((a, d) => a + d.cantidad, 0))}</p>
                 </div>
                 <div>
                   <p className="text-stone-500 text-xs mb-1">Ingresos Totales</p>
                   <p className="font-semibold text-stone-800 text-lg">
-                    L {detalleFiltrado.reduce((a, d) => a + d.cantidad * d.precio_unitario, 0).toFixed(2)}
+                    {formatCurrency(detalleFiltrado.reduce((a, d) => a + d.cantidad * d.precio_unitario, 0))}
                   </p>
                 </div>
                 <div>
                   <p className="text-stone-500 text-xs mb-1">Utilidad Total</p>
                   <p className="font-semibold text-emerald-700 text-lg">
-                    L {utilidadColumnaDetalle.toFixed(2)}
+                    {formatCurrency(utilidadColumnaDetalle)}
                     <span className="text-sm font-medium text-emerald-600 ml-1">({margenColumnaDetalle.toFixed(1)}%)</span>
                   </p>
                 </div>
@@ -1076,17 +1105,21 @@ export default function HistorialVentasPage() {
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">Precio Unit.</TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
                       <div>Total</div>
-                      <div className="text-xs font-bold text-stone-900">L {totalColumnaDetalle.toFixed(2)}</div>
+                      <div className="text-xs font-bold text-stone-900">{formatCurrency(totalColumnaDetalle)}</div>
                     </TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
                       <div>Comisión</div>
-                      <div className="text-xs font-bold text-amber-700">L {comisionColumnaDetalle.toFixed(2)}</div>
+                      <div className="text-xs font-bold text-amber-700">{formatCurrency(comisionColumnaDetalle)}</div>
+                    </TableHead>
+                    <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
+                      <div>Subtotal</div>
+                      <div className="text-xs font-bold text-stone-900">{formatCurrency(subtotalColumnaDetalle)}</div>
                     </TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">Costo Unit.</TableHead>
                     <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">
                       <div>Utilidad Bruta</div>
                       <div className="text-xs font-bold text-emerald-700">
-                        L {utilidadColumnaDetalle.toFixed(2)} ({margenColumnaDetalle.toFixed(1)}%)
+                        {formatCurrency(utilidadColumnaDetalle)} ({margenColumnaDetalle.toFixed(1)}%)
                       </div>
                     </TableHead>
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Bodega</TableHead>
@@ -1096,18 +1129,21 @@ export default function HistorialVentasPage() {
                   {loadingAnalitico ? (
                     [...Array(5)].map((_, i) => (
                       <TableRow key={i}>
-                        {[...Array(13)].map((_, j) => (
+                        {[...Array(14)].map((_, j) => (
                           <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                         ))}
                       </TableRow>
                     ))
                   ) : detalleFiltrado.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={13} className="text-center text-muted-foreground py-10">
+                      <TableCell colSpan={14} className="text-center text-muted-foreground py-10">
                         {analiticoLoaded ? "No hay registros para los filtros aplicados" : "Cargando datos..."}
                       </TableCell>
                     </TableRow>
-                  ) : detalleFiltrado.map((d, idx) => (
+                  ) : detallePaginado.map((d, idx) => {
+                    const com = comisionLinea(d)
+                    const subtotalLinea = d.total_linea - (com?.valor ?? 0)
+                    return (
                     <TableRow key={idx} className="hover:bg-stone-50/50">
                       <TableCell className="whitespace-nowrap">{d.fecha_venta?.split('T')[0] || ''}</TableCell>
                       <TableCell className="font-mono whitespace-nowrap">{d.numero_factura}</TableCell>
@@ -1115,24 +1151,22 @@ export default function HistorialVentasPage() {
                       <TableCell className="whitespace-nowrap">{getMetodoPagoBadge(d.venta_id)}</TableCell>
                       <TableCell className="font-medium whitespace-nowrap">{d.producto_nombre}</TableCell>
                       <TableCell className="text-muted-foreground whitespace-nowrap">{d.producto_sku}</TableCell>
-                      <TableCell className="text-right">{d.cantidad}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">L {d.precio_unitario.toFixed(2)}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap font-medium">L {d.total_linea.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{formatNumber(d.cantidad)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{formatCurrency(d.precio_unitario)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap font-medium">{formatCurrency(d.total_linea)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">
-                        {(() => {
-                          const c = comisionLinea(d)
-                          return c ? (
-                            <span className="text-amber-700">{c.pct.toFixed(2)}% · L {c.valor.toFixed(2)}</span>
-                          ) : (
-                            <span className="text-stone-400">—</span>
-                          )
-                        })()}
+                        {com ? (
+                          <span className="text-amber-700">{com.pct.toFixed(2)}% · {formatCurrency(com.valor)}</span>
+                        ) : (
+                          <span className="text-stone-400">—</span>
+                        )}
                       </TableCell>
-                      <TableCell className="text-right whitespace-nowrap text-muted-foreground">L {d.costo_promedio_momento.toFixed(2)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap font-medium">{formatCurrency(subtotalLinea)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap text-muted-foreground">{formatCurrency(d.costo_promedio_momento)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
                           <Badge className={d.utilidad_linea >= 0 ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : "bg-red-100 text-red-800 hover:bg-red-100"}>
-                            L {d.utilidad_linea.toFixed(2)}
+                            {formatCurrency(d.utilidad_linea)}
                           </Badge>
                           <span className="text-xs text-muted-foreground w-12 text-right">
                             {(() => {
@@ -1144,10 +1178,19 @@ export default function HistorialVentasPage() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">{d.almacen_nombre}</TableCell>
                     </TableRow>
-                  ))}
+                    )
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
+            <TablePaginator
+              pageIndex={pageIndexDetalle}
+              pageSize={pageSizeDetalle}
+              totalItems={detalleFiltrado.length}
+              onPageIndexChange={setPageIndexDetalle}
+              onPageSizeChange={setPageSizeDetalle}
+              className="border-t border-stone-200"
+            />
           </Card>
 
         </TabsContent>

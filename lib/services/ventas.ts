@@ -17,6 +17,30 @@ function esTablaInexistente(err: { code?: string; message?: string } | null): bo
   return /relation .* does not exist|could not find the table|schema cache/i.test(err.message || '')
 }
 
+/**
+ * PostgREST corta cada `.select()` en 1000 filas. Este helper pagina con
+ * `.range()` en bloques de 1000 hasta traerlas TODAS, para poder mostrar mas
+ * de 1000 lineas. `buildQuery()` debe reconstruir la consulta base (sin range).
+ */
+type RangeableQuery = {
+  range: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
+}
+async function fetchAllRows<T>(buildQuery: () => RangeableQuery): Promise<{ data: T[]; error: string | null }> {
+  const PAGE = 1000
+  let from = 0
+  const acc: T[] = []
+  // Tope de seguridad para no ciclar indefinidamente (100k filas).
+  for (let guard = 0; guard < 100; guard++) {
+    const { data, error } = await buildQuery().range(from, from + PAGE - 1)
+    if (error) return { data: acc, error: error.message }
+    const rows = (data || []) as T[]
+    acc.push(...rows)
+    if (rows.length < PAGE) break
+    from += PAGE
+  }
+  return { data: acc, error: null }
+}
+
 // ==================== INTERFACES ====================
 
 export interface VentaEncabezado {
@@ -136,32 +160,40 @@ export async function getVentas(
   const supabase = createClient()
   if (!supabase) return { data: [], total: 0, error: 'Cliente no disponible' }
 
-  try {
-    let query = supabase
-      .from('ventas_encabezado')
-      .select(`
-        *,
-        clientes (nombre),
-        almacenes (nombre)
-      `, { count: 'exact' })
-      .order('id', { ascending: false })
+  type EncabezadoRow = VentaEncabezado & {
+    clientes?: { nombre?: string } | null
+    almacenes?: { nombre?: string } | null
+  }
+  const mapRow = (v: EncabezadoRow): VentaEncabezado => ({
+    ...v,
+    cliente_nombre: v.clientes?.nombre || '',
+    almacen_nombre: v.almacenes?.nombre || '',
+  })
 
+  try {
+    // Con `limit`: una sola pagina (con count exacto). Sin `limit`: TODAS las
+    // filas via bucle por rangos (para superar el tope de 1000 de PostgREST).
     if (opts.limit != null) {
       const desde = opts.offset ?? 0
-      query = query.range(desde, desde + opts.limit - 1)
+      const { data, count, error } = await supabase
+        .from('ventas_encabezado')
+        .select(`*, clientes (nombre), almacenes (nombre)`, { count: 'exact' })
+        .order('id', { ascending: false })
+        .range(desde, desde + opts.limit - 1)
+      if (error) return { data: [], total: 0, error: error.message }
+      const formattedData = ((data || []) as EncabezadoRow[]).map(mapRow)
+      return { data: formattedData, total: count ?? formattedData.length, error: null }
     }
 
-    const { data, count, error } = await query
-
-    if (error) return { data: [], total: 0, error: error.message }
-    
-    const formattedData = (data || []).map(v => ({
-      ...v,
-      cliente_nombre: v.clientes?.nombre || '',
-      almacen_nombre: v.almacenes?.nombre || ''
-    }))
-
-    return { data: formattedData, total: count ?? formattedData.length, error: null }
+    const { data, error } = await fetchAllRows<EncabezadoRow>(() =>
+      supabase
+        .from('ventas_encabezado')
+        .select(`*, clientes (nombre), almacenes (nombre)`)
+        .order('id', { ascending: false })
+    )
+    if (error) return { data: [], total: 0, error }
+    const formattedData = data.map(mapRow)
+    return { data: formattedData, total: formattedData.length, error: null }
   } catch (err) {
     console.error('[Supabase] Error obteniendo ventas:', err)
     return { data: [], total: 0, error: 'Error de conexion' }
@@ -369,31 +401,41 @@ export async function getDetalleAnalitico(
   if (!supabase) return { data: [], error: 'Cliente no disponible' }
 
   try {
-    let query = supabase
-      .from('ventas_detalle')
-      .select(`
-        venta_id,
-        cantidad,
-        precio_unitario,
-        costo_promedio_momento,
-        utilidad_linea,
-        ventas_encabezado (
-          fecha_venta,
-          numero_factura,
-          almacen_id,
-          aplica_impuesto,
-          porcentaje_impuesto,
-          descuento,
-          clientes ( nombre ),
-          almacenes ( nombre )
-        ),
-        productos ( nombre, codigo_barras )
-      `)
-      .order('venta_id', { ascending: false })
+    // TODAS las lineas via bucle por rangos (supera el tope de 1000 filas).
+    type DetalleRow = {
+      venta_id?: number
+      cantidad?: number
+      precio_unitario?: number
+      costo_promedio_momento?: number
+      utilidad_linea?: number
+      ventas_encabezado?: unknown
+      productos?: unknown
+    }
+    const { data, error } = await fetchAllRows<DetalleRow>(() =>
+      supabase
+        .from('ventas_detalle')
+        .select(`
+          venta_id,
+          cantidad,
+          precio_unitario,
+          costo_promedio_momento,
+          utilidad_linea,
+          ventas_encabezado (
+            fecha_venta,
+            numero_factura,
+            almacen_id,
+            aplica_impuesto,
+            porcentaje_impuesto,
+            descuento,
+            clientes ( nombre ),
+            almacenes ( nombre )
+          ),
+          productos ( nombre, codigo_barras )
+        `)
+        .order('venta_id', { ascending: false })
+    )
 
-    const { data, error } = await query
-
-    if (error) return { data: [], error: error.message }
+    if (error) return { data: [], error }
 
     const formattedData: VentaDetalleAnalitico[] = (data || [])
       .filter(d => {
@@ -1200,6 +1242,60 @@ export interface VentasDashboardData {
   // Additional metrics
   clientesActivos: number
   productosVendidos: number
+}
+
+/** Punto de la serie diaria: `dia` = numero de dia (label del eje X). */
+export interface VentaDiaria { dia: string; fecha: string; ventas: number }
+
+/**
+ * Ventas por dia del MES CALENDARIO ACTUAL (independiente de filtros del
+ * dashboard). Siembra todos los dias del mes en 0 para un eje X continuo.
+ */
+export async function getVentasDiariasMesActual(): Promise<{ data: VentaDiaria[]; error: string | null }> {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth() // 0-based
+  const mm = String(month + 1).padStart(2, '0')
+  const finMes = new Date(year, month + 1, 0, 23, 59, 59)
+  const diasEnMes = finMes.getDate()
+
+  const byDay = new Map<string, number>()
+  for (let d = 1; d <= diasEnMes; d++) {
+    byDay.set(`${year}-${mm}-${String(d).padStart(2, '0')}`, 0)
+  }
+  const acumular = (fecha: string | null | undefined, total: number | null | undefined) => {
+    const key = (fecha || '').split('T')[0]
+    if (byDay.has(key)) byDay.set(key, (byDay.get(key) || 0) + (Number(total) || 0))
+  }
+  const serie = (): VentaDiaria[] =>
+    Array.from(byDay.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([fecha, ventas]) => ({ dia: String(Number(fecha.split('-')[2])), fecha, ventas: +ventas.toFixed(2) }))
+
+  if (!isSupabaseConfigured()) {
+    const saved = localStorage.getItem('ventas_encabezado')
+    const todas: VentaEncabezado[] = saved ? JSON.parse(saved) : []
+    for (const v of todas) acumular(v.fecha_venta, v.total_venta)
+    return { data: serie(), error: null }
+  }
+
+  const supabase = createClient()
+  if (!supabase) return { data: [], error: 'Cliente no disponible' }
+  try {
+    const { data, error } = await supabase
+      .from('ventas_encabezado')
+      .select('fecha_venta, total_venta')
+      .gte('fecha_venta', `${year}-${mm}-01T00:00:00`)
+      .lte('fecha_venta', finMes.toISOString())
+    if (error) return { data: [], error: error.message }
+    for (const v of (data || []) as { fecha_venta: string | null; total_venta: number | null }[]) {
+      acumular(v.fecha_venta, v.total_venta)
+    }
+    return { data: serie(), error: null }
+  } catch (err) {
+    console.error('[Supabase] Error obteniendo ventas diarias:', err)
+    return { data: [], error: 'Error de conexion' }
+  }
 }
 
 export async function getVentasDashboard(anio?: number, mes?: number): Promise<{ data: VentasDashboardData | null; error: string | null }> {

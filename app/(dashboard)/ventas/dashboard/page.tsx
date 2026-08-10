@@ -43,7 +43,7 @@ import {
   Pie,
   Cell
 } from "recharts"
-import { getVentasDashboard, type VentasDashboardData } from "@/lib/services/ventas"
+import { getVentasDashboard, getVentasDiariasMesActual, type VentasDashboardData, type VentaDiaria } from "@/lib/services/ventas"
 import { getPagosResumen, type PagosResumen } from "@/lib/services/ventas-analytics"
 
 
@@ -71,6 +71,8 @@ export default function VentasDashboardPage() {
   // "Comisiones Pagadas"). La tarjeta grande de Ingresos por Metodo de
   // Pago se elimino, pero estas metricas se mantienen.
   const [pagos, setPagos] = React.useState<PagosResumen | null>(null)
+  // Serie de ventas diarias del mes actual (independiente del filtro Año/Mes).
+  const [ventasDiarias, setVentasDiarias] = React.useState<VentaDiaria[]>([])
   const [loading, setLoading] = React.useState(true)
   const [anioFiltro, setAnioFiltro] = React.useState<string>("todos")
   const [mesFiltro, setMesFiltro] = React.useState<string>("todos")
@@ -86,14 +88,17 @@ export default function VentasDashboardPage() {
       const mes = mesFiltro !== "todos" ? parseInt(mesFiltro) : undefined
 
       // Ambos servicios consultan la misma ventana temporal y razon_social.
-      const [dashRes, pagosRes] = await Promise.all([
+      // La serie diaria es siempre del mes actual (no depende del filtro).
+      const [dashRes, pagosRes, diariasRes] = await Promise.all([
         getVentasDashboard(anio, mes),
         getPagosResumen(anio, mes),
+        getVentasDiariasMesActual(),
       ])
 
       if (dashRes.error) throw new Error(dashRes.error)
       setData(dashRes.data)
       setPagos(pagosRes.data)
+      setVentasDiarias(diariasRes.data)
     } catch (err) {
       toast({
         title: "Error",
@@ -452,6 +457,41 @@ export default function VentasDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Ventas diarias del mes actual */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Ventas diarias — {MESES[new Date().getMonth()]} {new Date().getFullYear()}
+          </CardTitle>
+          <CardDescription>Total vendido por día en el mes actual</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {ventasDiarias.some((d) => d.ventas > 0) ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={ventasDiarias}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" />
+                <XAxis dataKey="dia" tick={{ fill: '#78716c', fontSize: 12 }} />
+                <YAxis
+                  tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`}
+                  tick={{ fill: '#78716c', fontSize: 12 }}
+                />
+                <Tooltip
+                  formatter={(value: number) => formatCurrency(value)}
+                  labelFormatter={(label) => `Día ${label}`}
+                  contentStyle={{ backgroundColor: '#fafaf9', borderColor: '#e7e5e4' }}
+                />
+                <Bar dataKey="ventas" name="Ventas" fill="#78716c" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+              No hay ventas registradas este mes
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Rankings Row */}
       <div className="grid gap-6 lg:grid-cols-3">

@@ -3,6 +3,14 @@
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { getTenantStamp, isValidStamp } from "@/lib/services/tenant-stamp"
 
+/** Parte un arreglo en grupos de `size` (para no exceder el largo de URL en `.in()`). */
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+const IN_CHUNK = 200
+
 /**
  * Resumen de pagos del periodo, derivado de la tabla `ventas_pagos_detalle`
  * (migracion 011). Sirve como fuente unica para:
@@ -241,22 +249,27 @@ export async function getMetodosPagoPorVenta(
   if (!supabase) return { data: empty, error: null }
 
   try {
-    const { data, error } = await supabase
-      .from("ventas_pagos_detalle")
-      .select("venta_id, metodo_pago")
-      .in("venta_id", ventaIds)
-
-    if (error) {
-      // Tabla pendiente: regresa map vacio para que la UI muestre fallback.
-      if (/does not exist|ventas_pagos_detalle/i.test(error.message)) {
-        return { data: empty, error: null }
+    type Row = { venta_id: number; metodo_pago: string }
+    // Chunk de ids para no exceder el largo de URL con miles de ventas.
+    const resultados = await Promise.all(
+      chunk(ventaIds, IN_CHUNK).map((grupo) =>
+        supabase.from("ventas_pagos_detalle").select("venta_id, metodo_pago").in("venta_id", grupo)
+      )
+    )
+    const filas: Row[] = []
+    for (const r of resultados) {
+      if (r.error) {
+        // Tabla pendiente: regresa map vacio para que la UI muestre fallback.
+        if (/does not exist|ventas_pagos_detalle/i.test(r.error.message)) {
+          return { data: empty, error: null }
+        }
+        return { data: empty, error: r.error.message }
       }
-      return { data: empty, error: error.message }
+      filas.push(...((r.data || []) as Row[]))
     }
 
-    type Row = { venta_id: number; metodo_pago: string }
     const sets = new Map<number, Set<string>>()
-    for (const r of (data || []) as Row[]) {
+    for (const r of filas) {
       const s = sets.get(r.venta_id) || new Set<string>()
       s.add(r.metodo_pago)
       sets.set(r.venta_id, s)
@@ -313,21 +326,25 @@ export async function getComisionesPorVenta(
   if (!supabase) return { data: empty, error: null }
 
   try {
-    const { data, error } = await supabase
-      .from("ventas_pagos_detalle")
-      .select("venta_id, monto_bruto, porcentaje_comision")
-      .in("venta_id", ventaIds)
-
-    if (error) {
-      if (/does not exist|ventas_pagos_detalle/i.test(error.message)) {
-        return { data: empty, error: null }
+    type Row = { venta_id: number; monto_bruto: number | null; porcentaje_comision: number | null }
+    const resultados = await Promise.all(
+      chunk(ventaIds, IN_CHUNK).map((grupo) =>
+        supabase.from("ventas_pagos_detalle").select("venta_id, monto_bruto, porcentaje_comision").in("venta_id", grupo)
+      )
+    )
+    const filas: Row[] = []
+    for (const r of resultados) {
+      if (r.error) {
+        if (/does not exist|ventas_pagos_detalle/i.test(r.error.message)) {
+          return { data: empty, error: null }
+        }
+        return { data: empty, error: r.error.message }
       }
-      return { data: empty, error: error.message }
+      filas.push(...((r.data || []) as Row[]))
     }
 
-    type Row = { venta_id: number; monto_bruto: number | null; porcentaje_comision: number | null }
     const acc = new Map<number, { bruto: number; comision: number }>()
-    for (const r of (data || []) as Row[]) {
+    for (const r of filas) {
       const bruto = Number(r.monto_bruto) || 0
       const pct = Number(r.porcentaje_comision) || 0
       const cur = acc.get(r.venta_id) || { bruto: 0, comision: 0 }
