@@ -1038,8 +1038,8 @@ export default function GastosPage() {
                 </Empty>
               ) : (
                 <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
+                  <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                    <TableHeader sticky>
                       <TableRow className="bg-stone-50/50">
                         <TableHead>Fecha</TableHead>
                         <TableHead>Concepto</TableHead>
@@ -1207,8 +1207,8 @@ export default function GastosPage() {
                 </Empty>
               ) : (
                 <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
+                  <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                    <TableHeader sticky>
                       <TableRow className="bg-stone-50/50">
                         <TableHead>Vencimiento</TableHead>
                         <TableHead>Proveedor</TableHead>

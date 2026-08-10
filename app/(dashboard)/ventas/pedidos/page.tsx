@@ -140,8 +140,8 @@ export default function PedidosCatalogoPage() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
+                  <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                    <TableHeader sticky>
                       <TableRow>
                         <TableHead>Pedido</TableHead>
                         <TableHead>Fecha</TableHead>
@@ -194,8 +194,8 @@ export default function PedidosCatalogoPage() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
+                  <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                    <TableHeader sticky>
                       <TableRow>
                         <TableHead>Referencia</TableHead>
                         <TableHead>Tipo</TableHead>

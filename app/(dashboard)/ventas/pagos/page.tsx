@@ -126,8 +126,8 @@ export default function PagosPage() {
           <CardTitle>Cuentas por Cobrar</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
+          <Table containerClassName="max-h-[60vh] overflow-y-auto">
+            <TableHeader sticky>
               <TableRow>
                 <TableHead>No. Factura</TableHead>
                 <TableHead>Fecha</TableHead>

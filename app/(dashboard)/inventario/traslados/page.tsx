@@ -694,8 +694,8 @@ export default function TrasladosPage() {
           <CardContent className="p-0">
             {/* Desktop Table */}
             <div className="hidden md:block">
-              <Table>
-                <TableHeader>
+              <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                <TableHeader sticky>
                   <TableRow className="bg-amber-50/50">
                     <TableHead>Referencia</TableHead>
                     <TableHead className="text-center">Stock</TableHead>

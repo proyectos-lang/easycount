@@ -4,11 +4,17 @@ import * as React from 'react'
 
 import { cn } from '@/lib/utils'
 
-function Table({ className, ...props }: React.ComponentProps<'table'>) {
+function Table({
+  className,
+  containerClassName,
+  ...props
+}: React.ComponentProps<'table'> & { containerClassName?: string }) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      // `containerClassName` permite dar scroll vertical (`max-h-[..] overflow-y-auto`)
+      // al contenedor; combinado con `<TableHeader sticky>` deja el encabezado fijo.
+      className={cn('relative w-full overflow-x-auto', containerClassName)}
     >
       <table
         data-slot="table"
@@ -19,11 +25,22 @@ function Table({ className, ...props }: React.ComponentProps<'table'>) {
   )
 }
 
-function TableHeader({ className, ...props }: React.ComponentProps<'thead'>) {
+function TableHeader({
+  className,
+  sticky,
+  ...props
+}: React.ComponentProps<'thead'> & { sticky?: boolean }) {
   return (
     <thead
       data-slot="table-header"
-      className={cn('[&_tr]:border-b', className)}
+      className={cn(
+        '[&_tr]:border-b',
+        // Encabezado fijo al hacer scroll vertical. Fondo opaco para que las
+        // filas no se transparenten por debajo. Una pagina puede sobreescribir
+        // el color pasando `className="[&_th]:bg-<color>"`.
+        sticky && '[&_th]:sticky [&_th]:top-0 [&_th]:z-20 [&_th]:bg-background',
+        className,
+      )}
       {...props}
     />
   )

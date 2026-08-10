@@ -391,8 +391,8 @@ export default function CuentasPorCobrarPage() {
           {/* Desktop Table */}
           <Card className="hidden md:block">
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
+              <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                <TableHeader sticky>
                   <TableRow>
                     <TableHead>Factura</TableHead>
                     <TableHead>Cliente</TableHead>
@@ -474,8 +474,8 @@ export default function CuentasPorCobrarPage() {
               <CardDescription>Registro cronologico de todos los abonos</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
+              <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                <TableHeader sticky>
                   <TableRow>
                     <TableHead>Fecha</TableHead>
                     <TableHead>Factura</TableHead>

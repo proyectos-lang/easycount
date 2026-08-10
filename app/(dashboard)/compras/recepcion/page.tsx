@@ -542,8 +542,8 @@ export default function RecepcionPage() {
                   </div>
 
                   {/* Desktop */}
-                  <Table className="hidden md:table">
-                    <TableHeader>
+                  <Table className="hidden md:table" containerClassName="max-h-[60vh] overflow-y-auto">
+                    <TableHeader sticky>
                       <TableRow>
                         <TableHead>Producto</TableHead>
                         <TableHead className="text-right">Cant.</TableHead>

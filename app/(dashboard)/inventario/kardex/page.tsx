@@ -309,8 +309,8 @@ export default function KardexPage() {
             </div>
           ) : (
             <div className="overflow-x-auto border rounded-lg">
-              <Table>
-                <TableHeader>
+              <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                <TableHeader sticky>
                   <TableRow className="bg-stone-50">
                     <TableHead className="font-semibold">Fecha</TableHead>
                     <TableHead className="font-semibold">Producto</TableHead>

@@ -304,9 +304,9 @@ export default function AjustesInventarioPage() {
                 {cargandoStock ? (
                   <div className="flex justify-center py-10"><Spinner className="h-6 w-6" /></div>
                 ) : (
-                  <div className="overflow-x-auto max-h-[55vh] overflow-y-auto">
-                    <Table>
-                      <TableHeader>
+                  <div className="overflow-x-auto">
+                    <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                      <TableHeader sticky>
                         <TableRow>
                           <TableHead>Producto</TableHead>
                           <TableHead className="text-center">Actual</TableHead>

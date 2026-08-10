@@ -212,8 +212,8 @@ export default function ProveedoresConfigPage() {
               </div>
 
               {/* Desktop Table View */}
-              <Table className="hidden md:table">
-                <TableHeader>
+              <Table className="hidden md:table" containerClassName="max-h-[60vh] overflow-y-auto">
+                <TableHeader sticky>
                   <TableRow>
                     <TableHead>Nombre</TableHead>
                     <TableHead>RTN</TableHead>

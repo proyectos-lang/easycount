@@ -618,8 +618,8 @@ export default function RecepcionIAPage() {
               <div className="space-y-4">
                 {/* Products Table */}
                 <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
+                  <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                    <TableHeader sticky>
                       <TableRow className="bg-muted/50">
                         <TableHead className="w-[200px]">Extraido por IA</TableHead>
                         <TableHead>Mapear a Producto</TableHead>

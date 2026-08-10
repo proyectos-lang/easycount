@@ -188,8 +188,8 @@ export default function MovimientosCuentasPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
+              <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                <TableHeader sticky>
                   <TableRow>
                     <TableHead>Fecha</TableHead>
                     <TableHead>Cuenta</TableHead>

@@ -219,8 +219,8 @@ export default function DevolucionesPage() {
                   />
                 </div>
                 <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
+                  <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                    <TableHeader sticky>
                       <TableRow>
                         <TableHead>Factura</TableHead>
                         <TableHead>Cliente</TableHead>
@@ -388,8 +388,8 @@ export default function DevolucionesPage() {
                 <div className="py-16 text-center text-muted-foreground">Aún no hay devoluciones registradas.</div>
               ) : (
                 <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
+                  <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                    <TableHeader sticky>
                       <TableRow>
                         <TableHead>Devolución</TableHead>
                         <TableHead>Fecha</TableHead>

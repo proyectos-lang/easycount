@@ -819,8 +819,8 @@ export default function HistorialVentasPage() {
           {/* Listado (tabla en todos los dispositivos; scroll horizontal en movil) */}
           <Card className="rounded-2xl shadow-sm border border-stone-200">
             <CardContent className="p-0 overflow-x-auto">
-              <Table>
-                <TableHeader>
+              <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                <TableHeader sticky>
                   <TableRow className="bg-stone-50 border-b border-stone-200">
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">N° Factura</TableHead>
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Fecha</TableHead>
@@ -1092,8 +1092,8 @@ export default function HistorialVentasPage() {
 
           <Card className="rounded-2xl shadow-sm border border-stone-200">
             <CardContent className="p-0 overflow-x-auto">
-              <Table>
-                <TableHeader>
+              <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                <TableHeader sticky>
                   <TableRow className="bg-stone-50 border-b border-stone-200">
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Fecha</TableHead>
                     <TableHead className="font-semibold text-stone-700 whitespace-nowrap">N° Factura</TableHead>

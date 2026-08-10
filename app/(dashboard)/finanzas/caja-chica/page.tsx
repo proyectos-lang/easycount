@@ -634,8 +634,8 @@ export default function CajaChicaPage() {
               </div>
 
               {/* Desktop table */}
-              <Table className="hidden md:table">
-                <TableHeader>
+              <Table className="hidden md:table" containerClassName="max-h-[60vh] overflow-y-auto">
+                <TableHeader sticky>
                   <TableRow>
                     <TableHead>Fecha</TableHead>
                     <TableHead>Tipo</TableHead>
@@ -794,8 +794,8 @@ export default function CajaChicaPage() {
 
                   {/* Desktop table */}
                   <div className="hidden md:block overflow-x-auto">
-                    <Table>
-                      <TableHeader>
+                    <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                      <TableHeader sticky>
                         <TableRow>
                           <TableHead>Fecha</TableHead>
                           <TableHead>Usuario</TableHead>

@@ -626,8 +626,8 @@ export default function ProductosConfigPage() {
 
               {/* Desktop Table */}
               <div className="hidden md:block rounded-xl border border-stone-200 overflow-hidden">
-                <Table>
-                  <TableHeader>
+                <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                  <TableHeader sticky>
                     <TableRow className="bg-stone-50/80 hover:bg-stone-50/80">
                       <TableHead className="w-16">Imagen</TableHead>
                       <TableHead>Nombre</TableHead>

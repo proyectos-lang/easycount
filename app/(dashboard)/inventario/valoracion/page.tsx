@@ -757,8 +757,8 @@ export default function ValoracionPage() {
               </div>
 
               {/* Desktop Table */}
-              <div className="hidden lg:block overflow-x-auto overflow-y-auto max-h-[70vh]">
-                <Table>
+              <div className="hidden lg:block overflow-x-auto">
+                <Table containerClassName="max-h-[60vh] overflow-y-auto">
                   <TableHeader>
                     <TableRow className="bg-amber-50/50 [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-amber-50">
                       <TableHead className="w-8"></TableHead>
