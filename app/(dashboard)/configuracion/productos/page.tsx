@@ -16,6 +16,9 @@ import {
   Layers,
   Search,
   Settings2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -70,6 +73,51 @@ import { procesarIngresoManual } from "@/lib/services/inventario"
 import { formatCurrency } from "@/lib/utils/format"
 import { useTenant } from "@/lib/hooks/use-tenant"
 import { ManageCategoriasDialog } from "@/components/productos/manage-categorias-dialog"
+
+// Columnas por las que se puede ordenar la tabla de productos.
+type SortKey =
+  | "nombre"
+  | "codigo_barras"
+  | "marca_nombre"
+  | "categoria_nombre"
+  | "subcategoria_nombre"
+  | "precio_venta_sugerido"
+  | "costo_promedio"
+  | "ganancia"
+  | "margen"
+  | "stock_total"
+
+/** Encabezado clickeable que ordena la tabla por su columna (1er click = mayor a menor). */
+function SortHeader({
+  label,
+  sortField,
+  sortKey,
+  sortDir,
+  onSort,
+  align = "left",
+}: {
+  label: string
+  sortField: SortKey
+  sortKey: SortKey | null
+  sortDir: "asc" | "desc"
+  onSort: (k: SortKey) => void
+  align?: "left" | "right"
+}) {
+  const active = sortKey === sortField
+  const Icon = !active ? ArrowUpDown : sortDir === "desc" ? ArrowDown : ArrowUp
+  return (
+    <TableHead className={align === "right" ? "text-right" : undefined}>
+      <button
+        type="button"
+        onClick={() => onSort(sortField)}
+        className={`inline-flex items-center gap-1 select-none hover:text-stone-900 ${active ? "text-stone-900 font-semibold" : "text-stone-600"}`}
+      >
+        {label}
+        <Icon className={`h-3.5 w-3.5 ${active ? "opacity-90" : "opacity-40"}`} />
+      </button>
+    </TableHead>
+  )
+}
 
 export default function ProductosConfigPage() {
   const { toast } = useToast()
@@ -228,9 +276,51 @@ export default function ProductosConfigPage() {
     return subcategorias.filter((s) => s.categoria_id === formData.categoria_id)
   }, [subcategorias, formData.categoria_id])
 
-  // Filtered productos
+  // Ordenamiento dinamico de la tabla (click en el encabezado).
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
+
+  function handleSort(k: SortKey) {
+    if (sortKey === k) {
+      // Mismo campo: alterna mayor→menor / menor→mayor.
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"))
+    } else {
+      // Campo nuevo: arranca de mayor a menor.
+      setSortKey(k)
+      setSortDir("desc")
+    }
+  }
+
+  function sortValue(p: Producto, k: SortKey): number | string {
+    switch (k) {
+      case "precio_venta_sugerido":
+        return p.precio_venta_sugerido || 0
+      case "costo_promedio":
+        return p.costo_promedio || 0
+      case "stock_total":
+        return p.stock_total || 0
+      case "ganancia":
+        return (p.precio_venta_sugerido || 0) - (p.costo_promedio || 0)
+      case "margen": {
+        const precio = p.precio_venta_sugerido || 0
+        return precio > 0 ? ((precio - (p.costo_promedio || 0)) / precio) : 0
+      }
+      case "nombre":
+        return (p.nombre ?? "").toString().toLowerCase()
+      case "codigo_barras":
+        return (p.codigo_barras ?? "").toString().toLowerCase()
+      case "marca_nombre":
+        return (p.marca_nombre ?? "").toString().toLowerCase()
+      case "categoria_nombre":
+        return (p.categoria_nombre ?? "").toString().toLowerCase()
+      case "subcategoria_nombre":
+        return (p.subcategoria_nombre ?? "").toString().toLowerCase()
+    }
+  }
+
+  // Filtered + sorted productos
   const filteredProductos = useMemo(() => {
-    return productos.filter(p => {
+    const arr = productos.filter(p => {
       const matchMarca = filterMarca === "all" || p.marca_id?.toString() === filterMarca
       const matchCat = filterCategoria === "all" || p.categoria_id?.toString() === filterCategoria
       const search = searchTerm.toLowerCase().trim()
@@ -244,7 +334,18 @@ export default function ProductosConfigPage() {
         codigoBarras.includes(search)
       return matchMarca && matchCat && matchSearch
     })
-  }, [productos, filterMarca, filterCategoria, searchTerm])
+
+    if (sortKey) {
+      const dir = sortDir === "asc" ? 1 : -1
+      arr.sort((a, b) => {
+        const va = sortValue(a, sortKey)
+        const vb = sortValue(b, sortKey)
+        if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir
+        return String(va).localeCompare(String(vb), "es") * dir
+      })
+    }
+    return arr
+  }, [productos, filterMarca, filterCategoria, searchTerm, sortKey, sortDir])
 
   async function handleCreateMarca() {
     if (!newMarcaName.trim()) {
@@ -643,16 +744,16 @@ export default function ProductosConfigPage() {
                   <TableHeader sticky>
                     <TableRow className="bg-stone-50/80 hover:bg-stone-50/80">
                       <TableHead className="w-16">Imagen</TableHead>
-                      <TableHead>Nombre</TableHead>
-                      <TableHead>Codigo</TableHead>
-                      <TableHead>Marca</TableHead>
-                      <TableHead>Categoria</TableHead>
-                      <TableHead>Subcategoria</TableHead>
-                      <TableHead className="text-right">Precio Venta</TableHead>
-                      <TableHead className="text-right">Costo Prom.</TableHead>
-                      <TableHead className="text-right">Ganancia</TableHead>
-                      <TableHead className="text-right">Margen</TableHead>
-                      <TableHead className="text-right">Stock</TableHead>
+                      <SortHeader label="Nombre" sortField="nombre" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                      <SortHeader label="Codigo" sortField="codigo_barras" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                      <SortHeader label="Marca" sortField="marca_nombre" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                      <SortHeader label="Categoria" sortField="categoria_nombre" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                      <SortHeader label="Subcategoria" sortField="subcategoria_nombre" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                      <SortHeader label="Precio Venta" sortField="precio_venta_sugerido" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
+                      <SortHeader label="Costo Prom." sortField="costo_promedio" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
+                      <SortHeader label="Ganancia" sortField="ganancia" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
+                      <SortHeader label="Margen" sortField="margen" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
+                      <SortHeader label="Stock" sortField="stock_total" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
                       <TableHead className="w-24"></TableHead>
                     </TableRow>
                   </TableHeader>
