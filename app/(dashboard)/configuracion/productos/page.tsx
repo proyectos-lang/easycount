@@ -67,6 +67,7 @@ import {
   getLocalizaciones,
 } from "@/lib/services/catalogos"
 import { procesarIngresoManual } from "@/lib/services/inventario"
+import { formatCurrency } from "@/lib/utils/format"
 import { useTenant } from "@/lib/hooks/use-tenant"
 import { ManageCategoriasDialog } from "@/components/productos/manage-categorias-dialog"
 
@@ -611,6 +612,18 @@ export default function ProductosConfigPage() {
                         <span className="text-emerald-700 font-medium">L {(producto.precio_venta_sugerido || 0).toFixed(2)}</span>
                         <span className="text-stone-500">Stock: {producto.stock_total || 0}</span>
                       </div>
+                      {(() => {
+                        const precio = producto.precio_venta_sugerido || 0
+                        const costo = producto.costo_promedio || 0
+                        const ganancia = precio - costo
+                        const margen = precio > 0 ? (ganancia / precio) * 100 : 0
+                        const color = ganancia >= 0 ? "text-emerald-700" : "text-red-600"
+                        return (
+                          <div className={`mt-0.5 text-xs ${color}`}>
+                            Ganancia: {formatCurrency(ganancia)} · {margen.toFixed(1)}%
+                          </div>
+                        )
+                      })()}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(producto)}>
@@ -637,6 +650,8 @@ export default function ProductosConfigPage() {
                       <TableHead>Subcategoria</TableHead>
                       <TableHead className="text-right">Precio Venta</TableHead>
                       <TableHead className="text-right">Costo Prom.</TableHead>
+                      <TableHead className="text-right">Ganancia</TableHead>
+                      <TableHead className="text-right">Margen</TableHead>
                       <TableHead className="text-right">Stock</TableHead>
                       <TableHead className="w-24"></TableHead>
                     </TableRow>
@@ -684,6 +699,19 @@ export default function ProductosConfigPage() {
                         </TableCell>
                         <TableCell className="text-right font-medium text-emerald-700">L {(producto.precio_venta_sugerido || 0).toFixed(2)}</TableCell>
                         <TableCell className="text-right text-stone-600">L {(producto.costo_promedio || 0).toFixed(2)}</TableCell>
+                        {(() => {
+                          const precio = producto.precio_venta_sugerido || 0
+                          const costo = producto.costo_promedio || 0
+                          const ganancia = precio - costo
+                          const margen = precio > 0 ? (ganancia / precio) * 100 : 0
+                          const color = ganancia >= 0 ? "text-emerald-700" : "text-red-600"
+                          return (
+                            <>
+                              <TableCell className={`text-right font-medium ${color}`}>{formatCurrency(ganancia)}</TableCell>
+                              <TableCell className={`text-right ${color}`}>{margen.toFixed(1)}%</TableCell>
+                            </>
+                          )
+                        })()}
                         <TableCell className="text-right">{producto.stock_total || 0}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">

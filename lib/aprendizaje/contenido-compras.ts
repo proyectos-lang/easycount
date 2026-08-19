@@ -155,4 +155,54 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
     ],
     keywords: ["ia", "inteligencia artificial", "foto", "escanear", "gemini", "factura proveedor", "ocr"],
   },
+  {
+    modulo: "Recalcular Recepcion",
+    titulo: "Recalcular Recepción",
+    descripcion:
+      "Tomar una compra ya recibida y recomputar el costo del lote con costos fijos corregidos (importación, impuestos, otros, tasa de cambio), aplicando la diferencia al costo de los productos.",
+    queHace: [
+      "Lista las compras ya recibidas (por Orden de Compra) para elegir el lote a corregir.",
+      "Precarga los costos fijos del lote (importación, impuestos, otros, tasa) y permite editarlos.",
+      "Re-corre el prorrateo y muestra, por producto, el costo final antiguo vs. el nuevo y la diferencia.",
+      "Actualiza el costo final de cada línea, el kardex de la entrada y el total del lote.",
+      "Corrige el costo promedio de cada producto por la diferencia del lote proporcional al stock actual (ajuste por delta).",
+      "Opcional: recalcula el costo de las ventas pasadas de esos productos en un rango de fechas (afecta el CMV y el margen histórico).",
+    ],
+    queNoHace: [
+      "No recalcula recepciones hechas por Recepción por Factura (IA): esas no generan una compra en el sistema y no aparecen en la lista.",
+      "No cambia las cantidades recibidas ni los costos unitarios de compra; solo redistribuye los costos fijos.",
+      "No revierte el promedio ponderado lote por lote: aplica la diferencia sobre el stock actual, así que si ya se vendió gran parte del lote el ajuste es aproximado.",
+    ],
+    operaciones: [
+      {
+        titulo: "Corregir el flete/aduana de una importación ya recibida",
+        pasos: [
+          "Abre Compras → Recalcular Recepción y busca la compra por número o proveedor.",
+          "Selecciona la compra recibida: se precargan sus costos fijos.",
+          "Ajusta los costos de importación, impuestos, otros costos y/o la tasa de cambio a los valores reales.",
+          "Revisa el desglose del prorrateo y la tabla de impacto por producto (costo final y costo promedio, antiguo → nuevo).",
+          "Si quieres corregir también las ventas ya hechas, activa «Recalcular ventas» y elige el rango (por defecto desde la recepción hasta hoy).",
+          "Presiona Aplicar recálculo y confirma.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        pregunta: "¿Por qué el costo promedio no cambia exactamente al nuevo costo final del lote?",
+        respuesta:
+          "Porque el costo promedio mezcla todos los lotes en stock. Se aplica solo la diferencia del lote proporcional al stock actual, para no borrar el costo de la mercancía de otras compras.",
+      },
+      {
+        pregunta: "¿Qué pasa si el producto ya no tiene stock?",
+        respuesta:
+          "Sin stock no hay ajuste del costo actual hacia adelante; el costo final de la línea y el kardex sí se actualizan. Si activas el recálculo de ventas, el CMV histórico del rango sí se corrige.",
+      },
+      {
+        pregunta: "¿Queda registro del cambio?",
+        respuesta:
+          "Sí. Cada ajuste de costo por producto queda en la bitácora de ajustes de costo, con el motivo «Recálculo recepción #<número>».",
+      },
+    ],
+    keywords: ["recalcular", "recepcion", "importacion", "prorrateo", "costos fijos", "flete", "aduana", "costo lote", "delta", "tasa cambio"],
+  },
 ]
