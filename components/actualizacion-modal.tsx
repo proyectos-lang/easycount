@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Sparkles } from "lucide-react"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog"
@@ -41,8 +40,9 @@ export function ActualizacionModal() {
     <Dialog open={open} onOpenChange={(o) => { if (!o) cerrar() }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
-            <Sparkles className="h-6 w-6 text-emerald-700" />
+          <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-white border border-stone-200 overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/easycount-logo.jpeg" alt="EasyCount" className="h-14 w-14 object-contain" />
           </div>
           <DialogTitle className="text-center">¡Hemos implementado una actualización!</DialogTitle>
           <DialogDescription className="text-center">
@@ -57,9 +57,7 @@ export function ActualizacionModal() {
 
         <DialogFooter className="sm:justify-center gap-2">
           <Button variant="outline" onClick={cerrar}>Ahora no</Button>
-          <Button onClick={verActualizaciones} className="gap-2">
-            <Sparkles className="h-4 w-4" /> Ver actualizaciones
-          </Button>
+          <Button onClick={verActualizaciones}>Ver actualizaciones</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
