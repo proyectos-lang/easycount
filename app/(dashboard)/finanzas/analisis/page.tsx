@@ -7,7 +7,7 @@ import {
 } from "lucide-react"
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
-  ScatterChart, Scatter, ZAxis, ReferenceLine, ComposedChart, Line, LineChart, Legend,
+  ScatterChart, Scatter, ZAxis, ReferenceLine, ComposedChart, Line, LineChart,
 } from "recharts"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -40,10 +40,16 @@ function inicioMes(d = new Date()): string { return iso(new Date(d.getFullYear()
 function hoyISO(): string { return iso(new Date()) }
 
 const CUADRANTE_COLOR: Record<Cuadrante, string> = {
-  "Estrella": "#059669",
-  "Vaca lechera": "#0284c7",
-  "Nicho": "#d97706",
-  "Bajo desempeño": "#dc2626",
+  "Estrella": "#22c55e",
+  "Vaca lechera": "#3b82f6",
+  "Nicho": "#f59e0b",
+  "Bajo desempeño": "#ef4444",
+}
+const CUADRANTE_INFO: Record<Cuadrante, string> = {
+  "Estrella": "Alto volumen y alto margen. Lo ideal: protégelos y dales prioridad.",
+  "Vaca lechera": "Alto volumen, bajo margen. Generan caja; busca subir precio o bajar costo.",
+  "Nicho": "Bajo volumen, alto margen. Poco vendidos pero muy rentables; intenta venderlos más.",
+  "Bajo desempeño": "Bajo volumen y bajo margen. Revisa precio/costo o si conviene descontinuarlos.",
 }
 const PIE_COLORS = ["#5D7B6F", "#C07A5C", "#D4A574", "#7C9A92", "#8fa9c7", "#b08968", "#a3a380", "#c98986"]
 
@@ -343,11 +349,23 @@ function ProductosTab({ rentab, loading, desde, hasta }: { rentab: RentabilidadP
                 }}
               />
               {cuadrantes.map((c) => (
-                <Scatter key={c} name={c} data={rentab.productos.filter((p) => p.cuadrante === c)} fill={CUADRANTE_COLOR[c]} fillOpacity={0.7} />
+                <Scatter key={c} name={c} data={rentab.productos.filter((p) => p.cuadrante === c)} fill={CUADRANTE_COLOR[c]} fillOpacity={0.8} />
               ))}
-              <Legend wrapperStyle={{ fontSize: 11 }} />
             </ScatterChart>
           </ResponsiveContainer>
+
+          {/* Concepto de cada cuadrante (además de leyenda de colores) */}
+          <div className="grid gap-2 sm:grid-cols-2 mt-3">
+            {cuadrantes.map((c) => (
+              <div key={c} className="flex items-start gap-2 rounded-lg border bg-stone-50/60 p-2.5">
+                <span className="mt-1 h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: CUADRANTE_COLOR[c] }} />
+                <div>
+                  <p className="text-sm font-semibold text-stone-800">{c}</p>
+                  <p className="text-xs text-stone-500">{CUADRANTE_INFO[c]}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
@@ -364,8 +382,8 @@ function ProductosTab({ rentab, loading, desde, hasta }: { rentab: RentabilidadP
               <YAxis yAxisId="l" tickFormatter={(v) => formatNumber(Number(v))} tick={{ fontSize: 11 }} width={64} />
               <YAxis yAxisId="r" orientation="right" domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} width={40} />
               <Tooltip formatter={(v: number, n) => (n === "acumPct" ? [`${v}%`, "Acumulado"] : [formatCurrency(Number(v)), "Utilidad"])} contentStyle={{ fontSize: 12 }} />
-              <Bar yAxisId="l" dataKey="utilidad" fill="#5D7B6F" radius={[3, 3, 0, 0]} />
-              <Line yAxisId="r" dataKey="acumPct" stroke="#C07A5C" strokeWidth={2} dot={false} />
+              <Bar yAxisId="l" dataKey="utilidad" fill="#6366f1" radius={[3, 3, 0, 0]} />
+              <Line yAxisId="r" dataKey="acumPct" stroke="#f97316" strokeWidth={2.5} dot={false} />
             </ComposedChart>
           </ResponsiveContainer>
         </CardContent>
