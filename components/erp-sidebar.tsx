@@ -4,7 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/contexts/auth-context"
-import { Home, ChevronRight, LayoutDashboard, ShoppingCart, FileText, ClipboardList, CreditCard, Settings, GraduationCap } from "lucide-react"
+import { Home, ChevronRight, LayoutDashboard, ShoppingCart, FileText, ClipboardList, CreditCard, Settings, GraduationCap, Sparkles } from "lucide-react"
 
 import {
   Sidebar,
@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/collapsible"
 import { MODULOS, CATEGORIAS_ORDEN, type Categoria, type ModuloGranular } from "@/lib/constants/modulos"
 import { usePedidosPendientes } from "@/lib/hooks/use-pedidos-pendientes"
+import { useActualizaciones } from "@/lib/hooks/use-actualizaciones"
 
 // Iconos por categoria (el contenedor del collapsible)
 const CATEGORIA_ICON: Record<Categoria, React.ComponentType<{ className?: string }>> = {
@@ -50,6 +51,7 @@ export function ERPSidebar() {
   const pathname = usePathname()
   const { user, hasModulo } = useAuth()
   const pedidosPendientes = usePedidosPendientes()
+  const { hayNueva: hayActualizacion } = useActualizaciones()
 
   // Agrupa los modulos granulares por categoria, filtrando por permiso
   // en CADA HOJA (no en el contenedor). Si una categoria queda vacia,
@@ -187,6 +189,21 @@ export function ERPSidebar() {
                   <Link href="/aprendizaje">
                     <GraduationCap className="h-4 w-4" />
                     <span>Aprendizaje</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  tooltip="Actualizaciones"
+                  isActive={pathname === "/actualizaciones" || pathname.startsWith("/actualizaciones/")}
+                >
+                  <Link href="/actualizaciones">
+                    <Sparkles className="h-4 w-4" />
+                    <span>Actualizaciones</span>
+                    {hayActualizacion && (
+                      <span className="ml-auto h-2 w-2 rounded-full bg-emerald-500" aria-label="Nueva actualización" />
+                    )}
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

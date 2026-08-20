@@ -35,6 +35,7 @@ SQL Editor de Supabase. Son en su mayoría idempotentes (`IF NOT EXISTS` /
 | 028 | `028-ventas-pagos-detalle-columnas.sql` | Repara `ventas_pagos_detalle`: agrega `porcentaje_comision`/`usuario` y default a `monto_recibido` (bases con esquema viejo) |
 | 029 | `029-reconstruir-desglose-pago.sql` | Reconstruye método + comisión de ventas viejas desde tesorería (preview + insert, opcional) |
 | 030 | `030-recalcular-recepcion.sql` | Recalcular Recepción: registra el módulo (solo INSERT; reutiliza tablas/RPC del 026) |
+| 031 | `031-analisis-financiero.sql` | Análisis Financiero: registra el módulo (solo INSERT; analítica de lectura sobre datos existentes) |
 | — | `add-almacen-to-ventas-encabezado.sql` | Agrega `almacen_id` a ventas (aplicar tras 011) |
 
 > **Huecos 006–008:** la numeración salta de 005 a 009. No faltan migraciones;

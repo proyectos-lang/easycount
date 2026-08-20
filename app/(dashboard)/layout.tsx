@@ -17,6 +17,7 @@ import {
 import { useAuth } from "@/lib/contexts/auth-context"
 import { RouteGuard } from "@/components/route-guard"
 import { BusquedaGlobal } from "@/components/busqueda-global"
+import { ActualizacionModal } from "@/components/actualizacion-modal"
 
 // Dynamic import with SSR disabled to prevent hydration mismatch from Radix IDs
 const ERPSidebar = dynamic(
@@ -138,6 +139,7 @@ export default function DashboardLayout({
           <RouteGuard>{children}</RouteGuard>
         </main>
       </SidebarInset>
+      <ActualizacionModal />
     </SidebarProvider>
   )
 }

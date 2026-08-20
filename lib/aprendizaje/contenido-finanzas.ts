@@ -309,4 +309,68 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
     ],
     keywords: ["corte", "dia", "resumen diario", "cuadre", "reporte dia", "pdf"],
   },
+  {
+    modulo: "Analisis Financiero",
+    titulo: "Análisis Financiero",
+    descripcion:
+      "Análisis integral de rentabilidad del negocio en un período: cómo se genera el valor, qué productos dan más o menos margen, dónde crecen los gastos y si los productos están bien costeados.",
+    queHace: [
+      "Trabaja sobre un rango de fechas libre con atajos (este mes, mes pasado, este año).",
+      "Resumen / P&L: cascada de Ingresos → CMV → Utilidad bruta → Gastos operativos → Comisiones → Utilidad neta, con márgenes; netea devoluciones.",
+      "Rentabilidad por producto: unidades, ingreso, utilidad y % de margen por producto, con cuadrante margen×volumen (Estrella, Vaca lechera, Nicho, Bajo desempeño) y Pareto de utilidad.",
+      "Análisis de gastos: desglose por categoría, concepto y proveedor; gasto como % de ventas; y detección de incrementos anómalos (vs promedio de meses previos y vs mes anterior).",
+      "Auditoría de costeo: lista de productos mal costeados (costo 0, costo ≥ precio, margen negativo) e historial de costo por producto reconstruido de compras/importaciones y ajustes.",
+      "Exporta a Excel la rentabilidad por producto y los gastos.",
+    ],
+    queNoHace: [
+      "No modifica datos: es solo lectura/análisis. Para corregir costos usa «Ajuste de Costo» o «Recalcular Recepción».",
+      "No guarda una serie histórica de costo: el historial por producto se reconstruye del kardex, las compras y la bitácora de ajustes.",
+      "La utilidad por producto usa precio − costo por línea (sin ISV ni descuento de factura), por lo que puede no cuadrar al centavo con la utilidad neta del P&L.",
+    ],
+    operaciones: [
+      {
+        titulo: "Saber si vendo mucho con poco margen o poco con mucho margen",
+        pasos: [
+          "Abre Finanzas → Análisis Financiero y elige el período.",
+          "Entra a «Rentabilidad por producto».",
+          "Mira el cuadrante margen×volumen: los puntos abajo-derecha (Vaca lechera) venden mucho con poco margen; arriba-izquierda (Nicho) venden poco con mucho margen; arriba-derecha (Estrella) es lo ideal.",
+          "Revisa el Pareto para ver cuántos productos concentran la utilidad.",
+        ],
+      },
+      {
+        titulo: "Detectar una fuga de dinero en gastos",
+        pasos: [
+          "Entra a «Análisis de gastos».",
+          "Observa la mayor categoría y el gasto como % de ventas.",
+          "En la tabla de anomalías, las filas resaltadas superan +30% contra el promedio de meses previos o contra el mes anterior.",
+        ],
+      },
+      {
+        titulo: "Auditar el costeo de un producto",
+        pasos: [
+          "Entra a «Auditoría de costeo».",
+          "Revisa la lista de productos mal costeados (costo en 0, costo ≥ precio o margen negativo).",
+          "Abajo, busca un producto y mira su historial de costo: entradas de compra/importación (con costos fijos) y ajustes previos.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        pregunta: "¿Por qué la utilidad neta del P&L no coincide con la suma de utilidades por producto?",
+        respuesta:
+          "El P&L usa las ventas totales (con ISV y descuento) y resta gastos y comisiones; la utilidad por producto usa precio − costo por línea (sin ISV ni descuento). Sirven para fines distintos: el P&L mide el resultado del negocio; la vista por producto compara márgenes entre productos.",
+      },
+      {
+        pregunta: "¿Cómo se marca un gasto como anómalo?",
+        respuesta:
+          "Se compara el gasto del mes por categoría contra el promedio de los meses previos y contra el mes anterior; si supera +30% en cualquiera de las dos, se resalta.",
+      },
+      {
+        pregunta: "¿De dónde sale el historial de costo si no se guarda?",
+        respuesta:
+          "Se reconstruye combinando el kardex (entradas de compra con su costo final), el contexto del lote en compras (importación, moneda, prorrateo) y la bitácora de ajustes de costo.",
+      },
+    ],
+    keywords: ["rentabilidad", "margen", "utilidad", "pareto", "cuadrante", "volumen", "gastos", "anomalia", "costeo", "auditoria", "pyl", "p&l", "fuga", "analisis"],
+  },
 ]
