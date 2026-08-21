@@ -73,41 +73,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const nombreEmpresa: string | null = razonSocial?.nombre_empresa ?? null
 
-        // 2) Permisos por modulo.
-        // Canonizamos cada nombre de permiso al nombre exacto del constants,
-        // para que sidebar y RouteGuard puedan hacer `hasModulo("Valoracion")`
-        // aun si la DB guarda "Valoración" (con tilde). Si un permiso no matchea
-        // ningun constants (modulo desconocido), se conserva tal cual.
+        // 2) Permisos por modulo. Se cargan SIEMPRE en dos pasos (ids ->
+        // catalogo de modulos) en vez de un JOIN embebido: el embed de PostgREST
+        // puede devolver null o error segun como este declarada la relacion FK,
+        // y no queremos que un problema de consulta deje al usuario sin permisos.
+        // Canonizamos cada nombre al exacto del constants (tolera tildes/plurales)
+        // para que sidebar y RouteGuard hagan `hasModulo("Valoracion")` aun si la
+        // DB guarda "Valoración". Un permiso desconocido se conserva tal cual.
         const canonizar = (nombres: (string | null | undefined)[]): string[] =>
           nombres.filter((n): n is string => !!n).map((db) => findModuloByDBName(db)?.nombre ?? db)
 
-        // Intento con JOIN embebido a `modulos`.
-        const { data: permisosData, error: permisosError } = await supabase
+        let modulosPermitidos: string[] = []
+        const { data: permRows, error: permisosError } = await supabase
           .from("permisos_usuarios")
-          .select("puede_ver, modulos(nombre)")
+          .select("modulo_id")
           .eq("usuario_id", perfil.id)
           .eq("puede_ver", true)
+        if (permisosError) console.log("Error cargando permisos:", permisosError)
 
-        let modulosPermitidos: string[]
-        if (permisosError) {
-          // Si el embed falla (p.ej. PostgREST no resuelve la relacion FK),
-          // cargamos en DOS pasos para no caer a "sin permisos" por un error de
-          // consulta. IMPORTANTE: nunca interpretamos un error como "acceso total".
-          console.log("Error cargando permisos (embed); reintentando en 2 pasos:", permisosError)
-          const { data: permRows } = await supabase
-            .from("permisos_usuarios")
-            .select("modulo_id")
-            .eq("usuario_id", perfil.id)
-            .eq("puede_ver", true)
-          const ids = (permRows || []).map((r: any) => r.modulo_id).filter((x: any) => x != null)
-          if (ids.length > 0) {
-            const { data: mods } = await supabase.from("modulos").select("id, nombre").in("id", ids)
-            modulosPermitidos = canonizar((mods || []).map((m: any) => m?.nombre))
-          } else {
-            modulosPermitidos = []
-          }
-        } else {
-          modulosPermitidos = canonizar((permisosData || []).map((p: any) => p?.modulos?.nombre))
+        const moduloIds = (permRows || []).map((r: any) => r.modulo_id).filter((x: any) => x != null)
+        if (moduloIds.length > 0) {
+          const { data: mods, error: modsError } = await supabase
+            .from("modulos")
+            .select("id, nombre")
+            .in("id", moduloIds)
+          if (modsError) console.log("Error cargando catalogo de modulos:", modsError)
+          modulosPermitidos = canonizar((mods || []).map((m: any) => m?.nombre))
         }
 
         return {
