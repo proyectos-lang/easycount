@@ -73,26 +73,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const nombreEmpresa: string | null = razonSocial?.nombre_empresa ?? null
 
-        // 2) Permisos por modulo
+        // 2) Permisos por modulo.
+        // Canonizamos cada nombre de permiso al nombre exacto del constants,
+        // para que sidebar y RouteGuard puedan hacer `hasModulo("Valoracion")`
+        // aun si la DB guarda "Valoración" (con tilde). Si un permiso no matchea
+        // ningun constants (modulo desconocido), se conserva tal cual.
+        const canonizar = (nombres: (string | null | undefined)[]): string[] =>
+          nombres.filter((n): n is string => !!n).map((db) => findModuloByDBName(db)?.nombre ?? db)
+
+        // Intento con JOIN embebido a `modulos`.
         const { data: permisosData, error: permisosError } = await supabase
           .from("permisos_usuarios")
           .select("puede_ver, modulos(nombre)")
           .eq("usuario_id", perfil.id)
           .eq("puede_ver", true)
 
+        let modulosPermitidos: string[]
         if (permisosError) {
-          console.log("Error cargando permisos:", permisosError)
+          // Si el embed falla (p.ej. PostgREST no resuelve la relacion FK),
+          // cargamos en DOS pasos para no caer a "sin permisos" por un error de
+          // consulta. IMPORTANTE: nunca interpretamos un error como "acceso total".
+          console.log("Error cargando permisos (embed); reintentando en 2 pasos:", permisosError)
+          const { data: permRows } = await supabase
+            .from("permisos_usuarios")
+            .select("modulo_id")
+            .eq("usuario_id", perfil.id)
+            .eq("puede_ver", true)
+          const ids = (permRows || []).map((r: any) => r.modulo_id).filter((x: any) => x != null)
+          if (ids.length > 0) {
+            const { data: mods } = await supabase.from("modulos").select("id, nombre").in("id", ids)
+            modulosPermitidos = canonizar((mods || []).map((m: any) => m?.nombre))
+          } else {
+            modulosPermitidos = []
+          }
+        } else {
+          modulosPermitidos = canonizar((permisosData || []).map((p: any) => p?.modulos?.nombre))
         }
-
-        // Canonizamos cada nombre de permiso al nombre exacto del constants.
-        // Asi sidebar y RouteGuard pueden hacer `hasModulo("Valoracion")` aun
-        // si la DB guarda "Valoración" (con tilde) o "Dashboard de Ventas"
-        // en vez de "Dashboard Ventas". Si un permiso de la DB no matchea
-        // ningun constants (modulo desconocido), se conserva tal cual.
-        const modulosPermitidos: string[] = (permisosData || [])
-          .map((p: any) => p?.modulos?.nombre)
-          .filter(Boolean)
-          .map((dbName: string) => findModuloByDBName(dbName)?.nombre ?? dbName)
 
         return {
           usuario_id: perfil.id,
@@ -307,11 +323,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hasModulo = React.useCallback(
     (nombre: string) => {
       if (!user) return false
+      // Los administradores ven todos los modulos.
       if ((user.rol || "").trim().toLowerCase() === "admin") return true
-      // Fallback defensivo: si el usuario aun no tiene permisos configurados,
-      // le damos acceso por defecto (estado inicial post-onboarding).
-      if (!user.modulos_permitidos || user.modulos_permitidos.length === 0) return true
-      return user.modulos_permitidos.includes(nombre)
+      // Cualquier otro usuario ve SOLO los modulos con permiso explicito
+      // (`permisos_usuarios.puede_ver = true`). Sin permisos => no ve nada
+      // (deny by default). NUNCA se concede acceso total por lista vacia.
+      return (user.modulos_permitidos || []).includes(nombre)
     },
     [user]
   )
