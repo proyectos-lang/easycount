@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import {
-  Landmark, Wallet, TrendingUp, TrendingDown, DollarSign, Scale,
-  ArrowRightLeft, Plus, Minus,
+  Landmark, Wallet, ArrowRightLeft, Plus, Minus,
 } from "lucide-react"
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -20,6 +19,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Indicador } from "@/components/ui/indicador"
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter,
+} from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { formatCurrency } from "@/lib/utils/format"
 import {
@@ -67,46 +70,67 @@ export default function DashboardFinanzasPage() {
         </div>
       </div>
 
-      {/* KPIs principales */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <KpiCard title="Ventas del Mes" value={resumen?.ventasDelMes} loading={loading} color="#5D7B6F" icon={<DollarSign className="h-4 w-4" />} />
-        <KpiCard title="Por Cobrar (CxC)" value={resumen?.cxcPendiente} loading={loading} color="#7C9A92" icon={<TrendingUp className="h-4 w-4" />} />
-        <KpiCard title="Por Pagar (CxP)" value={resumen?.cxpPendiente} loading={loading} color="#C07A5C" icon={<TrendingDown className="h-4 w-4" />} />
-        <KpiCard title="Balance de Bancos" value={resumen?.balanceBancos} loading={loading} color="#D4A574" icon={<Scale className="h-4 w-4" />} hint="Bancos + Caja + CxC − CxP" />
-      </div>
+      {/* Indicadores (contenedor único) */}
+      <Card className="border-stone-200 shadow-sm">
+        <CardContent className="p-4 md:p-5">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-4 md:divide-x md:divide-stone-200 [&>*]:md:pl-4 [&>*:first-child]:md:pl-0">
+            <Indicador loading={loading} label="Ventas del mes" value={formatCurrency(resumen?.ventasDelMes || 0)} />
+            <Indicador loading={loading} label="Por cobrar (CxC)" value={formatCurrency(resumen?.cxcPendiente || 0)} valueClass="text-emerald-700" />
+            <Indicador loading={loading} label="Por pagar (CxP)" value={formatCurrency(resumen?.cxpPendiente || 0)} valueClass="text-rose-700" />
+            <Indicador loading={loading} label="Balance de bancos" value={formatCurrency(resumen?.balanceBancos || 0)} sub="Bancos + Caja + CxC − CxP" />
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Saldos por cuenta + caja */}
-      <div>
-        <h2 className="text-lg font-semibold text-stone-700 mb-3">Saldos por cuenta</h2>
-        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      {/* Saldos por cuenta (tabla) */}
+      <Card className="border-stone-200 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base text-stone-800">Saldos por cuenta</CardTitle>
+          <CardDescription>Bancos y caja chica.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
           {loading ? (
-            [1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)
+            <div className="p-4 space-y-2">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
+            </div>
           ) : (
-            <>
-              {(resumen?.cuentas || []).map((c) => (
-                <Card key={c.cuenta_id} className="border-l-4 border-l-sky-500">
-                  <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                    <CardTitle className="text-sm text-stone-500 truncate">{c.nombre}</CardTitle>
-                    <Landmark className="h-4 w-4 text-sky-600 shrink-0" />
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-xl font-bold text-stone-800">{formatCurrency(c.saldo)}</p>
-                  </CardContent>
-                </Card>
-              ))}
-              <Card className="border-l-4 border-l-amber-500">
-                <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                  <CardTitle className="text-sm text-stone-500">Caja Chica</CardTitle>
-                  <Wallet className="h-4 w-4 text-amber-600 shrink-0" />
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xl font-bold text-stone-800">{formatCurrency(resumen?.saldoCaja || 0)}</p>
-                </CardContent>
-              </Card>
-            </>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-stone-50">
+                    <TableHead>Cuenta</TableHead>
+                    <TableHead className="text-right">Saldo</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(resumen?.cuentas || []).map((c) => (
+                    <TableRow key={c.cuenta_id}>
+                      <TableCell className="font-medium text-stone-800">
+                        <span className="inline-flex items-center gap-2"><Landmark className="h-4 w-4 text-sky-600" />{c.nombre}</span>
+                      </TableCell>
+                      <TableCell className="text-right font-mono">{formatCurrency(c.saldo)}</TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow>
+                    <TableCell className="font-medium text-stone-800">
+                      <span className="inline-flex items-center gap-2"><Wallet className="h-4 w-4 text-amber-600" />Caja Chica</span>
+                    </TableCell>
+                    <TableCell className="text-right font-mono">{formatCurrency(resumen?.saldoCaja || 0)}</TableCell>
+                  </TableRow>
+                </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell className="font-semibold">Total</TableCell>
+                    <TableCell className="text-right font-mono font-semibold">
+                      {formatCurrency((resumen?.cuentas || []).reduce((a, c) => a + c.saldo, 0) + (resumen?.saldoCaja || 0))}
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
+              </Table>
+            </div>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Flujo de caja mensual */}
       <Card>
@@ -133,25 +157,6 @@ export default function DashboardFinanzasPage() {
         </CardContent>
       </Card>
     </div>
-  )
-}
-
-function KpiCard({ title, value, loading, color, icon, hint }: {
-  title: string; value?: number; loading: boolean; color: string; icon: React.ReactNode; hint?: string
-}) {
-  return (
-    <Card className="border-l-4" style={{ borderLeftColor: color }}>
-      <CardHeader className="pb-2 flex flex-row items-center justify-between">
-        <CardTitle className="text-sm text-stone-500">{title}</CardTitle>
-        <span className="rounded-lg p-1.5" style={{ backgroundColor: `${color}22`, color }}>{icon}</span>
-      </CardHeader>
-      <CardContent>
-        {loading ? <Skeleton className="h-7 w-24" /> : (
-          <p className="text-2xl font-bold text-stone-800">{formatCurrency(value || 0)}</p>
-        )}
-        {hint && <p className="text-xs text-stone-400 mt-1">{hint}</p>}
-      </CardContent>
-    </Card>
   )
 }
 

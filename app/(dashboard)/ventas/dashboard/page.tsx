@@ -4,37 +4,26 @@ import * as React from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Progress } from "@/components/ui/progress"
+import { Indicador } from "@/components/ui/indicador"
 import { useToast } from "@/hooks/use-toast"
-import { 
-  DollarSign, 
-  TrendingUp, 
-  TrendingDown,
-  Receipt, 
-  Users, 
-  Package,
+import {
+  TrendingUp,
   Warehouse,
   BarChart3,
-  Target,
-  ArrowUpRight,
-  ArrowDownRight,
   Crown,
   ShoppingCart,
-  Percent,
   Calendar,
   RefreshCw,
-  Banknote,
-  CreditCard
 } from "lucide-react"
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   BarChart,
   Bar,
@@ -127,11 +116,7 @@ export default function VentasDashboardPage() {
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-10 w-48" />
         </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-32" />
-          ))}
-        </div>
+        <Skeleton className="h-40 w-full" />
         <div className="grid gap-4 lg:grid-cols-2">
           <Skeleton className="h-80" />
           <Skeleton className="h-80" />
@@ -141,6 +126,9 @@ export default function VentasDashboardPage() {
   }
 
   const crecimientoPositivo = (data?.crecimientoMensual || 0) >= 0
+  const ventasNetas = pagos && pagos.totalBruto > 0
+    ? (data?.ventasTotales || 0) - pagos.totalComisiones
+    : (data?.ventasTotales || 0)
 
   return (
     <div className="space-y-6">
@@ -152,7 +140,7 @@ export default function VentasDashboardPage() {
             Analisis comercial y metricas de rendimiento
           </p>
         </div>
-        
+
         <div className="flex flex-wrap items-center gap-3">
           <Select value={anioFiltro} onValueChange={(v) => { setAnioFiltro(v); if (v === "todos") setMesFiltro("todos") }}>
             <SelectTrigger className="w-32">
@@ -166,9 +154,9 @@ export default function VentasDashboardPage() {
               ))}
             </SelectContent>
           </Select>
-          
-          <Select 
-            value={mesFiltro} 
+
+          <Select
+            value={mesFiltro}
             onValueChange={setMesFiltro}
             disabled={anioFiltro === "todos"}
           >
@@ -182,9 +170,9 @@ export default function VentasDashboardPage() {
               ))}
             </SelectContent>
           </Select>
-          
-          <Button 
-            variant="outline" 
+
+          <Button
+            variant="outline"
             size="icon"
             onClick={handleRefresh}
             disabled={refreshing}
@@ -194,170 +182,40 @@ export default function VentasDashboardPage() {
         </div>
       </div>
 
-      {/* Main KPIs */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* Ventas Totales: Bruta vs Neta */}
-        {/*
-          Bruta = lo facturado al cliente (data.ventasTotales).
-          Neta  = bruta - comisiones bancarias (pagos.totalComisiones).
-          Si la migracion 011 esta pendiente (featurePending) Neta == Bruta y
-          comisiones = 0, asi que la UI se degrada elegantemente.
-        */}
-        <Card className="bg-gradient-to-br from-stone-800 to-stone-900 text-white border-0">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardDescription className="text-stone-300">Ventas Totales</CardDescription>
-              <DollarSign className="h-5 w-5 text-stone-400" />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-stone-400">Bruta</p>
-              <p className="text-2xl font-bold leading-tight">{formatCompact(data?.ventasTotales || 0)}</p>
-            </div>
-            <div className="border-t border-stone-700 pt-2">
-              <p className="text-[10px] uppercase tracking-wider text-emerald-300/80">Neta</p>
-              <p className="text-xl font-semibold leading-tight text-emerald-300">
-                {formatCompact(
-                  pagos && pagos.totalBruto > 0
-                    ? (data?.ventasTotales || 0) - pagos.totalComisiones
-                    : (data?.ventasTotales || 0)
-                )}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {crecimientoPositivo ? (
-                <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 gap-1">
-                  <ArrowUpRight className="h-3 w-3" />
-                  {data?.crecimientoMensual.toFixed(1)}%
-                </Badge>
-              ) : (
-                <Badge className="bg-red-500/20 text-red-300 border-red-500/30 gap-1">
-                  <ArrowDownRight className="h-3 w-3" />
-                  {Math.abs(data?.crecimientoMensual || 0).toFixed(1)}%
-                </Badge>
-              )}
-              <span className="text-xs text-stone-400">vs mes anterior</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Ganancia Bruta */}
-        <Card className="bg-gradient-to-br from-emerald-600 to-emerald-700 text-white border-0">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardDescription className="text-emerald-100">Ganancia Bruta</CardDescription>
-              <TrendingUp className="h-5 w-5 text-emerald-200" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{formatCompact(data?.gananciaBruta || 0)}</p>
-            <div className="flex items-center gap-2 mt-2">
-              <Badge className="bg-white/20 text-white border-white/30">
-                {data?.margenPromedio.toFixed(1)}% margen
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Facturas */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardDescription>Facturas Emitidas</CardDescription>
-              <Receipt className="h-5 w-5 text-muted-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-stone-800">{formatNumber(data?.cantidadFacturas || 0)}</p>
-            <p className="text-sm text-muted-foreground mt-2">
-              Ticket promedio: <span className="font-medium text-stone-700">{formatCurrency(data?.ticketPromedio || 0)}</span>
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Unidades */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardDescription>Unidades Vendidas</CardDescription>
-              <Package className="h-5 w-5 text-muted-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-stone-800">{formatNumber(data?.unidadesVendidas || 0)}</p>
-            <p className="text-sm text-muted-foreground mt-2">
-              <span className="font-medium text-stone-700">{data?.productosVendidos}</span> productos diferentes
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Secondary KPIs */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-l-4 border-l-amber-500">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Clientes Activos</p>
-                <p className="text-2xl font-bold">{data?.clientesActivos || 0}</p>
-              </div>
-              <Users className="h-8 w-8 text-amber-500" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/*
-          Total Comisiones Pagadas: suma de (monto_bruto - monto_neto) de
-          ventas_pagos_detalle en el periodo seleccionado. Es el "costo" oculto
-          que se le paga a la red bancaria por cobrar con tarjeta/link.
-        */}
-        <Card className="border-l-4 border-l-rose-500">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Comisiones Pagadas</p>
-                <p className="text-2xl font-bold text-rose-700">
-                  {formatCompact(pagos?.totalComisiones || 0)}
-                </p>
-                {pagos && pagos.totalBruto > 0 && (
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {((pagos.totalComisiones / pagos.totalBruto) * 100).toFixed(2)}% sobre bruto
-                  </p>
-                )}
-                {pagos?.featurePending && (
-                  <p className="text-xs text-amber-600 mt-0.5">Pendiente migracion 011</p>
-                )}
-              </div>
-              <CreditCard className="h-8 w-8 text-rose-500" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-blue-500">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Ventas Este Mes</p>
-                <p className="text-2xl font-bold">{formatCompact(data?.ventasMesActual || 0)}</p>
-              </div>
-              <BarChart3 className="h-8 w-8 text-blue-500" />
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="border-l-4 border-l-purple-500">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Margen Promedio</p>
-                <p className="text-2xl font-bold">{data?.margenPromedio.toFixed(1)}%</p>
-              </div>
-              <Percent className="h-8 w-8 text-purple-500" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Indicadores (contenedor único) */}
+      <Card className="border-stone-200 shadow-sm">
+        <CardContent className="p-4 md:p-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-5">
+            <Indicador
+              label="Ventas brutas"
+              value={formatCompact(data?.ventasTotales || 0)}
+              sub={`${crecimientoPositivo ? "▲" : "▼"} ${Math.abs(data?.crecimientoMensual || 0).toFixed(1)}% vs mes anterior`}
+            />
+            <Indicador label="Ventas netas" value={formatCompact(ventasNetas)} valueClass="text-emerald-700" sub="Bruta − comisiones" />
+            <Indicador label="Ganancia bruta" value={formatCompact(data?.gananciaBruta || 0)} valueClass="text-emerald-700" sub={`${(data?.margenPromedio || 0).toFixed(1)}% margen`} />
+            <Indicador label="Facturas" value={formatNumber(data?.cantidadFacturas || 0)} sub={`Ticket ${formatCurrency(data?.ticketPromedio || 0)}`} />
+            <Indicador label="Unidades" value={formatNumber(data?.unidadesVendidas || 0)} sub={`${data?.productosVendidos || 0} productos`} />
+            <Indicador label="Clientes activos" value={formatNumber(data?.clientesActivos || 0)} />
+            <Indicador
+              label="Comisiones"
+              value={formatCompact(pagos?.totalComisiones || 0)}
+              valueClass="text-rose-700"
+              sub={pagos && pagos.totalBruto > 0 ? `${((pagos.totalComisiones / pagos.totalBruto) * 100).toFixed(2)}% sobre bruto` : undefined}
+            />
+            <Indicador label="Ventas este mes" value={formatCompact(data?.ventasMesActual || 0)} />
+            <Indicador
+              label="Facturas / cliente"
+              value={data?.cantidadFacturas && data?.clientesActivos ? (data.cantidadFacturas / data.clientesActivos).toFixed(1) : "0"}
+              sub="Frecuencia de compra"
+            />
+            <Indicador
+              label="Uds / factura"
+              value={data?.unidadesVendidas && data?.cantidadFacturas ? (data.unidadesVendidas / data.cantidadFacturas).toFixed(1) : "0"}
+              sub="Ítems promedio"
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Charts Row */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -386,30 +244,30 @@ export default function VentasDashboardPage() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" />
                   <XAxis dataKey="mes" tick={{ fill: '#78716c', fontSize: 12 }} />
-                  <YAxis 
-                    tickFormatter={(v) => `${(v/1000).toFixed(0)}K`} 
+                  <YAxis
+                    tickFormatter={(v) => `${(v/1000).toFixed(0)}K`}
                     tick={{ fill: '#78716c', fontSize: 12 }}
                   />
-                  <Tooltip 
+                  <Tooltip
                     formatter={(value: number) => formatCurrency(value)}
                     contentStyle={{ backgroundColor: '#fafaf9', borderColor: '#e7e5e4' }}
                   />
                   <Legend />
-                  <Area 
-                    type="monotone" 
-                    dataKey="ventas" 
+                  <Area
+                    type="monotone"
+                    dataKey="ventas"
                     name="Ventas"
-                    stroke="#78716c" 
-                    fillOpacity={1} 
-                    fill="url(#colorVentas)" 
+                    stroke="#78716c"
+                    fillOpacity={1}
+                    fill="url(#colorVentas)"
                   />
-                  <Area 
-                    type="monotone" 
-                    dataKey="ganancia" 
+                  <Area
+                    type="monotone"
+                    dataKey="ganancia"
                     name="Ganancia"
-                    stroke="#10b981" 
-                    fillOpacity={1} 
-                    fill="url(#colorGanancia)" 
+                    stroke="#10b981"
+                    fillOpacity={1}
+                    fill="url(#colorGanancia)"
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -436,11 +294,11 @@ export default function VentasDashboardPage() {
                 <BarChart data={data?.ventasPorAnio}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" />
                   <XAxis dataKey="anio" tick={{ fill: '#78716c', fontSize: 12 }} />
-                  <YAxis 
+                  <YAxis
                     tickFormatter={(v) => `${(v/1000).toFixed(0)}K`}
                     tick={{ fill: '#78716c', fontSize: 12 }}
                   />
-                  <Tooltip 
+                  <Tooltip
                     formatter={(value: number) => formatCurrency(value)}
                     contentStyle={{ backgroundColor: '#fafaf9', borderColor: '#e7e5e4' }}
                   />
@@ -509,7 +367,7 @@ export default function VentasDashboardPage() {
               data?.topClientes.slice(0, 5).map((cliente, index) => {
                 const maxVentas = data.topClientes[0].ventas
                 const percentage = (cliente.ventas / maxVentas) * 100
-                
+
                 return (
                   <div key={cliente.id} className="space-y-1">
                     <div className="flex items-center justify-between">
@@ -554,7 +412,7 @@ export default function VentasDashboardPage() {
               data?.topProductos.slice(0, 5).map((producto, index) => {
                 const maxVentas = data.topProductos[0].ventas
                 const percentage = (producto.ventas / maxVentas) * 100
-                
+
                 return (
                   <div key={producto.id} className="space-y-1">
                     <div className="flex items-center justify-between">
@@ -616,13 +474,13 @@ export default function VentasDashboardPage() {
                     <Tooltip formatter={(value: number) => formatCurrency(value)} />
                   </PieChart>
                 </ResponsiveContainer>
-                
+
                 <div className="space-y-2">
                   {data?.topAlmacenes.map((almacen, index) => (
                     <div key={almacen.id} className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <div 
-                          className="w-3 h-3 rounded-full" 
+                        <div
+                          className="w-3 h-3 rounded-full"
                           style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
                         />
                         <span className="text-sm">{almacen.nombre}</span>
@@ -641,55 +499,6 @@ export default function VentasDashboardPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Performance Indicators */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Target className="h-4 w-4" />
-            Indicadores de Rendimiento
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <div className="text-center p-4 rounded-lg bg-stone-50">
-              <p className="text-3xl font-bold text-stone-800">
-                {formatCurrency(data?.ticketPromedio || 0)}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">Ticket Promedio</p>
-              <p className="text-xs text-muted-foreground">por factura</p>
-            </div>
-            
-            <div className="text-center p-4 rounded-lg bg-emerald-50">
-              <p className="text-3xl font-bold text-emerald-700">
-                {data?.margenPromedio.toFixed(1)}%
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">Margen Bruto</p>
-              <p className="text-xs text-muted-foreground">promedio</p>
-            </div>
-            
-            <div className="text-center p-4 rounded-lg bg-blue-50">
-              <p className="text-3xl font-bold text-blue-700">
-                {data?.cantidadFacturas && data?.clientesActivos 
-                  ? (data.cantidadFacturas / data.clientesActivos).toFixed(1)
-                  : '0'}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">Facturas/Cliente</p>
-              <p className="text-xs text-muted-foreground">frecuencia de compra</p>
-            </div>
-            
-            <div className="text-center p-4 rounded-lg bg-amber-50">
-              <p className="text-3xl font-bold text-amber-700">
-                {data?.unidadesVendidas && data?.cantidadFacturas
-                  ? (data.unidadesVendidas / data.cantidadFacturas).toFixed(1)
-                  : '0'}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">Uds/Factura</p>
-              <p className="text-xs text-muted-foreground">items promedio</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }

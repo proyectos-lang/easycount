@@ -6,11 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Indicador } from "@/components/ui/indicador"
 import {
-  Warehouse,
-  CreditCard,
-  TrendingUp,
-  ShoppingCart,
   AlertTriangle,
   Truck,
   Users,
@@ -175,104 +172,17 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid gap-3 md:gap-5 grid-cols-2 lg:grid-cols-4">
-        {/* Valor Inventario */}
-        <Card className="card-elevated rounded-xl md:rounded-2xl border-stone-200/60 border-l-4 border-l-[#5D7B6F] bg-white">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 md:p-6 pb-1 md:pb-2">
-            <CardTitle className="text-xs md:text-sm font-medium text-stone-600">
-              Valor Inventario
-            </CardTitle>
-            <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg md:rounded-xl bg-[#5D7B6F]/10 flex items-center justify-center">
-              <Warehouse className="h-4 w-4 md:h-5 md:w-5 text-[#5D7B6F]" />
-            </div>
-          </CardHeader>
-          <CardContent className="p-3 md:p-6 pt-0">
-            {loading ? (
-              <Skeleton className="h-6 md:h-8 w-24 md:w-32" />
-            ) : (
-              <div className="text-lg md:text-2xl font-bold text-stone-800">
-                {formatCurrency(metrics?.valorInventario || 0)}
-              </div>
-            )}
-            <p className="text-[10px] md:text-xs text-stone-500 mt-1 hidden sm:block">
-              Patrimonio en productos
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Cuentas por Cobrar */}
-        <Card className="card-elevated rounded-xl md:rounded-2xl border-stone-200/60 border-l-4 border-l-[#C07A5C] bg-white">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 md:p-6 pb-1 md:pb-2">
-            <CardTitle className="text-xs md:text-sm font-medium text-stone-600">
-              Por Cobrar
-            </CardTitle>
-            <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg md:rounded-xl bg-[#C07A5C]/10 flex items-center justify-center">
-              <CreditCard className="h-4 w-4 md:h-5 md:w-5 text-[#C07A5C]" />
-            </div>
-          </CardHeader>
-          <CardContent className="p-3 md:p-6 pt-0">
-            {loading ? (
-              <Skeleton className="h-6 md:h-8 w-24 md:w-32" />
-            ) : (
-              <div className="text-lg md:text-2xl font-bold text-stone-800">
-                {formatCurrency(metrics?.cuentasPorCobrar || 0)}
-              </div>
-            )}
-            <p className="text-[10px] md:text-xs text-stone-500 mt-1 hidden sm:block">
-              Cartera pendiente
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Utilidad Bruta */}
-        <Card className="card-elevated rounded-xl md:rounded-2xl border-stone-200/60 border-l-4 border-l-[#7C9A92] bg-white">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 md:p-6 pb-1 md:pb-2">
-            <CardTitle className="text-xs md:text-sm font-medium text-stone-600">
-              Utilidad Bruta
-            </CardTitle>
-            <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg md:rounded-xl bg-[#7C9A92]/10 flex items-center justify-center">
-              <TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-[#7C9A92]" />
-            </div>
-          </CardHeader>
-          <CardContent className="p-3 md:p-6 pt-0">
-            {loading ? (
-              <Skeleton className="h-6 md:h-8 w-24 md:w-32" />
-            ) : (
-              <div className="text-lg md:text-2xl font-bold text-stone-800">
-                {formatCurrency(metrics?.utilidadBruta || 0)}
-              </div>
-            )}
-            <p className="text-[10px] md:text-xs text-stone-500 mt-1 hidden sm:block">
-              Ganancia acumulada
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Ventas del Mes */}
-        <Card className="card-elevated rounded-xl md:rounded-2xl border-stone-200/60 border-l-4 border-l-[#D4A574] bg-white">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 md:p-6 pb-1 md:pb-2">
-            <CardTitle className="text-xs md:text-sm font-medium text-stone-600">
-              Ventas Mes
-            </CardTitle>
-            <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg md:rounded-xl bg-[#D4A574]/10 flex items-center justify-center">
-              <ShoppingCart className="h-4 w-4 md:h-5 md:w-5 text-[#D4A574]" />
-            </div>
-          </CardHeader>
-          <CardContent className="p-3 md:p-6 pt-0">
-            {loading ? (
-              <Skeleton className="h-6 md:h-8 w-24 md:w-32" />
-            ) : (
-              <div className="text-lg md:text-2xl font-bold text-stone-800">
-                {formatCurrency(metrics?.ventasMes || 0)}
-              </div>
-            )}
-            <p className="text-[10px] md:text-xs text-stone-500 mt-1 hidden sm:block">
-              {metrics?.ventasMesCount || 0} facturas
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Indicadores (contenedor único) */}
+      <Card className="border-stone-200 shadow-sm bg-white">
+        <CardContent className="p-4 md:p-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-4 md:divide-x md:divide-stone-200 [&>*]:md:pl-4 [&>*:first-child]:md:pl-0">
+            <Indicador loading={loading} label="Valor inventario" value={formatCurrency(metrics?.valorInventario || 0)} sub="Patrimonio en productos" />
+            <Indicador loading={loading} label="Por cobrar" value={formatCurrency(metrics?.cuentasPorCobrar || 0)} sub="Cartera pendiente" valueClass="text-amber-700" />
+            <Indicador loading={loading} label="Utilidad bruta" value={formatCurrency(metrics?.utilidadBruta || 0)} sub="Ganancia acumulada" valueClass="text-emerald-700" />
+            <Indicador loading={loading} label="Ventas del mes" value={formatCurrency(metrics?.ventasMes || 0)} sub={`${metrics?.ventasMesCount || 0} facturas`} />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Charts Row */}
       <div className="grid gap-4 md:gap-6 lg:grid-cols-2">

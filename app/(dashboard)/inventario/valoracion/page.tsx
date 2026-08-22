@@ -45,19 +45,10 @@ import { useToast } from "@/hooks/use-toast"
 import { getValoracionInventarioExtendida, getValoracionPorAlmacen, type ProductoValoracionExtendida } from "@/lib/services/inventario"
 import { getAlmacenes, type Almacen } from "@/lib/services/catalogos"
 import { exportToXlsx } from "@/lib/utils/export"
+import { Indicador } from "@/components/ui/indicador"
 
 type EstadoInventario = "todos" | "con_stock" | "sin_stock" | "stock_bajo"
 type RotacionFiltro = "todos" | "sin_ventas" | "mas_30_dias" | "mas_60_dias" | "mas_90_dias"
-
-/** Indicador compacto para el contenedor de resumen. */
-function Indicador({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
-  return (
-    <div className="md:px-4 md:first:pl-0">
-      <p className="text-[11px] uppercase tracking-wide text-stone-500">{label}</p>
-      <p className={`mt-0.5 text-lg md:text-xl font-semibold text-stone-800 tabular-nums ${valueClass || ""}`}>{value}</p>
-    </div>
-  )
-}
 
 /** Chip-filtro de estado (con stock / stock bajo / sin stock). */
 function FiltroChip({ label, count, active, onClick, color = "neutral" }: {
@@ -350,7 +341,7 @@ export default function ValoracionPage() {
       {/* Contenedor único de indicadores + filtros de estado */}
       <Card className="border-stone-200 shadow-sm">
         <CardContent className="p-4 md:p-5 space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-x-4 gap-y-4 md:divide-x md:divide-stone-200">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-x-4 gap-y-4 md:divide-x md:divide-stone-200 [&>*]:md:pl-4 [&>*:first-child]:md:pl-0">
             <Indicador label="Valoración (costo)" value={formatCurrency(totales.valorCosto)} />
             <Indicador label="Valor comercial" value={formatCurrency(totales.valorComercial)} valueClass="text-emerald-700" />
             <Indicador label="Margen potencial" value={formatCurrency(totales.margenPotencial)} valueClass={totales.margenPotencial >= 0 ? "text-emerald-700" : "text-red-600"} />
