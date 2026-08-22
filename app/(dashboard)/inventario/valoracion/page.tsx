@@ -1,33 +1,21 @@
 "use client"
 
 import * as React from "react"
-import { 
-  DollarSign, 
-  Package, 
-  FileSpreadsheet, 
-  TrendingUp, 
-  Boxes,
+import {
+  DollarSign,
+  Package,
   Warehouse,
   Search,
   Filter,
   ChevronDown,
   ChevronRight,
-  AlertTriangle,
-  CheckCircle2,
-  XCircle,
-  BarChart3,
-  PieChart,
-  Clock,
-  TrendingDown,
   CalendarClock,
   Download,
-  MapPin
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TablePaginator } from "@/components/ui/table-paginator"
@@ -38,6 +26,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableFooter,
 } from "@/components/ui/table"
 import {
   Select,
@@ -51,18 +40,68 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
 import { useToast } from "@/hooks/use-toast"
 import { getValoracionInventarioExtendida, getValoracionPorAlmacen, type ProductoValoracionExtendida } from "@/lib/services/inventario"
 import { getAlmacenes, type Almacen } from "@/lib/services/catalogos"
 import { exportToXlsx } from "@/lib/utils/export"
-import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from "recharts"
-
-const CHART_COLORS = ['#abcde0', '#8fbdd4', '#73adc8', '#579dbc', '#3b8db0', '#1f7da4', '#039798']
 
 type EstadoInventario = "todos" | "con_stock" | "sin_stock" | "stock_bajo"
 type RotacionFiltro = "todos" | "sin_ventas" | "mas_30_dias" | "mas_60_dias" | "mas_90_dias"
+
+/** Indicador compacto para el contenedor de resumen. */
+function Indicador({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
+  return (
+    <div className="md:px-4 md:first:pl-0">
+      <p className="text-[11px] uppercase tracking-wide text-stone-500">{label}</p>
+      <p className={`mt-0.5 text-lg md:text-xl font-semibold text-stone-800 tabular-nums ${valueClass || ""}`}>{value}</p>
+    </div>
+  )
+}
+
+/** Chip-filtro de estado (con stock / stock bajo / sin stock). */
+function FiltroChip({ label, count, active, onClick, color = "neutral" }: {
+  label: string; count: number; active: boolean; onClick: () => void; color?: "neutral" | "emerald" | "amber" | "red"
+}) {
+  const activeCls: Record<string, string> = {
+    neutral: "bg-stone-800 text-white ring-stone-800",
+    emerald: "bg-emerald-600 text-white ring-emerald-600",
+    amber: "bg-amber-500 text-white ring-amber-500",
+    red: "bg-red-600 text-white ring-red-600",
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ring-1 transition ${
+        active ? activeCls[color] : "bg-white text-stone-600 ring-stone-200 hover:bg-stone-50"
+      }`}
+    >
+      {label}
+      <span className={`rounded-full px-1.5 text-[10px] leading-4 ${active ? "bg-white/25" : "bg-stone-100 text-stone-600"}`}>{count}</span>
+    </button>
+  )
+}
+
+/** Chip compacto para el análisis de rotación. */
+function RotChip({ label, value, active, onClick, color }: {
+  label: string; value: number; active: boolean; onClick: () => void; color: "red" | "orange" | "amber" | "stone"
+}) {
+  const ring: Record<string, string> = { red: "ring-red-300", orange: "ring-orange-300", amber: "ring-amber-300", stone: "ring-stone-400" }
+  const dot: Record<string, string> = { red: "bg-red-500", orange: "bg-orange-500", amber: "bg-amber-500", stone: "bg-stone-500" }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left transition ${
+        active ? `bg-stone-50 ring-2 ${ring[color]} border-transparent` : "bg-white border-stone-200 hover:bg-stone-50"
+      }`}
+    >
+      <span className="flex items-center gap-2 text-xs text-stone-600"><span className={`h-2 w-2 rounded-full ${dot[color]}`} />{label}</span>
+      <span className="text-lg font-semibold text-stone-800 tabular-nums">{value}</span>
+    </button>
+  )
+}
 
 export default function ValoracionPage() {
   const { toast } = useToast()
@@ -97,9 +136,9 @@ export default function ValoracionPage() {
   async function loadProductos() {
     // Show table skeleton while loading
     if (!loading) setLoadingTable(true)
-    
+
     let valoracionRes
-    
+
     if (almacenFiltro === "todos") {
       // Get all products with consolidated stock
       valoracionRes = await getValoracionInventarioExtendida()
@@ -107,13 +146,13 @@ export default function ValoracionPage() {
       // Get products filtered by specific almacen
       valoracionRes = await getValoracionPorAlmacen(parseInt(almacenFiltro))
     }
-    
+
     if (valoracionRes.error) {
       toast({ title: "Error", description: valoracionRes.error, variant: "destructive" })
     } else {
       setProductos(valoracionRes.data)
     }
-    
+
     setLoading(false)
     setLoadingTable(false)
   }
@@ -121,29 +160,29 @@ export default function ValoracionPage() {
   const productosFiltrados = React.useMemo(() => {
     return productos.filter(p => {
       // Search filter
-      const matchesSearch = 
+      const matchesSearch =
         p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.codigo_barras?.toLowerCase().includes(searchTerm.toLowerCase())
-      
+
       // Status filter
       let matchesEstado = true
       if (estadoFiltro === "con_stock") matchesEstado = p.stock_total > 0
       if (estadoFiltro === "sin_stock") matchesEstado = p.stock_total === 0
       if (estadoFiltro === "stock_bajo") matchesEstado = p.stock_total > 0 && p.stock_total <= 10
-      
+
       // Warehouse filter
       let matchesAlmacen = true
       if (almacenFiltro !== "todos") {
         matchesAlmacen = p.stock_por_almacen.some(s => s.almacen_id === parseInt(almacenFiltro))
       }
-      
+
       // Rotation filter
       let matchesRotacion = true
       if (rotacionFiltro === "sin_ventas") matchesRotacion = p.dias_sin_venta === null && p.stock_total > 0
       if (rotacionFiltro === "mas_30_dias") matchesRotacion = p.dias_sin_venta !== null && p.dias_sin_venta >= 30
       if (rotacionFiltro === "mas_60_dias") matchesRotacion = p.dias_sin_venta !== null && p.dias_sin_venta >= 60
       if (rotacionFiltro === "mas_90_dias") matchesRotacion = p.dias_sin_venta !== null && p.dias_sin_venta >= 90
-      
+
       return matchesSearch && matchesEstado && matchesAlmacen && matchesRotacion
     })
   }, [productos, searchTerm, estadoFiltro, almacenFiltro, rotacionFiltro])
@@ -167,18 +206,18 @@ export default function ValoracionPage() {
     const productosConStock = productosFiltrados.filter(p => p.stock_total > 0).length
     const productosSinStock = productosFiltrados.filter(p => p.stock_total === 0).length
     const productosStockBajo = productosFiltrados.filter(p => p.stock_total > 0 && p.stock_total <= 10).length
-    
+
     // Rotation stats
     const productosSinVentas = productosFiltrados.filter(p => p.dias_sin_venta === null && p.stock_total > 0).length
     const productosMas30Dias = productosFiltrados.filter(p => p.dias_sin_venta !== null && p.dias_sin_venta >= 30).length
     const productosMas60Dias = productosFiltrados.filter(p => p.dias_sin_venta !== null && p.dias_sin_venta >= 60).length
     const productosMas90Dias = productosFiltrados.filter(p => p.dias_sin_venta !== null && p.dias_sin_venta >= 90).length
-    
+
     // Value of slow moving inventory
     const valorSinRotacion = productosFiltrados
       .filter(p => p.dias_sin_venta === null || p.dias_sin_venta >= 30)
       .reduce((acc, p) => acc + p.valor_costo, 0)
-    
+
     // Valuation by warehouse
     const valorPorAlmacen: Record<number, { nombre: string; valorCosto: number; valorComercial: number; unidades: number }> = {}
     productosFiltrados.forEach(p => {
@@ -191,13 +230,13 @@ export default function ValoracionPage() {
         valorPorAlmacen[s.almacen_id].unidades += s.stock
       })
     })
-    
-    return { 
-      totalUnidades, 
-      valorCosto, 
-      valorComercial, 
+
+    return {
+      totalUnidades,
+      valorCosto,
+      valorComercial,
       margenPotencial,
-      productosConStock, 
+      productosConStock,
       productosSinStock,
       productosStockBajo,
       productosTotal: productosFiltrados.length,
@@ -279,19 +318,19 @@ export default function ValoracionPage() {
   }
 
   return (
-    <div className="space-y-6 bg-gradient-to-br from-amber-50/30 via-orange-50/20 to-stone-50/40 -m-4 md:-m-6 p-4 md:p-6 min-h-screen">
+    <div className="space-y-5 bg-stone-50/60 -m-4 md:-m-6 p-4 md:p-6 min-h-screen">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-stone-800">Valoracion de Inventario</h1>
-          <p className="text-stone-600 mt-1">Analisis financiero del patrimonio empresarial</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-stone-800">Valoración de Inventario</h1>
+          <p className="text-stone-500 text-sm mt-1">Análisis financiero del patrimonio en inventario</p>
         </div>
         <div className="flex items-center gap-3">
-          {/* Warehouse Filter - Prominent Style */}
+          {/* Warehouse Filter */}
           <Select value={almacenFiltro} onValueChange={setAlmacenFiltro}>
-            <SelectTrigger className="w-56 bg-white/50 backdrop-blur-sm rounded-full border-stone-200 shadow-sm">
-              <Warehouse className="h-4 w-4 mr-2 text-amber-700" />
-              <SelectValue placeholder="Ver Almacen" />
+            <SelectTrigger className="w-56 bg-white rounded-full border-stone-200 shadow-sm">
+              <Warehouse className="h-4 w-4 mr-2 text-stone-500" />
+              <SelectValue placeholder="Ver Almacén" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos los Almacenes</SelectItem>
@@ -300,295 +339,125 @@ export default function ValoracionPage() {
               ))}
             </SelectContent>
           </Select>
-          
-          <Button onClick={exportToExcel} variant="outline" className="gap-2 bg-white/50 backdrop-blur-sm rounded-full border-stone-200 shadow-sm">
+
+          <Button onClick={exportToExcel} variant="outline" className="gap-2 bg-white rounded-full border-stone-200 shadow-sm">
             <Download className="h-4 w-4" />
             Descargar Excel
           </Button>
         </div>
       </div>
 
-      {/* Main KPI Cards - Beige/Pastel Theme */}
-      <div className="grid gap-4 md:grid-cols-3">
-        {/* Total Units Card */}
-        <Card className="relative overflow-hidden bg-white/70 backdrop-blur-sm border-[#abcde0] shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-[#0D1821] flex items-center gap-2">
-              <Boxes className="h-4 w-4" style={{ color: "#344966" }} />
-              Total Unidades
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl md:text-4xl font-bold text-[#0D1821]">
-              {totales.totalUnidades.toLocaleString()}
-            </div>
-            <p className="text-sm text-[#344966]/60 mt-1">
-              En {totales.productosTotal} productos
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Cost Valuation Card */}
-        <Card className="relative overflow-hidden bg-white/70 backdrop-blur-sm border-[#abcde0] shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-[#0D1821] flex items-center gap-2">
-              <DollarSign className="h-4 w-4" style={{ color: "#344966" }} />
-              Costo Total (Valoracion)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl md:text-4xl font-bold text-[#0D1821]">
-              {formatCurrency(totales.valorCosto)}
-            </div>
-            <p className="text-sm text-[#344966]/60 mt-1">
-              Capital invertido
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Margin Card */}
-        <Card className="relative overflow-hidden bg-gradient-to-br from-[#BFCC94]/20 to-[#abcde0]/10 backdrop-blur-sm border-[#abcde0] shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-[#0D1821] flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" style={{ color: "#344966" }} />
-              Margen Potencial
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl md:text-4xl font-bold text-[#0D1821]">
-              {formatCurrency(totales.margenPotencial)}
-            </div>
-            <p className="text-sm text-[#344966]/60 mt-1">
-              Diferencia precio venta - costo
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Status Cards Row */}
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-        <Card 
-          className={`cursor-pointer transition-all bg-white/70 backdrop-blur-sm border-[#344966] shadow-sm ${estadoFiltro === "todos" ? "ring-2 ring-[#344966]" : "hover:bg-[#abcde0]/10"}`}
-          onClick={() => setEstadoFiltro("todos")}
-        >
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg" style={{ backgroundColor: "#abcde0" }}>
-              <Boxes className="h-5 w-5" style={{ color: "#344966" }} />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-[#0D1821]">{totales.productosTotal}</p>
-              <p className="text-xs text-[#344966]">Total Productos</p>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card 
-          className={`cursor-pointer transition-all bg-white/70 backdrop-blur-sm border-[#344966] shadow-sm ${estadoFiltro === "con_stock" ? "ring-2 ring-green-500" : "hover:bg-green-50/30"}`}
-          onClick={() => setEstadoFiltro("con_stock")}
-        >
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-green-100">
-              <CheckCircle2 className="h-5 w-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-green-600">{totales.productosConStock}</p>
-              <p className="text-xs text-[#344966]">Con Stock</p>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card 
-          className={`cursor-pointer transition-all bg-white/70 backdrop-blur-sm border-[#344966] shadow-sm ${estadoFiltro === "stock_bajo" ? "ring-2 ring-[#BFCC94]" : "hover:bg-[#BFCC94]/10"}`}
-          onClick={() => setEstadoFiltro("stock_bajo")}
-        >
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg" style={{ backgroundColor: "#BFCC94" }}>
-              <AlertTriangle className="h-5 w-5 text-orange-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-orange-600">{totales.productosStockBajo}</p>
-              <p className="text-xs text-[#344966]">Stock Bajo</p>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card 
-          className={`cursor-pointer transition-all bg-white/70 backdrop-blur-sm border-[#344966] shadow-sm ${estadoFiltro === "sin_stock" ? "ring-2 ring-red-500" : "hover:bg-red-50/30"}`}
-          onClick={() => setEstadoFiltro("sin_stock")}
-        >
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-red-100">
-              <XCircle className="h-5 w-5 text-red-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-red-600">{totales.productosSinStock}</p>
-              <p className="text-xs text-[#344966]">Sin Stock</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Rotation Analysis */}
-      <Card className="border-[#344966] bg-gradient-to-br from-[#abcde0]/10 to-[#BFCC94]/10 backdrop-blur-sm shadow-sm">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2" style={{ color: "#344966" }}>
-              <CalendarClock className="h-4 w-4" style={{ color: "#344966" }} />
-              Analisis de Rotacion
-            </CardTitle>
-            <Badge variant="outline" style={{ borderColor: "#344966", color: "#344966" }}>
-              {formatCurrency(totales.valorSinRotacion)} en inventario lento
-            </Badge>
+      {/* Contenedor único de indicadores + filtros de estado */}
+      <Card className="border-stone-200 shadow-sm">
+        <CardContent className="p-4 md:p-5 space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-x-4 gap-y-4 md:divide-x md:divide-stone-200">
+            <Indicador label="Valoración (costo)" value={formatCurrency(totales.valorCosto)} />
+            <Indicador label="Valor comercial" value={formatCurrency(totales.valorComercial)} valueClass="text-emerald-700" />
+            <Indicador label="Margen potencial" value={formatCurrency(totales.margenPotencial)} valueClass={totales.margenPotencial >= 0 ? "text-emerald-700" : "text-red-600"} />
+            <Indicador label="Unidades" value={totales.totalUnidades.toLocaleString("es-HN")} />
+            <Indicador label="Productos" value={totales.productosTotal.toLocaleString("es-HN")} />
           </div>
-          <CardDescription style={{ color: "#344966" }}>Identifica productos sin movimiento de venta</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-            <div 
-              className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                rotacionFiltro === "sin_ventas" 
-                  ? "bg-red-100 border-red-300 ring-2 ring-red-200" 
-                  : "bg-white hover:bg-red-50 border-red-200"
-              }`}
-              onClick={() => setRotacionFiltro(rotacionFiltro === "sin_ventas" ? "todos" : "sin_ventas")}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <XCircle className="h-4 w-4 text-red-600" />
-                <span className="text-2xl font-bold text-red-600">{totales.productosSinVentas}</span>
-              </div>
-              <p className="text-xs text-red-700">Sin ventas registradas</p>
-            </div>
-            
-            <div 
-              className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                rotacionFiltro === "mas_30_dias" 
-                  ? "bg-orange-100 border-orange-300 ring-2 ring-orange-200" 
-                  : "bg-white hover:bg-orange-50 border-orange-200"
-              }`}
-              onClick={() => setRotacionFiltro(rotacionFiltro === "mas_30_dias" ? "todos" : "mas_30_dias")}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <Clock className="h-4 w-4 text-orange-600" />
-                <span className="text-2xl font-bold text-orange-600">{totales.productosMas30Dias}</span>
-              </div>
-              <p className="text-xs text-orange-700">Mas de 30 dias</p>
-            </div>
-            
-            <div 
-              className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                rotacionFiltro === "mas_60_dias" 
-                  ? "bg-amber-100 border-amber-300 ring-2 ring-amber-200" 
-                  : "bg-white hover:bg-amber-50 border-amber-200"
-              }`}
-              onClick={() => setRotacionFiltro(rotacionFiltro === "mas_60_dias" ? "todos" : "mas_60_dias")}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingDown className="h-4 w-4 text-amber-600" />
-                <span className="text-2xl font-bold text-amber-600">{totales.productosMas60Dias}</span>
-              </div>
-              <p className="text-xs text-amber-700">Mas de 60 dias</p>
-            </div>
-            
-            <div 
-              className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                rotacionFiltro === "mas_90_dias" 
-                  ? "bg-stone-200 border-stone-400 ring-2 ring-stone-300" 
-                  : "bg-white hover:bg-stone-100 border-stone-300"
-              }`}
-              onClick={() => setRotacionFiltro(rotacionFiltro === "mas_90_dias" ? "todos" : "mas_90_dias")}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <AlertTriangle className="h-4 w-4 text-stone-600" />
-                <span className="text-2xl font-bold text-stone-600">{totales.productosMas90Dias}</span>
-              </div>
-              <p className="text-xs text-stone-700">Mas de 90 dias</p>
-            </div>
+          <div className="flex flex-wrap items-center gap-2 border-t border-stone-200 pt-4">
+            <span className="text-xs font-medium text-stone-500 mr-1">Estado:</span>
+            <FiltroChip label="Todos" count={totales.productosTotal} active={estadoFiltro === "todos"} onClick={() => setEstadoFiltro("todos")} />
+            <FiltroChip label="Con stock" count={totales.productosConStock} color="emerald" active={estadoFiltro === "con_stock"} onClick={() => setEstadoFiltro(estadoFiltro === "con_stock" ? "todos" : "con_stock")} />
+            <FiltroChip label="Stock bajo" count={totales.productosStockBajo} color="amber" active={estadoFiltro === "stock_bajo"} onClick={() => setEstadoFiltro(estadoFiltro === "stock_bajo" ? "todos" : "stock_bajo")} />
+            <FiltroChip label="Sin stock" count={totales.productosSinStock} color="red" active={estadoFiltro === "sin_stock"} onClick={() => setEstadoFiltro(estadoFiltro === "sin_stock" ? "todos" : "sin_stock")} />
           </div>
         </CardContent>
       </Card>
 
-      {/* Warehouse Breakdown with PieChart */}
+      {/* Rotación (compacto) */}
+      <Card className="border-stone-200 shadow-sm">
+        <CardContent className="p-4 md:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-stone-700">
+              <CalendarClock className="h-4 w-4 text-stone-500" /> Rotación
+              <span className="text-xs font-normal text-stone-400">· productos sin movimiento de venta</span>
+            </div>
+            <Badge variant="outline" className="text-stone-600 border-stone-300 font-normal">
+              {formatCurrency(totales.valorSinRotacion)} en inventario lento
+            </Badge>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <RotChip label="Sin ventas" value={totales.productosSinVentas} color="red" active={rotacionFiltro === "sin_ventas"} onClick={() => setRotacionFiltro(rotacionFiltro === "sin_ventas" ? "todos" : "sin_ventas")} />
+            <RotChip label="+30 días" value={totales.productosMas30Dias} color="orange" active={rotacionFiltro === "mas_30_dias"} onClick={() => setRotacionFiltro(rotacionFiltro === "mas_30_dias" ? "todos" : "mas_30_dias")} />
+            <RotChip label="+60 días" value={totales.productosMas60Dias} color="amber" active={rotacionFiltro === "mas_60_dias"} onClick={() => setRotacionFiltro(rotacionFiltro === "mas_60_dias" ? "todos" : "mas_60_dias")} />
+            <RotChip label="+90 días" value={totales.productosMas90Dias} color="stone" active={rotacionFiltro === "mas_90_dias"} onClick={() => setRotacionFiltro(rotacionFiltro === "mas_90_dias" ? "todos" : "mas_90_dias")} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Distribución del valor por almacén (tabla) */}
       {totales.valorPorAlmacen.length > 0 && almacenFiltro === "todos" && (
-        <Card className="bg-white/70 backdrop-blur-sm border-[#abcde0] shadow-sm">
+        <Card className="border-stone-200 shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2" style={{ color: "#344966" }}>
-              <Warehouse className="h-4 w-4" style={{ color: "#344966" }} />
-              Distribucion del Valor por Almacen
+            <CardTitle className="text-base flex items-center gap-2 text-stone-800">
+              <Warehouse className="h-4 w-4 text-stone-500" />
+              Distribución del valor por almacén
             </CardTitle>
-            <CardDescription style={{ color: "#344966" }}>Click en un almacen para filtrar los productos</CardDescription>
+            <CardDescription>Valoración a costo de cada almacén y su participación. Haz click en una fila para filtrar los productos.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="grid gap-6 lg:grid-cols-2">
-              {/* Pie Chart */}
-              <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RechartsPie>
-                    <Pie
-                      data={totales.valorPorAlmacen.map(a => ({ name: a.nombre, value: a.valorCosto }))}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={100}
-                      paddingAngle={2}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                      labelLine={false}
-                      fill="#0D1821"
-                    >
-                      {totales.valorPorAlmacen.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip 
-                      formatter={(value: number) => formatCurrency(value)}
-                      contentStyle={{ backgroundColor: '#fef7ed', borderColor: '#d6c4ab', borderRadius: '8px' }}
-                    />
-                    <Legend />
-                  </RechartsPie>
-                </ResponsiveContainer>
-              </div>
-              
-              {/* Warehouse Cards */}
-              <div className="grid gap-3 content-start">
-                {totales.valorPorAlmacen.map((almacen, idx) => {
-                  const porcentajeCosto = totales.valorCosto > 0 ? (almacen.valorCosto / totales.valorCosto) * 100 : 0
-                  return (
-                    <div 
-                      key={idx} 
-                      className="p-4 rounded-xl border bg-white/80 hover:bg-[#abcde0]/10 transition-colors cursor-pointer"
-                      style={{ borderLeftColor: CHART_COLORS[idx % CHART_COLORS.length], borderLeftWidth: '4px' }}
-                      onClick={() => setAlmacenFiltro(almacenes.find(a => a.nombre === almacen.nombre)?.id?.toString() || "todos")}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium" style={{ color: "#0D1821" }}>{almacen.nombre}</span>
-                        <Badge style={{ backgroundColor: "#abcde0", color: "#0D1821" }}>{almacen.unidades} uds</Badge>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <div>
-                          <span style={{ color: "#344966" }}>Costo: </span>
-                          <span className="font-semibold" style={{ color: "#0D1821" }}>{formatCurrency(almacen.valorCosto)}</span>
-                        </div>
-                        <span style={{ color: "#0D1821" }}>{porcentajeCosto.toFixed(1)}%</span>
-                      </div>
-                      <Progress value={porcentajeCosto} className="h-1.5 mt-2" />
-                    </div>
-                  )
-                })}
-              </div>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-stone-50">
+                    <TableHead>Almacén</TableHead>
+                    <TableHead className="text-right">Unidades</TableHead>
+                    <TableHead className="text-right">Valor costo</TableHead>
+                    <TableHead className="text-right">Valor comercial</TableHead>
+                    <TableHead className="text-right w-[220px]">% del costo</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[...totales.valorPorAlmacen].sort((a, b) => b.valorCosto - a.valorCosto).map((a, idx) => {
+                    const pct = totales.valorCosto > 0 ? (a.valorCosto / totales.valorCosto) * 100 : 0
+                    const almId = almacenes.find(x => x.nombre === a.nombre)?.id
+                    return (
+                      <TableRow
+                        key={idx}
+                        className="cursor-pointer hover:bg-stone-50"
+                        onClick={() => almId && setAlmacenFiltro(almId.toString())}
+                      >
+                        <TableCell className="font-medium text-stone-800">{a.nombre}</TableCell>
+                        <TableCell className="text-right tabular-nums">{a.unidades.toLocaleString("es-HN")}</TableCell>
+                        <TableCell className="text-right font-mono">{formatCurrency(a.valorCosto)}</TableCell>
+                        <TableCell className="text-right font-mono text-emerald-700">{formatCurrency(a.valorComercial)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center gap-2 justify-end">
+                            <Progress value={pct} className="h-1.5 w-24" />
+                            <span className="text-xs font-medium text-stone-600 w-12 text-right tabular-nums">{pct.toFixed(1)}%</span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell className="font-semibold">Total</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">{totales.totalUnidades.toLocaleString("es-HN")}</TableCell>
+                    <TableCell className="text-right font-mono font-semibold">{formatCurrency(totales.valorCosto)}</TableCell>
+                    <TableCell className="text-right font-mono font-semibold text-emerald-700">{formatCurrency(totales.valorComercial)}</TableCell>
+                    <TableCell className="text-right font-semibold">100%</TableCell>
+                  </TableRow>
+                </TableFooter>
+              </Table>
             </div>
           </CardContent>
         </Card>
       )}
 
       {/* Filters and Table */}
-      <Card className="bg-white/70 backdrop-blur-sm border-stone-200 shadow-sm">
+      <Card className="border-stone-200 shadow-sm">
         <CardHeader className="border-b border-stone-200">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <CardTitle className="text-lg">Detalle de Productos</CardTitle>
-              <CardDescription>Valoracion individual con desglose por almacen</CardDescription>
+              <CardDescription>Valoración individual con desglose por almacén</CardDescription>
             </div>
-            
+
             {/* Filters */}
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative">
@@ -600,7 +469,7 @@ export default function ValoracionPage() {
                   className="pl-9 w-full sm:w-64"
                 />
               </div>
-              
+
               <Select value={estadoFiltro} onValueChange={(v) => setEstadoFiltro(v as EstadoInventario)}>
                 <SelectTrigger className="w-full sm:w-40">
                   <Filter className="h-4 w-4 mr-2" />
@@ -613,7 +482,7 @@ export default function ValoracionPage() {
                   <SelectItem value="sin_stock">Sin Stock</SelectItem>
                 </SelectContent>
               </Select>
-              
+
               <Select value={rotacionFiltro} onValueChange={(v) => setRotacionFiltro(v as RotacionFiltro)}>
                 <SelectTrigger className="w-full sm:w-44">
                   <CalendarClock className="h-4 w-4 mr-2" />
@@ -630,7 +499,7 @@ export default function ValoracionPage() {
             </div>
           </div>
         </CardHeader>
-        
+
         <CardContent className="p-0">
           {/* Loading State */}
           {loadingTable ? (
@@ -653,15 +522,15 @@ export default function ValoracionPage() {
             </div>
           ) : productosFiltrados.length === 0 ? (
             <div className="text-center py-16 px-4">
-              <div className="inline-flex items-center justify-center p-4 rounded-full bg-amber-100/50 mb-4">
-                <Package className="h-10 w-10 text-amber-600/70" />
+              <div className="inline-flex items-center justify-center p-4 rounded-full bg-stone-100 mb-4">
+                <Package className="h-10 w-10 text-stone-400" />
               </div>
               <p className="text-lg font-medium text-stone-600 mb-2">
                 No se encontraron existencias
               </p>
               <p className="text-sm text-stone-500 max-w-md mx-auto">
-                {almacenFiltro !== "todos" 
-                  ? "No hay productos con stock en este almacen. Prueba seleccionando otro almacen o viendo todos." 
+                {almacenFiltro !== "todos"
+                  ? "No hay productos con stock en este almacen. Prueba seleccionando otro almacen o viendo todos."
                   : "No hay productos que coincidan con los filtros seleccionados."}
               </p>
             </div>
@@ -687,7 +556,7 @@ export default function ValoracionPage() {
                             )
                           ) : p.dias_sin_venta >= 30 && (
                             <Badge variant="outline" className={`text-xs ${
-                              p.dias_sin_venta >= 90 
+                              p.dias_sin_venta >= 90
                                 ? "border-stone-400 text-stone-700 bg-stone-100"
                                 : p.dias_sin_venta >= 60
                                   ? "border-amber-400 text-amber-700 bg-amber-50"
@@ -698,7 +567,7 @@ export default function ValoracionPage() {
                           )}
                         </div>
                       </div>
-                      
+
                       <div className="grid grid-cols-2 gap-3 text-sm mt-3">
                         <div>
                           <p className="text-muted-foreground text-xs">Stock</p>
@@ -717,7 +586,7 @@ export default function ValoracionPage() {
                           <p className="font-medium text-emerald-600">{formatCurrency(p.valor_comercial)}</p>
                         </div>
                       </div>
-                      
+
                       {p.stock_por_almacen.length > 0 && (
                         <CollapsibleTrigger asChild>
                           <Button variant="ghost" size="sm" className="w-full mt-3 text-xs">
@@ -728,7 +597,7 @@ export default function ValoracionPage() {
                         </CollapsibleTrigger>
                       )}
                     </div>
-                    
+
                     <CollapsibleContent>
                       <div className="px-4 pb-4 space-y-2">
                         {p.stock_por_almacen.map((s, idx) => (
@@ -760,7 +629,7 @@ export default function ValoracionPage() {
               <div className="hidden lg:block overflow-x-auto">
                 <Table containerClassName="max-h-[60vh] overflow-y-auto">
                   <TableHeader>
-                    <TableRow className="bg-amber-50/50 [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-amber-50">
+                    <TableRow className="bg-stone-50 [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:bg-stone-50">
                       <TableHead className="w-8"></TableHead>
                       <TableHead>Codigo</TableHead>
                       <TableHead>Producto</TableHead>
@@ -795,33 +664,33 @@ export default function ValoracionPage() {
                         ))}
                       </>
                     )}
-                    
+
                     {/* Empty State */}
                     {!loadingTable && productosFiltrados.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={11} className="h-48 text-center">
                           <div className="flex flex-col items-center justify-center py-8">
-                            <div className="p-4 rounded-full bg-amber-100/50 mb-4">
-                              <Package className="h-8 w-8 text-amber-600/70" />
+                            <div className="p-4 rounded-full bg-stone-100 mb-4">
+                              <Package className="h-8 w-8 text-stone-400" />
                             </div>
                             <p className="text-lg font-medium text-stone-600 mb-1">
                               No se encontraron existencias
                             </p>
                             <p className="text-sm text-stone-500">
-                              {almacenFiltro !== "todos" 
-                                ? "No hay productos con stock en este almacen" 
+                              {almacenFiltro !== "todos"
+                                ? "No hay productos con stock en este almacen"
                                 : "No hay productos que coincidan con los filtros"}
                             </p>
                           </div>
                         </TableCell>
                       </TableRow>
                     )}
-                    
+
                     {/* Data Rows */}
                     {!loadingTable && productosPaginados.map((p) => (
                       <React.Fragment key={p.id}>
-                        <TableRow 
-                          className={`cursor-pointer hover:bg-orange-50/30 transition-colors ${expandedRows.has(p.id) ? 'bg-amber-50/40' : ''}`}
+                        <TableRow
+                          className={`cursor-pointer hover:bg-stone-50 transition-colors ${expandedRows.has(p.id) ? 'bg-stone-50' : ''}`}
                           onClick={() => p.stock_por_almacen.length > 0 && toggleRow(p.id)}
                         >
                           <TableCell className="w-8">
@@ -876,7 +745,7 @@ export default function ValoracionPage() {
                             </span>
                           </TableCell>
                         </TableRow>
-                        
+
                         {/* Expanded Row - Warehouse Details */}
                         {expandedRows.has(p.id) && p.stock_por_almacen.length > 0 && (
                           <TableRow className="bg-muted/20">
@@ -913,7 +782,7 @@ export default function ValoracionPage() {
                         )}
                       </React.Fragment>
                     ))}
-                    
+
                   </TableBody>
                 </Table>
               </div>
@@ -928,15 +797,15 @@ export default function ValoracionPage() {
               />
 
               {/* Totals Footer */}
-              <div className="p-4 md:p-6 border-t bg-muted/20">
+              <div className="p-4 md:p-6 border-t bg-stone-50/60">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-primary/10">
-                      <DollarSign className="h-5 w-5 text-primary" />
+                    <div className="p-2 rounded-lg bg-stone-200/60">
+                      <DollarSign className="h-5 w-5 text-stone-600" />
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Totales ({productosFiltrados.length} productos)</p>
-                      <p className="font-medium">{totales.totalUnidades.toLocaleString()} unidades en inventario</p>
+                      <p className="font-medium">{totales.totalUnidades.toLocaleString("es-HN")} unidades en inventario</p>
                     </div>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-4 sm:gap-8">
