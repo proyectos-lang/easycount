@@ -109,7 +109,15 @@ export const MODULOS: ReadonlyArray<ModuloGranular> = [
     categoria: "Inventario",
     icon: ClipboardList,
   },
-  { nombre: "Ingreso Manual", href: "/inventario/ingreso", categoria: "Inventario", icon: PackagePlus },
+  {
+    nombre: "Movimientos Manuales",
+    href: "/inventario/ingreso",
+    categoria: "Inventario",
+    icon: PackagePlus,
+    // La fila historica en la tabla `modulos` se llama 'Ingreso Manual'; el
+    // alias mantiene validos los permisos ya otorgados con ese nombre.
+    aliases: ["Ingreso Manual"],
+  },
   { nombre: "Traslados", href: "/inventario/traslados", categoria: "Inventario", icon: ArrowLeftRight },
   { nombre: "Ajustes de Inventario", href: "/inventario/ajustes", categoria: "Inventario", icon: Scale },
   { nombre: "Ajuste de Costo", href: "/inventario/ajuste-costo", categoria: "Inventario", icon: Coins },

@@ -23,7 +23,7 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
           "Abre Inventario → Historial de Transacciones.",
           "Filtra por el producto (y opcionalmente el almacén o rango de fechas).",
           "Revisa la secuencia: cada venta debe tener su 'Salida Venta', cada compra su 'Entrada Compra'.",
-          "Si el stock no cuadra con la realidad física, registra un ajuste en Ingreso Manual.",
+          "Si el stock no cuadra con la realidad física, registra un ajuste en Movimientos Manuales.",
         ],
       },
       {
@@ -38,53 +38,59 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
       {
         pregunta: "¿Por qué el stock del sistema no coincide con lo físico?",
         respuesta:
-          "Causas típicas: ventas o recepciones no registradas, mermas o robos. Audita el kardex del producto para encontrar el faltante y regístralo como ajuste en Ingreso Manual (cantidad negativa o positiva).",
+          "Causas típicas: ventas o recepciones no registradas, mermas o robos. Audita el kardex del producto para encontrar el faltante y regístralo como ajuste en Movimientos Manuales (cantidad negativa o positiva).",
       },
     ],
     keywords: ["kardex", "movimientos", "auditar", "trazabilidad", "entradas", "salidas", "libro"],
   },
   {
-    modulo: "Ingreso Manual",
-    titulo: "Ingreso Manual / Ajustes",
+    modulo: "Movimientos Manuales",
+    titulo: "Movimientos Manuales (Ingresos y Salidas)",
     descripcion:
-      "Ingresar mercancía sin orden de compra o ajustar el inventario para cuadrarlo con la realidad física.",
+      "Registrar entradas y salidas manuales de inventario: ingresar mercancía sin orden de compra, o retirar unidades (mermas, consumo interno, correcciones).",
     queHace: [
-      "Ingresa unidades de un producto a un almacén/localización con su costo unitario.",
-      "Recalcula el costo promedio ponderado del producto con el costo ingresado.",
-      "Sirve para inventario inicial, regularizaciones y correcciones.",
-      "Deja rastro en el kardex.",
+      "Ingreso: suma unidades de un producto a un almacén/localización con su costo unitario y recalcula el costo promedio ponderado.",
+      "Salida: resta unidades del inventario al costo promedio actual (sin cambiar el costo promedio).",
+      "Sirve para inventario inicial, regularizaciones, mermas y correcciones.",
+      "Deja rastro en el kardex ('Ingreso Manual' o 'Salida Manual').",
     ],
     queNoHace: [
+      "No permite una salida si el producto no tiene existencias, ni una que deje el stock en negativo.",
       "No está pensado para recepciones de compras con orden (usa Recepción por OC, que además controla al proveedor).",
-      "No modifica el precio de venta del producto, solo stock y costo.",
+      "No modifica el precio de venta del producto; solo el stock (y el costo promedio solo en ingresos).",
     ],
     operaciones: [
       {
-        titulo: "Cargar inventario inicial de un producto",
+        titulo: "Ingresar mercancía / inventario inicial",
         pasos: [
-          "Abre Inventario → Ingreso Manual.",
+          "Abre Inventario → Movimientos Manuales y elige «Ingreso».",
           "Selecciona el producto, el almacén y la localización.",
-          "Ingresa la cantidad física contada y el costo unitario real.",
-          "Guarda: el stock y el costo promedio quedan establecidos.",
+          "Ingresa la cantidad y el costo unitario real.",
+          "Guarda: el stock sube y el costo promedio se recalcula.",
         ],
       },
       {
-        titulo: "Ajustar un descuadre de inventario",
+        titulo: "Dar salida manual (merma, consumo, corrección)",
         pasos: [
-          "Cuenta físicamente el producto y compara con el stock del sistema (Valoración).",
-          "Registra un ingreso por la diferencia (si falta en el sistema) usando el costo promedio actual.",
-          "Anota en observaciones el motivo del ajuste para auditoría.",
+          "Elige «Salida» y selecciona el producto (verás su stock disponible).",
+          "Ingresa la cantidad a retirar (no puede superar las existencias).",
+          "Anota el motivo en observaciones y procesa: el stock baja al costo promedio actual.",
         ],
       },
     ],
     faqs: [
       {
-        pregunta: "¿Qué costo pongo en un ajuste?",
+        pregunta: "¿Puedo dar salida a más de lo que hay en stock?",
         respuesta:
-          "Si solo corriges cantidades, usa el costo promedio actual del producto para no distorsionar la valoración. Si es mercancía nueva con costo conocido, usa el costo real.",
+          "No. Una salida no puede dejar el inventario en negativo ni hacerse si el stock es 0; el sistema la bloquea y muestra las existencias disponibles.",
+      },
+      {
+        pregunta: "¿La salida cambia el costo promedio?",
+        respuesta:
+          "No. Las salidas retiran unidades al costo promedio actual sin modificarlo. Solo los ingresos recalculan el costo promedio ponderado.",
       },
     ],
-    keywords: ["ajuste", "inventario inicial", "cuadrar", "conteo", "regularizar", "merma"],
+    keywords: ["ingreso", "salida", "movimiento", "ajuste", "inventario inicial", "cuadrar", "conteo", "merma", "regularizar"],
   },
   {
     modulo: "Traslados",
@@ -136,7 +142,7 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
     queNoHace: [
       "No cambia el costo promedio del producto: solo corrige la cantidad.",
       "No genera movimiento para los productos cuya cantidad real coincide con la del sistema (solo ajusta lo que difiere).",
-      "No es para ingresar mercancía nueva con costo (eso es Ingreso Manual o Compras); es para cuadrar existencias.",
+      "No es para ingresar mercancía nueva con costo (eso es Movimientos Manuales o Compras); es para cuadrar existencias.",
     ],
     operaciones: [
       {
@@ -193,7 +199,7 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
     queNoHace: [
       "No recalcula un promedio ponderado histórico: aplica el nuevo costo PLANO a todas las ventas del intervalo. Si en el período hubo compras a distintos costos, esa variación legítima se uniforma al nuevo costo.",
       "No deja un movimiento en el kardex por el cambio de costo (el kardex registra movimiento de cantidad, no de costo); la auditoría vive en la bitácora de ajustes de costo.",
-      "No cambia cantidades ni stock: para eso están Ingreso Manual, Traslados o Ajustes de Inventario.",
+      "No cambia cantidades ni stock: para eso están Movimientos Manuales, Traslados o Ajustes de Inventario.",
       "Si no activas el recálculo, el historial de ventas y el CMV pasado quedan intactos (solo cambia la valoración actual).",
     ],
     operaciones: [
@@ -249,7 +255,7 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
       "Filtro por almacén y export a Excel con fila de totales.",
     ],
     queNoHace: [
-      "No modifica stock ni costos: es un reporte. Los ajustes se hacen en Ingreso Manual.",
+      "No modifica stock ni costos: es un reporte. Los ajustes se hacen en Movimientos Manuales.",
       "No proyecta ventas ni sugiere pedidos automáticamente.",
     ],
     operaciones: [

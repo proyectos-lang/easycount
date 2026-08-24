@@ -570,6 +570,8 @@ export async function getStockMultipleProducts(
 // ==================== INGRESO MANUAL ====================
 
 interface IngresoManualData {
+  /** 'ingreso' suma stock y recalcula costo; 'salida' resta stock (sin cambiar costo). Default: 'ingreso'. */
+  tipo?: 'ingreso' | 'salida'
   producto_id: number
   almacen_id: number
   localizacion_id: number
@@ -583,6 +585,18 @@ interface IngresoManualData {
 }
 
 export async function procesarIngresoManual(data: IngresoManualData): Promise<{ success: boolean; error: string | null }> {
+  // Salida: nunca dejar el stock en negativo (validacion temprana con el stock
+  // que vio la pagina; la rama Supabase re-valida con el stock real de la fila).
+  if (data.tipo === 'salida') {
+    const stockPrevio = Number(data.stock_anterior || 0)
+    if (stockPrevio <= 0) {
+      return { success: false, error: 'El producto no tiene existencias; no se puede dar salida.' }
+    }
+    if (data.cantidad > stockPrevio) {
+      return { success: false, error: `La salida (${data.cantidad}) supera las existencias (${stockPrevio}).` }
+    }
+  }
+
   if (!isSupabaseConfigured()) {
     // LocalStorage implementation
     const savedTrans = localStorage.getItem('transacciones_inventario')
@@ -628,7 +642,45 @@ export async function procesarIngresoManual(data: IngresoManualData): Promise<{ 
       return { success: false, error: SESION_INVALIDA_ERROR }
     }
 
-    // Insert transaction
+    // ----- SALIDA manual: resta stock sin cambiar el costo promedio -----
+    if (data.tipo === 'salida') {
+      // Re-valida contra el stock REAL de la fila (evita negativos por lecturas
+      // obsoletas o concurrencia).
+      const { data: prod, error: readErr } = await supabase
+        .from('productos')
+        .select('stock_total, costo_promedio')
+        .eq('id', data.producto_id)
+        .single()
+      if (readErr) return { success: false, error: readErr.message }
+      const stock = Number(prod?.stock_total || 0)
+      if (stock <= 0) {
+        return { success: false, error: 'El producto no tiene existencias; no se puede dar salida.' }
+      }
+      if (data.cantidad > stock) {
+        return { success: false, error: `La salida (${data.cantidad}) supera las existencias disponibles (${stock}).` }
+      }
+
+      const { error: salidaTransError } = await supabase
+        .from('transacciones_inventario')
+        .insert({
+          producto_id: data.producto_id,
+          almacen_id: data.almacen_id,
+          localizacion_id: data.localizacion_id,
+          tipo_movimiento: 'Salida Manual',
+          cantidad: -data.cantidad,
+          costo_o_precio_unitario: Number(prod?.costo_promedio || data.costo_anterior || 0),
+          ...stamp,
+        })
+      if (salidaTransError) return { success: false, error: salidaTransError.message }
+
+      // Resta stock (solo stock_total; el costo promedio no cambia en salidas).
+      const aj = await ajustarStock(supabase, data.producto_id, -data.cantidad, stamp.razon_social_id)
+      if (aj.error) return { success: false, error: aj.error }
+
+      return { success: true, error: null }
+    }
+
+    // ----- INGRESO (entrada): suma stock y recalcula costo promedio -----
     const { error: transError } = await supabase
       .from('transacciones_inventario')
       .insert({
