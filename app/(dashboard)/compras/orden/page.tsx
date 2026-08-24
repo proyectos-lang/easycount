@@ -641,7 +641,8 @@ export default function OrdenCompraPage() {
                         <TableCell>
                           <Input
                             type="number"
-                            min="1"
+                            min="0"
+                            step="any"
                             value={d.cantidad}
                             onChange={(e) => handleUpdateDetalle(d.producto_id, "cantidad", Number(e.target.value))}
                             className="h-8"
@@ -703,7 +704,8 @@ export default function OrdenCompraPage() {
                         <Label className="text-xs text-muted-foreground">Cantidad</Label>
                         <Input
                           type="number"
-                          min="1"
+                          min="0"
+                          step="any"
                           value={d.cantidad}
                           onChange={(e) => handleUpdateDetalle(d.producto_id, "cantidad", Number(e.target.value))}
                           className="h-8 mt-1"

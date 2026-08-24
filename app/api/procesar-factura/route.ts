@@ -26,7 +26,7 @@ FORMATO DE RESPUESTA REQUERIDO:
 
 REGLAS DE EXTRACCION:
 - nombre_extraido: El nombre del producto TAL COMO aparece en la factura
-- cantidad: Numero entero de unidades (si no es claro, usa 1)
+- cantidad: Numero de unidades, puede ser decimal (si no es claro, usa 1)
 - costo_unitario_original: Precio unitario como numero decimal (sin simbolos de moneda)
 - Si hay codigos de producto, incluyelos en el nombre
 - Si no puedes leer un valor numerico claramente, usa 0

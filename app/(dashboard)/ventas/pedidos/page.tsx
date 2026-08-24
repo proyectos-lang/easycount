@@ -660,7 +660,7 @@ function RevisarPedidoDialog({ pedido, onDone }: { pedido: PedidoEncabezado; onD
                     </TableCell>
                     <TableCell className="w-20">
                       <Input
-                        type="number" min={1} className="h-8 text-center"
+                        type="number" min={0} step="any" className="h-8 text-center"
                         value={l.cantidad} disabled={!editable}
                         onChange={(e) => guardarLinea(l, Number(e.target.value) || 1, l.precio_unitario)}
                       />

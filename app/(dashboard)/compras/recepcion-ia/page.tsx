@@ -748,9 +748,10 @@ export default function RecepcionIAPage() {
                           <TableCell>
                             <Input
                               type="number"
-                              min="1"
+                              min="0"
+                              step="any"
                               value={linea.cantidad}
-                              onChange={(e) => updateLinea(linea.id, 'cantidad', parseInt(e.target.value) || 0)}
+                              onChange={(e) => updateLinea(linea.id, 'cantidad', parseFloat(e.target.value) || 0)}
                               className="w-16 text-center"
                             />
                           </TableCell>

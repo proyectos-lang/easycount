@@ -728,10 +728,11 @@ export default function TrasladosPage() {
                       <TableCell>
                         <Input
                           type="number"
-                          min="1"
+                          min="0"
+                          step="any"
                           max={linea.stock_origen}
                           value={linea.cantidad}
-                          onChange={(e) => updateCantidad(linea.producto_id, parseInt(e.target.value) || 0)}
+                          onChange={(e) => updateCantidad(linea.producto_id, parseFloat(e.target.value) || 0)}
                           className={`w-20 mx-auto text-center ${linea.hasError ? 'border-red-300 bg-red-50' : 'bg-white/50'}`}
                         />
                       </TableCell>
@@ -794,10 +795,11 @@ export default function TrasladosPage() {
                       <p className="text-xs text-stone-500 mb-1">Cantidad</p>
                       <Input
                         type="number"
-                        min="1"
+                        min="0"
+                        step="any"
                         max={linea.stock_origen}
                         value={linea.cantidad}
-                        onChange={(e) => updateCantidad(linea.producto_id, parseInt(e.target.value) || 0)}
+                        onChange={(e) => updateCantidad(linea.producto_id, parseFloat(e.target.value) || 0)}
                         className={`w-16 text-center ${linea.hasError ? 'border-red-300 bg-red-50' : 'bg-white/50'}`}
                       />
                     </div>

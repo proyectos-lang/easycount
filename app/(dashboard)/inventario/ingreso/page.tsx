@@ -325,8 +325,8 @@ export default function IngresoManualPage() {
                   <Label className="text-sm">Cantidad a Ingresar</Label>
                   <Input
                     type="number"
-                    min="1"
-                    step="1"
+                    min="0"
+                    step="any"
                     value={formData.cantidad}
                     onChange={(e) => setFormData({ ...formData, cantidad: e.target.value })}
                     placeholder="Ej: 50"

@@ -297,6 +297,7 @@ export default function DevolucionesPage() {
                                       className="h-7 w-16 text-center"
                                       type="number"
                                       min={0}
+                                      step="any"
                                       max={max}
                                       value={l.a_devolver}
                                       onChange={(e) => setCantidad(l.id!, Number(e.target.value))}

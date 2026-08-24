@@ -319,6 +319,19 @@ export default function NuevaVentaPage() {
     }))
   }
 
+  // Fija la cantidad exacta de una linea (permite decimales, p. ej. 2.5 lbs).
+  function setCantidadLinea(index: number, value: number) {
+    setLineas(lineas.map((l, i) => {
+      if (i === index) {
+        const cantidad = value >= 0 ? value : 0
+        const newSubtotal = cantidad * l.precio_unitario
+        const newUtilidad = calculateUtilidadLinea(cantidad, l.precio_unitario, l.costo_promedio)
+        return { ...l, cantidad, subtotal: newSubtotal, utilidad_linea: newUtilidad }
+      }
+      return l
+    }))
+  }
+
   function updatePrecio(index: number, precio: number) {
     setLineas(lineas.map((l, i) => {
       if (i === index) {
@@ -1141,7 +1154,14 @@ export default function NuevaVentaPage() {
                         >
                           <Minus className="h-3 w-3" />
                         </Button>
-                        <span className="w-7 text-center font-bold text-sm">{linea.cantidad}</span>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          value={linea.cantidad}
+                          onChange={(e) => setCantidadLinea(index, parseFloat(e.target.value) || 0)}
+                          className="w-14 h-7 text-center font-bold text-sm rounded-md border border-stone-200 focus:outline-none focus:ring-1 focus:ring-stone-300"
+                        />
                         <Button 
                           variant="outline" 
                           size="icon" 
