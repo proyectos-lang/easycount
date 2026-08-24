@@ -135,7 +135,7 @@ export default function DashboardLayout({
             </DropdownMenu>
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-4 md:p-6">
+        <main className="flex-1 min-w-0 w-full max-w-full overflow-x-hidden overflow-y-auto p-4 md:p-6">
           <RouteGuard>{children}</RouteGuard>
         </main>
       </SidebarInset>
