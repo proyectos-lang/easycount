@@ -25,6 +25,7 @@ interface ProductoCatalogo {
   nombre: string
   foto_url: string | null
   precio: number
+  talla?: string | null
   disponible: boolean
   max: number
 }
@@ -238,6 +239,9 @@ export default function CatalogoPublicoPage({ params }: { params: Promise<{ toke
                     <FotoProducto url={p.foto_url} nombre={p.nombre} />
                     <div className="min-h-[40px]">
                       <p className="text-sm font-medium text-stone-800 line-clamp-2">{p.nombre}</p>
+                      {p.talla ? (
+                        <p className="text-xs text-stone-500 mt-0.5">Talla: {p.talla}</p>
+                      ) : null}
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-stone-900">{formatCurrency(p.precio)}</span>

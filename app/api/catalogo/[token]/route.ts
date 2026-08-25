@@ -81,18 +81,36 @@ export async function GET(
     }
   }
 
-  let query = supabase
-    .from("productos")
-    // SOLO campos seguros: nunca costo_promedio.
-    .select("id, nombre, foto_url, precio_venta_sugerido, stock_total")
-    .eq("razon_social_id", link.razon_social_id)
-    .order("nombre", { ascending: true })
-  if (productoIds) query = query.in("id", productoIds)
+  // SOLO campos seguros: nunca costo_promedio. `talla` es opcional (migracion
+  // 033); si la columna aun no existe, se degrada consultando sin ella.
+  const selectProductos = (withTalla: boolean) => {
+    const cols = withTalla
+      ? "id, nombre, foto_url, precio_venta_sugerido, stock_total, talla"
+      : "id, nombre, foto_url, precio_venta_sugerido, stock_total"
+    let q = supabase
+      .from("productos")
+      .select(cols)
+      .eq("razon_social_id", link.razon_social_id)
+      .order("nombre", { ascending: true })
+    if (productoIds) q = q.in("id", productoIds)
+    return q
+  }
 
-  const { data: productos, error: prodErr } = await query
-  if (prodErr) {
+  let prodRes = await selectProductos(true)
+  if (prodRes.error && (prodRes.error.code === "42703" || /talla/i.test(prodRes.error.message || ""))) {
+    prodRes = await selectProductos(false)
+  }
+  if (prodRes.error) {
     return NextResponse.json({ error: "Error consultando productos" }, { status: 500 })
   }
+  const productos = (prodRes.data || []) as unknown as Array<{
+    id: number
+    nombre: string
+    foto_url: string | null
+    precio_venta_sugerido: number | null
+    stock_total: number | null
+    talla?: string | null
+  }>
 
   return NextResponse.json({
     empresa: {
@@ -106,6 +124,7 @@ export async function GET(
       nombre: p.nombre,
       foto_url: p.foto_url || null,
       precio: Number(p.precio_venta_sugerido || 0),
+      talla: (p.talla as string | null) || null,
       disponible: Number(p.stock_total || 0) > 0,
       // Tope para el stepper del carrito (la UI no muestra la cantidad).
       max: Math.max(0, Number(p.stock_total || 0)),

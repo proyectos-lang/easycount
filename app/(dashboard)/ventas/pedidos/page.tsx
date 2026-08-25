@@ -388,7 +388,7 @@ function NuevoLinkDialog({ onDone }: { onDone: () => void }) {
                       {productosFiltrados.map((p) => (
                         <label key={p.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-stone-50 cursor-pointer">
                           <Checkbox checked={seleccion.has(p.id!)} onCheckedChange={() => toggle(p.id!)} />
-                          <span className="text-sm flex-1 truncate">{p.nombre}</span>
+                          <span className="text-sm flex-1 truncate">{p.nombre}{p.talla ? ` · Talla ${p.talla}` : ""}</span>
                           <span className="text-xs text-muted-foreground">{formatCurrency(Number(p.precio_venta_sugerido || 0))}</span>
                         </label>
                       ))}

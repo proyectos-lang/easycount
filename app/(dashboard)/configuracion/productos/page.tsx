@@ -166,6 +166,7 @@ export default function ProductosConfigPage() {
     marca_id: null,
     categoria_id: null,
     subcategoria_id: null,
+    talla: "",
   })
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string>("")
@@ -398,6 +399,7 @@ export default function ProductosConfigPage() {
       marca_id: null,
       categoria_id: null,
       subcategoria_id: null,
+      talla: "",
     })
     setInvInicial({ cantidad: 0, costo_unitario: 0, almacen_id: 0, localizacion_id: 0 })
     setImagePreview("")
@@ -522,6 +524,8 @@ export default function ProductosConfigPage() {
       subcategoria_id: formData.categoria_id
         ? formData.subcategoria_id ?? null
         : null,
+      // Talla opcional.
+      talla: (formData.talla ?? "").toString().trim() || null,
     }
 
     const { data: creado, error } = await saveProducto(productoData, !editingProducto)
@@ -946,6 +950,19 @@ export default function ProductosConfigPage() {
               {validationErrors.codigo_barras && (
                 <p className="text-sm text-destructive">{validationErrors.codigo_barras}</p>
               )}
+            </div>
+
+            {/* Talla (opcional) */}
+            <div className="grid gap-2">
+              <Label htmlFor="talla">
+                Talla <span className="text-stone-400 text-xs font-normal">(opcional)</span>
+              </Label>
+              <Input
+                id="talla"
+                value={(formData.talla ?? "") as string}
+                onChange={(e) => setFormData({ ...formData, talla: e.target.value })}
+                placeholder="Ej: S, M, L, 38"
+              />
             </div>
 
             {/* Marca */}

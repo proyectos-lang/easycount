@@ -75,6 +75,7 @@ export function QuickCreateProductoDialog({
   // Form principal.
   const [nombre, setNombre] = useState(defaultNombre)
   const [codigoBarras, setCodigoBarras] = useState("")
+  const [talla, setTalla] = useState("")
   // Precio de venta y % utilidad estan sincronizados bidireccionalmente:
   // - Si el usuario ingresa precio: recalcula utilidad.
   // - Si el usuario ingresa utilidad: recalcula precio.
@@ -132,6 +133,7 @@ export function QuickCreateProductoDialog({
     if (open) {
       setNombre(defaultNombre)
       setCodigoBarras("")
+      setTalla("")
       setPrecioVenta(0)
       setUtilidadPct(0)
       setLastEdited(null)
@@ -265,6 +267,7 @@ export function QuickCreateProductoDialog({
       marca_id: marcaId,
       categoria_id: categoriaId,
       subcategoria_id: categoriaId ? subcategoriaId : null,
+      talla: talla.trim() || null,
     }
 
     const { data, error } = await saveProducto(payload, true)
@@ -339,6 +342,20 @@ export function QuickCreateProductoDialog({
               value={codigoBarras}
               onChange={(e) => setCodigoBarras(e.target.value)}
               placeholder="Auto-generado si se deja vacio"
+              className="border-stone-200"
+            />
+          </div>
+
+          {/* Talla (opcional) */}
+          <div className="grid gap-1.5">
+            <Label htmlFor="qc-talla">
+              Talla <span className="text-stone-400 text-xs font-normal">(opcional)</span>
+            </Label>
+            <Input
+              id="qc-talla"
+              value={talla}
+              onChange={(e) => setTalla(e.target.value)}
+              placeholder="Ej: S, M, L, 38"
               className="border-stone-200"
             />
           </div>

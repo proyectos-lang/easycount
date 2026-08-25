@@ -10,6 +10,8 @@ export interface Producto {
   precio_venta_sugerido: number
   costo_promedio?: number
   stock_total?: number
+  /** Talla opcional (ej. S, M, L, 38). Se muestra en el catalogo cuando existe. */
+  talla?: string | null
   foto_url?: string
   marca_id?: number | null
   categoria_id?: number | null
@@ -182,7 +184,16 @@ export async function saveProducto(
     if (cleanProducto.subcategoria_id == null) {
       delete (cleanProducto as { subcategoria_id?: number | null }).subcategoria_id
     }
-    
+
+    // Talla es opcional (columna nueva, migracion 033). Solo se envia si tiene
+    // valor; asi el guardado sigue funcionando en bases sin la columna y los
+    // productos sin talla no la mandan.
+    if (cleanProducto.talla == null || String(cleanProducto.talla).trim() === '') {
+      delete (cleanProducto as { talla?: string | null }).talla
+    } else {
+      cleanProducto.talla = String(cleanProducto.talla).trim()
+    }
+
     if (isNew) {
       const stamp = await getTenantStamp(supabase)
       if (!isValidStamp(stamp)) {
