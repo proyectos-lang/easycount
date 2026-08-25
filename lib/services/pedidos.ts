@@ -113,11 +113,14 @@ export async function crearLink(input: {
   }
 
   if (input.tipo === "seleccion" && input.producto_ids) {
+    // OJO: `catalogo_link_productos` NO tiene columna `usuario` (ver script 021),
+    // asi que solo sellamos `razon_social_id`. Spread del stamp completo rompe con
+    // "could not find the column usuario of catalogo_link_productos".
     const { error: selErr } = await supabase.from("catalogo_link_productos").insert(
       input.producto_ids.map((pid) => ({
         link_id: link.id,
         producto_id: pid,
-        ...stamp,
+        razon_social_id: stamp.razon_social_id,
       }))
     )
     if (selErr) {
