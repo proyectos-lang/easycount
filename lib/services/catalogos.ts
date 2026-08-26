@@ -230,6 +230,86 @@ export async function saveProducto(
   }
 }
 
+/** Dependencias de un producto que condicionan si se puede borrar. */
+export interface ProductoDependencias {
+  /** Lineas de venta (ventas_detalle). Si > 0, NO se borra. */
+  ventas: number
+  /** Lineas de compra/recepcion (compras_detalle). Si > 0, NO se borra. */
+  compras: number
+  /** Movimientos de inventario (transacciones_inventario). Se borran en cascada. */
+  transacciones: number
+}
+
+type SupaErr = { code?: string; message?: string } | null
+
+/** True cuando el error indica que la tabla no existe (no es una dependencia). */
+function esTablaAusente(err: SupaErr): boolean {
+  if (!err) return false
+  if (err.code === '42P01' || err.code === 'PGRST205') return true
+  return /relation .* does not exist|could not find the table/i.test(err.message || '')
+}
+
+async function contarPorProducto(
+  supabase: NonNullable<ReturnType<typeof createClient>>,
+  tabla: string,
+  productoId: number
+): Promise<{ count: number; error: string | null }> {
+  const { count, error } = await supabase
+    .from(tabla)
+    .select('id', { count: 'exact', head: true })
+    .eq('producto_id', productoId)
+  if (error) {
+    // Tabla ausente = feature no aplicada = sin dependencias.
+    if (esTablaAusente(error)) return { count: 0, error: null }
+    return { count: 0, error: error.message }
+  }
+  return { count: count || 0, error: null }
+}
+
+/** Borra filas hijas por producto_id; ignora tablas ausentes (best-effort). */
+async function borrarPorProductoBestEffort(
+  supabase: NonNullable<ReturnType<typeof createClient>>,
+  tabla: string,
+  productoId: number
+): Promise<void> {
+  const { error } = await supabase.from(tabla).delete().eq('producto_id', productoId)
+  if (error && !esTablaAusente(error)) {
+    console.warn(`[deleteProducto] No se pudo limpiar ${tabla}:`, error.message)
+  }
+}
+
+/**
+ * Cuenta las dependencias de un producto (ventas, compras, movimientos de
+ * inventario). La usa la UI para decidir el mensaje: bloquear si hay ventas o
+ * compras, o confirmar el borrado en cascada si solo hay movimientos.
+ */
+export async function getProductoDependencias(
+  id: number
+): Promise<{ data: ProductoDependencias; error: string | null }> {
+  const vacio = { ventas: 0, compras: 0, transacciones: 0 }
+  if (!isSupabaseConfigured()) return { data: vacio, error: null }
+
+  const supabase = createClient()
+  if (!supabase) return { data: vacio, error: 'Cliente no disponible' }
+
+  const [v, c, t] = await Promise.all([
+    contarPorProducto(supabase, 'ventas_detalle', id),
+    contarPorProducto(supabase, 'compras_detalle', id),
+    contarPorProducto(supabase, 'transacciones_inventario', id),
+  ])
+  const error = v.error || c.error || t.error
+  return { data: { ventas: v.count, compras: c.count, transacciones: t.count }, error }
+}
+
+/**
+ * Elimina un producto. Reglas:
+ *  - Si tiene VENTAS (ventas_detalle) -> NO se borra (protege el historial).
+ *  - Si tiene COMPRAS/RECEPCIONES (compras_detalle) -> tampoco (historial de costo).
+ *  - En otro caso, borra en cascada sus movimientos de inventario
+ *    (transacciones_inventario) y las bitacoras que lo referencian
+ *    (ajustes_inventario, ajustes_costo, pedidos_detalle; best-effort), y luego
+ *    el producto. `catalogo_link_productos` se borra solo (ON DELETE CASCADE).
+ */
 export async function deleteProducto(id: number): Promise<{ success: boolean; error: string | null }> {
   if (!isSupabaseConfigured()) {
     const saved = localStorage.getItem('productos')
@@ -243,6 +323,34 @@ export async function deleteProducto(id: number): Promise<{ success: boolean; er
   if (!supabase) return { success: false, error: 'Cliente no disponible' }
 
   try {
+    // 1) Proteccion: ventas y compras bloquean el borrado (re-chequeo en servidor).
+    const ventas = await contarPorProducto(supabase, 'ventas_detalle', id)
+    if (ventas.error) return { success: false, error: ventas.error }
+    if (ventas.count > 0) {
+      return {
+        success: false,
+        error: `No se puede eliminar: el producto tiene ${ventas.count} venta(s) registrada(s). No se borra para conservar el historial de ventas.`,
+      }
+    }
+    const compras = await contarPorProducto(supabase, 'compras_detalle', id)
+    if (compras.error) return { success: false, error: compras.error }
+    if (compras.count > 0) {
+      return {
+        success: false,
+        error: `No se puede eliminar: el producto tiene ${compras.count} compra(s)/recepcion(es) registrada(s).`,
+      }
+    }
+
+    // 2) Cascada de movimientos e historiales de inventario (hijos que
+    //    bloquearian el FK). transacciones_inventario siempre existe; el resto
+    //    es best-effort (tablas opcionales segun migraciones aplicadas).
+    const ti = await supabase.from('transacciones_inventario').delete().eq('producto_id', id)
+    if (ti.error) return { success: false, error: `No se pudieron eliminar los movimientos de inventario: ${ti.error.message}` }
+    await borrarPorProductoBestEffort(supabase, 'ajustes_inventario', id)
+    await borrarPorProductoBestEffort(supabase, 'ajustes_costo', id)
+    await borrarPorProductoBestEffort(supabase, 'pedidos_detalle', id)
+
+    // 3) Borrar el producto.
     const { error } = await supabase.from('productos').delete().eq('id', id)
     if (error) return { success: false, error: error.message }
     return { success: true, error: null }

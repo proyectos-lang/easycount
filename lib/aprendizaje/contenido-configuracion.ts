@@ -102,10 +102,12 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "Muestra el stock total y el costo promedio actuales (informativos).",
       "La foto se sube al almacenamiento de la nube y aparece en el catálogo de Nueva Venta.",
       "Al crear un producto puedes indicar una cantidad inicial (con su costo, almacén y localización): el sistema genera automáticamente un ingreso manual al inventario para que arranque con existencias.",
+      "Elimina productos: si solo tiene movimientos de inventario, se borran en cascada junto con el producto (te avisa cuántos); si tiene ventas o compras registradas, no se borra para proteger el historial.",
     ],
     queNoHace: [
       "No modifica stock ni costo promedio a mano: esos los gobiernan las compras, ventas y ajustes de inventario.",
       "El 'precio de venta sugerido' es una referencia: en Nueva Venta se puede ajustar el precio por línea.",
+      "No borra un producto con ventas o compras registradas (protege la trazabilidad financiera).",
     ],
     operaciones: [
       {
@@ -125,6 +127,15 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "Crea las categorías y subcategorías que reflejen tu negocio (facilitan filtrar y analizar ventas).",
         ],
       },
+      {
+        titulo: "Eliminar un producto",
+        pasos: [
+          "Presiona el ícono de basura en la fila del producto.",
+          "Si el producto tiene ventas o compras registradas, el sistema NO lo borra y te lo indica (protege el historial).",
+          "Si solo tiene movimientos de inventario (ingresos, ajustes, traslados), te avisa cuántos se eliminarán y, al confirmar, borra el producto junto con esos movimientos.",
+          "Si no tiene ningún movimiento, se borra directo tras confirmar.",
+        ],
+      },
     ],
     faqs: [
       {
@@ -132,8 +143,13 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
         respuesta:
           "El stock es el resultado del kardex (compras − ventas ± ajustes). Editarlo a mano rompería la trazabilidad. Al CREAR el producto sí puedes poner una cantidad inicial (genera un ingreso trazable); después los cambios se hacen por Compras o Inventario → Ingreso Manual.",
       },
+      {
+        pregunta: "¿Por qué no me deja borrar un producto?",
+        respuesta:
+          "Porque tiene ventas o compras registradas. Para no perder la trazabilidad de esos documentos, un producto con historial de ventas o compras no se elimina. Si solo tiene movimientos de inventario, sí se puede borrar y esos movimientos se eliminan en cascada con él.",
+      },
     ],
-    keywords: ["producto", "codigo de barras", "sku", "precio", "marca", "categoria", "foto", "catalogo"],
+    keywords: ["producto", "codigo de barras", "sku", "precio", "marca", "categoria", "foto", "catalogo", "eliminar", "borrar", "cascada"],
   },
   {
     modulo: "Almacenes",

@@ -60,6 +60,7 @@ import {
   getProductos,
   saveProducto,
   deleteProducto,
+  getProductoDependencias,
   uploadProductoImage,
   getMarcas,
   createMarca,
@@ -578,16 +579,50 @@ export default function ProductosConfigPage() {
 
   async function handleDelete(producto: Producto) {
     if (!producto.id) return
-    
-    if (!confirm(`Eliminar producto "${producto.nombre}"?`)) {
+
+    // Pre-chequeo de dependencias: ventas/compras bloquean; movimientos de
+    // inventario se borran en cascada (se avisa antes de confirmar).
+    const dep = await getProductoDependencias(producto.id)
+    if (dep.error) {
+      toast({ title: "Error", description: dep.error, variant: "destructive" })
       return
     }
+    const { ventas, compras, transacciones } = dep.data
+
+    if (ventas > 0) {
+      toast({
+        title: "No se puede eliminar",
+        description: `"${producto.nombre}" tiene ${ventas} venta(s) registrada(s). No se borra para conservar el historial de ventas.`,
+        variant: "destructive",
+      })
+      return
+    }
+    if (compras > 0) {
+      toast({
+        title: "No se puede eliminar",
+        description: `"${producto.nombre}" tiene ${compras} compra(s)/recepcion(es) registrada(s).`,
+        variant: "destructive",
+      })
+      return
+    }
+
+    const mensaje =
+      transacciones > 0
+        ? `"${producto.nombre}" tiene ${transacciones} movimiento(s) de inventario que se eliminaran junto con el producto. ¿Eliminar de todas formas?`
+        : `Eliminar producto "${producto.nombre}"?`
+    if (!confirm(mensaje)) return
 
     const { error } = await deleteProducto(producto.id)
     if (error) {
       toast({ title: "Error", description: error, variant: "destructive" })
     } else {
-      toast({ title: "Exito", description: "Producto eliminado" })
+      toast({
+        title: "Exito",
+        description:
+          transacciones > 0
+            ? `Producto y ${transacciones} movimiento(s) de inventario eliminados`
+            : "Producto eliminado",
+      })
       loadProductos()
     }
   }
