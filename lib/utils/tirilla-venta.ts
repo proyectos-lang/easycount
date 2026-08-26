@@ -13,6 +13,8 @@ export interface TirillaEmpresa {
   rtn?: string | null
   direccion?: string | null
   telefono?: string | null
+  /** URL absoluta de un logo a imprimir arriba de la tirilla (opcional). */
+  logoUrl?: string | null
 }
 
 export interface TirillaLinea {
@@ -136,28 +138,33 @@ export function buildTirillaVentaHtml(v: TirillaVenta): string {
   body {
     width: 80mm;
     margin: 0;
-    padding: 1mm 3mm 2mm 3mm;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 12px;
-    line-height: 1.5;
+    padding: 1mm 3mm 3mm 3mm;
+    /* Sans-serif y peso alto: en impresoras termicas el texto delgado sale
+       tenue; con bold se lee nitido sin verse deforme. */
+    font-family: Arial, Helvetica, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.45;
     color: #000;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
   .center { text-align: center; }
-  .emp    { font-size: 16px; font-weight: 900; text-align: center; word-wrap: break-word; }
-  .sub    { font-size: 10px; text-align: center; line-height: 1.4; word-wrap: break-word; }
-  .meta   { font-size: 11px; margin: 1px 0; }
-  .line   { border-top: 1px dashed #000; margin: 4px 0; }
-  .item       { margin: 3px 0; }
-  .item-name  { font-size: 11px; font-weight: 700; word-wrap: break-word; }
-  .row    { display: flex; justify-content: space-between; font-size: 11px; margin: 1px 0; gap: 6px; }
+  .logo   { display: block; margin: 0 auto 4px; max-width: 55mm; max-height: 30mm; width: auto; height: auto; }
+  .emp    { font-size: 17px; font-weight: 800; text-align: center; word-wrap: break-word; }
+  .sub    { font-size: 11px; font-weight: 700; text-align: center; line-height: 1.35; word-wrap: break-word; }
+  .meta   { font-size: 12px; margin: 1px 0; }
+  .line   { border-top: 1px solid #000; margin: 5px 0; }
+  .item       { margin: 4px 0; }
+  .item-name  { font-size: 12px; font-weight: 800; word-wrap: break-word; }
+  .row    { display: flex; justify-content: space-between; font-size: 12px; margin: 2px 0; gap: 8px; }
   .row span:last-child { white-space: nowrap; text-align: right; }
-  .row.bold   { font-weight: 700; }
-  .row.total  { font-size: 15px; font-weight: 900; margin: 3px 0; }
-  .foot   { text-align: center; font-size: 11px; margin-top: 6px; }
+  .row.bold   { font-weight: 800; }
+  .row.total  { font-size: 16px; font-weight: 800; margin: 4px 0; }
+  .foot   { text-align: center; font-size: 12px; margin-top: 8px; }
 </style></head>
 <body>
+  ${e.logoUrl ? `<img class="logo" src="${esc(e.logoUrl)}" alt="">` : ""}
   <div class="emp">${esc(e.nombre)}</div>
   ${subHtml}
   <div class="line"></div>

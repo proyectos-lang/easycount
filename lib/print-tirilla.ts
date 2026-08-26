@@ -32,7 +32,7 @@ export function printTirilla(
   iframe.style.cssText = `position:fixed;left:-9999px;top:0;width:${widthPx}px;height:1px;border:0;visibility:hidden;pointer-events:none;z-index:-9999;`
   document.body.appendChild(iframe)
 
-  iframe.onload = () => {
+  const measureAndPrint = () => {
     // Esperar a que el layout/fuentes se estabilicen antes de medir.
     setTimeout(() => {
       const iDoc = iframe.contentDocument
@@ -51,6 +51,36 @@ export function printTirilla(
         }, 3000)
       }, 150)
     }, 400)
+  }
+
+  iframe.onload = () => {
+    // Esperar a que las imagenes (p. ej. el logo) terminen de cargar ANTES de
+    // medir: si medimos antes, el alto no incluye el logo y ademas podria no
+    // salir impreso. Con un tope de seguridad para no colgarnos.
+    const iDoc = iframe.contentDocument
+    const imgs = iDoc ? Array.from(iDoc.images) : []
+    const pending = imgs.filter((img) => !(img.complete && img.naturalHeight > 0))
+    if (pending.length === 0) {
+      measureAndPrint()
+      return
+    }
+    let done = false
+    const go = () => {
+      if (done) return
+      done = true
+      measureAndPrint()
+    }
+    let left = pending.length
+    for (const img of pending) {
+      const onEnd = () => {
+        left -= 1
+        if (left <= 0) go()
+      }
+      img.addEventListener("load", onEnd, { once: true })
+      img.addEventListener("error", onEnd, { once: true })
+    }
+    // Tope: si alguna imagen no responde, imprimimos igual a los 2.5 s.
+    setTimeout(go, 2500)
   }
 
   iframe.src = blobUrl

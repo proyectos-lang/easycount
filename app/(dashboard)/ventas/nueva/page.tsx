@@ -65,6 +65,13 @@ interface LineaVenta {
   stock_disponible: number
 }
 
+// Logo estatico a imprimir arriba de la tirilla, por empresa (asset en /public).
+// Pedido puntual: la empresa 14 (Inversiones Mi Olanchito) lleva su logo. Para
+// sumar otra empresa, agrega { id: "/archivo.png" } y coloca el PNG en /public.
+const TIRILLA_LOGOS: Record<number, string> = {
+  14: "/logoolanchito.png",
+}
+
 export default function NuevaVentaPage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -709,6 +716,13 @@ export default function NuevaVentaPage() {
           rtn: razonSocial?.documento || null,
           direccion: razonSocial?.direccion || null,
           telefono: razonSocial?.telefono || null,
+          // Logo estatico de la tirilla si la empresa tiene uno asignado. URL
+          // absoluta: la tirilla se renderiza en un iframe blob (origen opaco),
+          // por lo que una ruta relativa no resolveria.
+          logoUrl:
+            user?.razon_social_id != null && TIRILLA_LOGOS[user.razon_social_id]
+              ? `${window.location.origin}${TIRILLA_LOGOS[user.razon_social_id]}`
+              : null,
         },
         numeroFactura: numeroFactura,
         fechaISO: encabezado.fecha_venta,
