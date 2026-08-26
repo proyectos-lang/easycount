@@ -347,6 +347,9 @@ Historial de abonos a cada gasto/factura. La suma actualiza `gastos.monto_pagado
 | `caja_movimiento_id`, `cuenta_movimiento_id` | integer | trazabilidad cruzada con caja chica / bancos |
 | `razon_social_id` | integer | FK tenant |
 
+### `consolidacion_saldos_iniciales` (script 035)
+Override manual del **saldo de inicio del mes** por cuenta bancaria, para el módulo Consolidación Bancaria. La consolidación diaria se **calcula** desde `cuenta_movimientos` (no se persiste); aquí solo se guarda el saldo inicial que el admin fija a mano cuando el calculado no arranca donde debe. Columnas: `id, razon_social_id, cuenta_id (FK cuentas_config), anio, mes (CHECK 1–12), saldo_inicial, usuario, created_at, updated_at`, con `UNIQUE (razon_social_id, cuenta_id, anio, mes)`. RLS de aislamiento por tenant.
+
 ---
 
 ## Devoluciones (script 020)

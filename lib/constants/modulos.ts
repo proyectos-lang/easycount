@@ -1,5 +1,5 @@
 /**
- * Fuente unica de verdad para los 31 modulos granulares del sistema.
+ * Fuente unica de verdad para los 32 modulos granulares del sistema.
  *
  * El campo `nombre` DEBE coincidir exactamente (case-sensitive) con la columna
  * `modulos.nombre` en la base de datos, ya que se usa como clave de los
@@ -38,6 +38,7 @@ import {
   Coins,
   Calculator,
   LineChart,
+  Banknote,
   type LucideIcon,
 } from "lucide-react"
 
@@ -68,7 +69,7 @@ export interface ModuloGranular {
 }
 
 /**
- * 31 modulos granulares. Cualquier cambio aqui debe replicarse en la tabla
+ * 32 modulos granulares. Cualquier cambio aqui debe replicarse en la tabla
  * `modulos` (y viceversa).
  */
 export const MODULOS: ReadonlyArray<ModuloGranular> = [
@@ -141,6 +142,12 @@ export const MODULOS: ReadonlyArray<ModuloGranular> = [
     icon: ClipboardCheck,
   },
   { nombre: "Analisis Financiero", href: "/finanzas/analisis", categoria: "Finanzas", icon: LineChart },
+  {
+    nombre: "Consolidacion Bancaria",
+    href: "/finanzas/consolidacion",
+    categoria: "Finanzas",
+    icon: Banknote,
+  },
 
   // ── Configuracion ──────────────────────────────────────────────────────
   { nombre: "Razon Social", href: "/configuracion/razon-social", categoria: "Configuracion", icon: Building2 },

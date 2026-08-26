@@ -373,4 +373,61 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
     ],
     keywords: ["rentabilidad", "margen", "utilidad", "pareto", "cuadrante", "volumen", "gastos", "anomalia", "costeo", "auditoria", "pyl", "p&l", "fuga", "analisis"],
   },
+  {
+    modulo: "Consolidacion Bancaria",
+    titulo: "Consolidación Bancaria",
+    descripcion:
+      "La consolidación de tus bancos día por día en un mes: por cada cuenta el saldo inicial, entradas, salidas y saldo final de cada día, más el total consolidado de todos los bancos. El admin puede fijar manualmente el saldo con el que arranca el mes.",
+    queHace: [
+      "Eliges un mes y ves, día por día, el saldo corriente de cada cuenta bancaria (saldo inicial → entradas − salidas → saldo final).",
+      "Pestaña 'Consolidado' con el total de todos los bancos por día, más una pestaña por cada cuenta.",
+      "Indicadores del mes: saldo inicial total, entradas, salidas y saldo final consolidado.",
+      "El saldo inicial del mes se calcula solo (neto de todos los movimientos anteriores al mes); si no cuadra, el admin lo fija a mano por cuenta.",
+      "Export a Excel de la consolidación.",
+    ],
+    queNoHace: [
+      "No incluye la caja chica (efectivo): consolida solo las cuentas bancarias. Para el efectivo usa Caja Chica.",
+      "No crea movimientos: la consolidación se calcula desde los movimientos que ya existen en cada cuenta.",
+      "El saldo inicial manual es por cuenta y por mes; no se propaga a otros meses.",
+    ],
+    operaciones: [
+      {
+        titulo: "Ver la consolidación de un mes",
+        pasos: [
+          "Abre Finanzas → Consolidación Bancaria.",
+          "Elige el mes en el selector (por defecto el mes actual).",
+          "Revisa la pestaña 'Consolidado' para el total de todos los bancos, o abre la pestaña de una cuenta para su detalle diario.",
+          "La columna 'Saldo final' de cada día es el 'Saldo inicial' del día siguiente.",
+        ],
+      },
+      {
+        titulo: "Fijar manualmente el saldo de inicio del mes (solo admin)",
+        pasos: [
+          "Abre la pestaña de la cuenta que quieres ajustar.",
+          "Presiona 'Editar saldo inicial'.",
+          "El sistema te muestra el saldo calculado como referencia; escribe el saldo real con el que arranca el mes (ej. el del estado de cuenta del banco al día 1).",
+          "Guarda: toda la consolidación del mes se recalcula desde ese saldo, y la cuenta queda marcada como 'Manual'.",
+          "Para volver al cálculo automático, usa 'Usar saldo calculado'.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        pregunta: "¿Cuándo debo fijar el saldo inicial a mano?",
+        respuesta:
+          "Cuando el sistema no tiene el historial completo de movimientos previos y el saldo inicial calculado arranca en un valor incorrecto. Fijándolo al saldo real del banco al inicio del mes, el resto de los días cuadra solo.",
+      },
+      {
+        pregunta: "¿Por qué el saldo final de un día es el inicial del siguiente?",
+        respuesta:
+          "Porque es un saldo corriente: cada día parte de donde cerró el anterior y le suma las entradas y le resta las salidas de ese día.",
+      },
+      {
+        pregunta: "¿El saldo inicial manual afecta otros meses o la caja chica?",
+        respuesta:
+          "No. El override es solo para esa cuenta y ese mes, y la consolidación no toca la caja chica (efectivo), solo las cuentas bancarias.",
+      },
+    ],
+    keywords: ["consolidacion", "bancaria", "bancos", "saldo diario", "dia por dia", "saldo inicial", "conciliacion", "cuentas", "flujo bancario", "excel"],
+  },
 ]
