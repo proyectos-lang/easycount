@@ -178,8 +178,12 @@ export async function abrirSesion(
     return { data: null, error: sErr.message }
   }
 
-  // Movimiento de apertura: saldo_resultante = saldo_inicial.
-  await supabase
+  // Movimiento de apertura: saldo_resultante = saldo_inicial. Si este insert
+  // falla, la sesion queda SIN movimientos y el "saldo actual" (= ultimo
+  // saldo_resultante) muestra 0 aunque el saldo_inicial sea > 0. Antes el
+  // error se ignoraba (await suelto); ahora lo chequeamos y revertimos la
+  // sesion recien creada para no dejar la caja en un estado inconsistente.
+  const { error: aperturaErr } = await supabase
     .from("caja_chica_movimientos")
     .insert({
       sesion_id: sesion.id,
@@ -192,6 +196,14 @@ export async function abrirSesion(
       fecha: nowHN,
       created_at: nowHN,
     })
+  if (aperturaErr) {
+    // Rollback best-effort del encabezado para no dejar una sesion huerfana.
+    await supabase.from("caja_chica_sesiones").delete().eq("id", sesion.id)
+    return {
+      data: null,
+      error: `No se pudo registrar la apertura de caja: ${aperturaErr.message}`,
+    }
+  }
 
   return { data: sesion as CajaSesion, error: null }
 }
@@ -214,7 +226,7 @@ export async function cerrarSesion(input: {
 
   // Movimiento de cierre. Forzamos fecha/created_at en hora Honduras.
   const nowHN = getHondurasNowISO()
-  await supabase
+  const { error: cierreErr } = await supabase
     .from("caja_chica_movimientos")
     .insert({
       sesion_id: input.sesion_id,
@@ -227,6 +239,14 @@ export async function cerrarSesion(input: {
       usuario: stamp.usuario,
       razon_social_id: stamp.razon_social_id,
     })
+  if (cierreErr) {
+    // No marcamos la sesion como Cerrada si no pudimos registrar el cierre:
+    // se deja Abierta para reintentar en vez de perder la trazabilidad.
+    return {
+      data: null,
+      error: `No se pudo registrar el cierre de caja: ${cierreErr.message}`,
+    }
+  }
 
   // Update sesion. La tabla `caja_chica_sesiones` no tiene una columna
   // `fecha_cierre`: la derivamos cuando se necesita desde el `fecha`

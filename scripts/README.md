@@ -38,6 +38,7 @@ SQL Editor de Supabase. Son en su mayoría idempotentes (`IF NOT EXISTS` /
 | 031 | `031-analisis-financiero.sql` | Análisis Financiero: registra el módulo (solo INSERT; analítica de lectura sobre datos existentes) |
 | 032 | `032-fix-rls-permisos-usuarios.sql` | Reactiva y corrige el RLS de `permisos_usuarios` (lectura directa `usuario_id = auth.uid()`; escrituras solo por service role) |
 | 033 | `033-producto-talla.sql` | Agrega columna opcional `talla` (text) a `productos` |
+| 034 | `034-caja-movimientos-fecha.sql` | Agrega `fecha` (timestamptz) a `caja_chica_movimientos` en bases que se crearon sin ella (aditivo + backfill); sin ella la caja chica no registra movimientos y el Flujo de Caja ignora el efectivo |
 | — | `add-almacen-to-ventas-encabezado.sql` | Agrega `almacen_id` a ventas (aplicar tras 011) |
 
 > **Huecos 006–008:** la numeración salta de 005 a 009. No faltan migraciones;

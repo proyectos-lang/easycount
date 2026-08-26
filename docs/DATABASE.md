@@ -280,9 +280,9 @@ Sesiones de caja (apertura → movimientos → cierre). **Solo puede haber una s
 |---|---|---|
 | `id` | serial | PK |
 | `razon_social_id` | integer | FK tenant, NOT NULL |
-| `fecha` / `fecha_apertura` | date / timestamptz | |
+| `fecha` | date | día operativo de la sesión |
+| `created_at` | timestamptz | timestamp de apertura. La app expone `fecha_apertura` como **alias de `created_at`**. **No hay columnas `fecha_apertura` ni `fecha_cierre`**: la hora de cierre se deriva del movimiento sintético `Cierre`. |
 | `saldo_inicial` | numeric(14,2) | monto de apertura |
-| `fecha_cierre` | timestamptz | |
 | `saldo_final_real` | numeric(14,2) | lo contado físicamente al cerrar |
 | `saldo_final_calculado` | numeric(14,2) | saldo según movimientos |
 | `diferencia` | numeric(14,2) | real − calculado (faltante/sobrante) |
@@ -302,6 +302,7 @@ Movimientos de la sesión con saldo corriente.
 | `ref_tipo`, `ref_id` | text, integer | trazabilidad (ej. venta que generó el ingreso) |
 | `cuenta_destino_id` | integer | FK → `cuentas_config.id` — solo para `Transferencia_Banco` |
 | `saldo_resultante` | numeric(14,2) | saldo de caja después del movimiento |
+| `fecha` | timestamptz | fecha operativa del movimiento (default `now()`). **Agregada por el script 034** en bases que se crearon sin ella; el Flujo de Caja filtra/agrupa por esta columna. |
 | `razon_social_id` | integer | FK tenant |
 
 ### `conceptos_gastos`
