@@ -406,6 +406,16 @@ Bitácora del módulo Ajuste de Costo (una fila por operación). Registra el cam
 
 ---
 
+## Plataforma y personalización por empresa
+
+### `plataforma_admins` (script 037)
+Allow-list de super-admins del dueño de la app (cuentas SIN empresa que ven el portal `/plataforma`): `user_id (uuid, PK, FK auth.users), email, nombre, created_at`. **RLS bloqueada para `authenticated`** (sin política de lectura): solo el `service_role` la consulta, vía las RPC del portal. RPCs asociadas (SECURITY DEFINER, `GRANT EXECUTE` solo a `service_role`): `plataforma_resumen_empresas()` (métricas por empresa) y `plataforma_db_stats()` (tamaño BD, conexiones).
+
+### `razon_social_config` (script 038)
+Feature flags / mini-personalizaciones por empresa: `razon_social_id (INTEGER, PK, FK razon_social ON DELETE CASCADE), config (JSONB, default '{}'), usuario, updated_at, created_at`. Un solo código para todas; el comportamiento por empresa lo gobiernan DATOS (este JSON), no forks. Defaults tipados en `lib/constants/feature-flags.ts` (`mergeFlags` combina la config guardada con ellos). **RLS**: cada empresa LEE solo su fila (`razon_social_id = app_current_tenant()`); **no hay política de escritura para `authenticated`** → solo el `service_role` (portal de super-admin, `setEmpresaFlag`) escribe, así los flags los administra el dueño de la app y no cada empresa. Flags actuales: `ventas_mostrar_isv` (si es `false`, la empresa vende sin ISV: se oculta el toggle y la fila de ISV en Nueva Venta y se fuerza `impuesto_total = 0`).
+
+---
+
 ## Vistas
 
 ### `vista_stock_por_localizacion`

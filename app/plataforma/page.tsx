@@ -3,6 +3,7 @@ import {
   getDbStats,
   getSupabaseProjectStatus,
 } from "@/lib/services/plataforma"
+import { FlagToggle } from "./flag-toggle"
 
 export const dynamic = "force-dynamic"
 
@@ -156,12 +157,15 @@ export default async function PlataformaPage() {
                 <th className="px-4 py-2 text-right font-medium">Inventario</th>
                 <th className="px-4 py-2 font-medium">Última venta</th>
                 <th className="px-4 py-2 font-medium">Última conexión</th>
+                <th className="px-4 py-2 font-medium" title="Mostrar el ISV (15%) en Nueva Venta para esta empresa">
+                  ISV en ventas
+                </th>
               </tr>
             </thead>
             <tbody>
               {empresas.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-stone-400">
+                  <td colSpan={10} className="px-4 py-10 text-center text-stone-400">
                     Sin empresas para mostrar.
                   </td>
                 </tr>
@@ -195,6 +199,15 @@ export default async function PlataformaPage() {
                     <td className="px-4 py-2 text-stone-500">{fmtFecha(e.ultima_venta)}</td>
                     <td className="px-4 py-2 text-stone-500" title={e.ultima_conexion || ""}>
                       {haceCuanto(e.ultima_conexion)}
+                    </td>
+                    <td className="px-4 py-2">
+                      <FlagToggle
+                        razonSocialId={e.id}
+                        flag="ventas_mostrar_isv"
+                        initial={e.flags.ventas_mostrar_isv}
+                        onLabel="Muestra"
+                        offLabel="Oculto"
+                      />
                     </td>
                   </tr>
                 ))

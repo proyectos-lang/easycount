@@ -4,6 +4,7 @@ import * as React from "react"
 import { createClient } from "@/lib/supabase/client"
 import { findModuloByDBName } from "@/lib/constants/modulos"
 import { esPlataformaAdmin } from "@/app/plataforma/actions"
+import { DEFAULT_FLAGS, mergeFlags, type FeatureFlags } from "@/lib/constants/feature-flags"
 
 export interface AuthUser {
   usuario_id: string
@@ -15,6 +16,8 @@ export interface AuthUser {
   logo_url: string | null
   razon_social_nombre: string | null
   modulos_permitidos: string[]
+  /** Feature flags / mini-personalizaciones de la empresa (con defaults). */
+  flags: FeatureFlags
 }
 
 interface AuthContextValue {
@@ -102,6 +105,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           modulosPermitidos = canonizar((mods || []).map((m: any) => m?.nombre))
         }
 
+        // 3) Feature flags de la empresa (mini-personalizaciones). Si la tabla
+        //    aun no existe (script 038 sin aplicar), se usan los defaults.
+        let flags: FeatureFlags = DEFAULT_FLAGS
+        if (perfil.razon_social_id != null) {
+          const { data: cfg, error: cfgErr } = await supabase
+            .from("razon_social_config")
+            .select("config")
+            .eq("razon_social_id", perfil.razon_social_id)
+            .maybeSingle()
+          if (!cfgErr) flags = mergeFlags(cfg?.config as Record<string, unknown> | null)
+        }
+
         return {
           usuario_id: perfil.id,
           auth_user_id: authUserId,
@@ -112,6 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           logo_url: razonSocial?.logo_url ?? null,
           razon_social_nombre: nombreEmpresa,
           modulos_permitidos: modulosPermitidos,
+          flags,
         }
       } catch (err) {
         console.log("Excepcion cargando perfil:", err)

@@ -47,6 +47,7 @@ import {
   type PagoVentaDetalleInput,
 } from "@/lib/services/ventas"
 import { useTenant } from "@/lib/hooks/use-tenant"
+import { useAuth } from "@/lib/contexts/auth-context"
 import { getCuentas, type CuentaConfig } from "@/lib/services/cuentas"
 import { useCajaSesion } from "@/lib/hooks/use-caja-sesion"
 
@@ -66,7 +67,10 @@ export default function NuevaVentaPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { ready, razonSocialId } = useTenant()
-  
+  const { user } = useAuth()
+  // Flag por empresa: si es false, la empresa vende SIN ISV (se oculta el campo).
+  const mostrarIsv = user?.flags?.ventas_mostrar_isv ?? true
+
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [clientes, setClientes] = React.useState<Cliente[]>([])
@@ -447,7 +451,9 @@ export default function NuevaVentaPage() {
   const descuentoPctSafe = Math.min(100, Math.max(0, Number.isFinite(descuentoPct) ? descuentoPct : 0))
   const montoDescuento = subtotal * (descuentoPctSafe / 100)
   const subtotalNeto = subtotal - montoDescuento
-  const isv = aplicaIsv ? subtotalNeto * 0.15 : 0
+  // Si la empresa oculta el ISV (flag ventas_mostrar_isv=false), no se cobra.
+  const isvActivo = mostrarIsv && aplicaIsv
+  const isv = isvActivo ? subtotalNeto * 0.15 : 0
   // `total` = total BRUTO (lo que paga el cliente: subtotal - desc + ISV).
   // Es el valor que el desglose `pagosDetalle` debe igualar (cada linea
   // contiene `monto_bruto` = lo que el cliente entrega).
@@ -618,7 +624,7 @@ export default function NuevaVentaPage() {
         // elegido (YYYY-MM-DD) con la hora actual para conservar el orden
         // cronologico dentro del mismo dia.
         fecha_venta: new Date(`${fecha}T${new Date().toTimeString().slice(0, 8)}`).toISOString(),
-        aplica_impuesto: aplicaIsv,
+        aplica_impuesto: isvActivo,
         porcentaje_impuesto: 15,
         descuento: descuentoPctSafe,
         subtotal,
@@ -1255,7 +1261,8 @@ export default function NuevaVentaPage() {
           </div>
         )}
 
-        {/* ISV Toggle */}
+        {/* ISV Toggle (oculto si la empresa vende sin ISV) */}
+        {mostrarIsv && (
         <div className="px-4 py-3 border-b flex items-center justify-between">
           <Label htmlFor="isv-switch" className="text-sm">Aplicar ISV (15%)</Label>
           <Switch
@@ -1264,6 +1271,7 @@ export default function NuevaVentaPage() {
             onCheckedChange={setAplicaIsv}
           />
         </div>
+        )}
 
         {/* Descuento */}
         <div className="px-4 py-3 border-b flex items-center justify-between gap-3">
@@ -1524,10 +1532,12 @@ export default function NuevaVentaPage() {
                 <span className="text-primary">- L {montoDescuento.toFixed(2)}</span>
               </div>
             )}
-            <div className="flex justify-between text-xs md:text-sm">
-              <span className="text-muted-foreground">ISV (15%)</span>
-              <span>L {isv.toFixed(2)}</span>
-            </div>
+            {mostrarIsv && (
+              <div className="flex justify-between text-xs md:text-sm">
+                <span className="text-muted-foreground">ISV (15%)</span>
+                <span>L {isv.toFixed(2)}</span>
+              </div>
+            )}
             <Separator />
             <div className="flex justify-between items-baseline">
               <span className="text-base md:text-lg font-semibold">Total</span>

@@ -2,6 +2,7 @@
 // (createServerClient). NUNCA importar desde un Client Component.
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient as createServerClient } from "@/lib/supabase/server"
+import { mergeFlags, type FeatureFlags } from "@/lib/constants/feature-flags"
 
 // ==================== TIPOS ====================
 
@@ -26,6 +27,8 @@ export interface EmpresaResumen {
   valor_inventario: number
   creada: string | null
   ultima_conexion: string | null
+  /** Feature flags / mini-personalizaciones de la empresa (con defaults). */
+  flags: FeatureFlags
 }
 
 export interface DbStats {
@@ -89,6 +92,17 @@ export async function getResumenEmpresas(): Promise<{ data: EmpresaResumen[]; er
   const { data, error } = await admin.rpc("plataforma_resumen_empresas")
   if (error) return { data: [], error: error.message }
 
+  // Feature flags por empresa (cross-tenant, service role). Si la tabla aun no
+  // existe (script 038 sin aplicar), se ignora el error y todas quedan con los
+  // defaults.
+  const cfgMap = new Map<number, Record<string, unknown>>()
+  const { data: cfgRows } = await admin
+    .from("razon_social_config")
+    .select("razon_social_id, config")
+  for (const c of (cfgRows as RawEmpresa[]) || []) {
+    cfgMap.set(Number(c.razon_social_id), (c.config as Record<string, unknown>) ?? {})
+  }
+
   const rows = ((data as RawEmpresa[]) || []).map((r) => ({
     id: Number(r.id),
     nombre: String(r.nombre ?? ""),
@@ -104,6 +118,7 @@ export async function getResumenEmpresas(): Promise<{ data: EmpresaResumen[]; er
     valor_inventario: Number(r.valor_inventario ?? 0),
     creada: (r.creada as string | null) ?? null,
     ultima_conexion: (r.ultima_conexion as string | null) ?? null,
+    flags: mergeFlags(cfgMap.get(Number(r.id)) ?? null),
   }))
   return { data: rows, error: null }
 }
@@ -160,4 +175,45 @@ export async function getSupabaseProjectStatus(): Promise<ProjectStatus> {
   } catch {
     return { configured: true, error: "No se pudo consultar la Management API." }
   }
+}
+
+// ==================== ESCRITURA DE FLAGS (solo super-admin) ====================
+
+/**
+ * Cambia un feature flag de una empresa. Merge parcial: preserva los demas
+ * flags ya guardados. Requiere ser super-admin de plataforma (se verifica
+ * server-side) y usa el service role para escribir (la RLS de
+ * razon_social_config no da write a `authenticated`).
+ */
+export async function setEmpresaFlag(
+  razonSocialId: number,
+  flag: keyof FeatureFlags,
+  value: boolean
+): Promise<{ error: string | null }> {
+  const su = await getSuperadmin()
+  if (!su) return { error: "No autorizado." }
+
+  const admin = createAdminClient()
+  if (!admin) return { error: "Service role no configurado." }
+
+  // Merge parcial con la config actual para no pisar otros flags.
+  const { data: cur } = await admin
+    .from("razon_social_config")
+    .select("config")
+    .eq("razon_social_id", razonSocialId)
+    .maybeSingle()
+
+  const config = { ...((cur?.config as Record<string, unknown>) ?? {}), [flag]: value }
+
+  const { error } = await admin.from("razon_social_config").upsert(
+    {
+      razon_social_id: razonSocialId,
+      config,
+      usuario: su.email,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "razon_social_id" }
+  )
+  if (error) return { error: error.message }
+  return { error: null }
 }

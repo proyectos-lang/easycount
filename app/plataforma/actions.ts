@@ -1,6 +1,8 @@
 "use server"
 
-import { getSuperadmin } from "@/lib/services/plataforma"
+import { revalidatePath } from "next/cache"
+import { getSuperadmin, setEmpresaFlag } from "@/lib/services/plataforma"
+import type { FeatureFlags } from "@/lib/constants/feature-flags"
 
 /**
  * Server action: ¿el usuario logueado es super-admin de plataforma?
@@ -9,4 +11,18 @@ import { getSuperadmin } from "@/lib/services/plataforma"
  */
 export async function esPlataformaAdmin(): Promise<boolean> {
   return (await getSuperadmin()) !== null
+}
+
+/**
+ * Server action: cambia un feature flag de una empresa desde el portal.
+ * La autorizacion (super-admin) la valida `setEmpresaFlag` server-side.
+ */
+export async function toggleEmpresaFlag(
+  razonSocialId: number,
+  flag: keyof FeatureFlags,
+  value: boolean
+): Promise<{ error: string | null }> {
+  const res = await setEmpresaFlag(razonSocialId, flag, value)
+  if (!res.error) revalidatePath("/plataforma")
+  return res
 }
