@@ -212,7 +212,7 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
       "Recibe automáticamente el efectivo de las ventas.",
       "Registra ingresos manuales y salidas de efectivo con su concepto.",
       "Transfiere efectivo de la caja a una cuenta bancaria (depósito), reflejándose en ambos lados.",
-      "Al cerrar, comparas el efectivo contado contra el calculado: el sistema registra la diferencia (faltante/sobrante).",
+      "Al cerrar, cuentas el efectivo en una cuadrícula por denominación (billetes y monedas): escribes cuántos hay de cada una y el saldo real se calcula solo, luego se compara con el calculado y registra la diferencia (faltante/sobrante).",
       "Historial de sesiones anteriores con sus movimientos.",
     ],
     queNoHace: [
@@ -248,10 +248,10 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
       {
         titulo: "Cerrar la caja",
         pasos: [
-          "Cuenta físicamente el efectivo.",
-          "Presiona 'Cerrar Caja' e ingresa el monto contado.",
-          "El sistema compara contra el saldo calculado y registra la diferencia.",
-          "Revisa el cierre en el Historial de Sesiones.",
+          "Presiona 'Cerrar Caja'.",
+          "En la cuadrícula de denominaciones escribe cuántos billetes/monedas hay de cada una (500, 100, 50…); el 'Total contado' se calcula solo.",
+          "El sistema compara ese total contra el saldo calculado y muestra la diferencia.",
+          "Confirma con 'Cerrar Caja' y revisa el cierre en el Historial de Sesiones.",
         ],
       },
     ],
@@ -267,7 +267,7 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
           "No: hay una sola sesión de caja abierta por empresa. Todos los cobros en efectivo entran a esa sesión.",
       },
     ],
-    keywords: ["efectivo", "caja", "abrir caja", "cerrar caja", "arqueo", "deposito", "faltante", "sobrante"],
+    keywords: ["efectivo", "caja", "abrir caja", "cerrar caja", "arqueo", "deposito", "faltante", "sobrante", "denominaciones", "billetes", "monedas", "conteo"],
   },
   {
     modulo: "Cierre Diario",

@@ -65,6 +65,7 @@ import {
 } from "@/lib/services/caja-chica"
 import { useCajaSesion } from "@/lib/hooks/use-caja-sesion"
 import { getCuentas, type CuentaConfig } from "@/lib/services/cuentas"
+import { ConteoEfectivo, conteoTotal } from "./conteo-efectivo"
 
 const ALERTA_SALDO = 5000
 
@@ -172,6 +173,9 @@ export default function CajaChicaPage() {
   const [salidaTransferencia, setSalidaTransferencia] = useState(false)
   const [salidaCuentaId, setSalidaCuentaId] = useState<string>("")
   const [cierreSaldoReal, setCierreSaldoReal] = useState<string>("")
+  // Conteo de efectivo por denominacion (Lempiras): denominacion -> cantidad.
+  // El total alimenta `cierreSaldoReal` (saldo real de cierre).
+  const [cierreConteo, setCierreConteo] = useState<Record<number, string>>({})
 
   const reload = useCallback(async () => {
     // 1) Refrescamos la sesion para tener el saldo y estado al dia.
@@ -372,6 +376,21 @@ export default function CajaChicaPage() {
     await reload()
   }
 
+  // Actualiza el conteo de una denominacion y recalcula el saldo real de
+  // cierre. Solo enteros no negativos (cantidad de billetes/monedas).
+  function handleConteoChange(denom: number, raw: string) {
+    const clean = raw.replace(/[^\d]/g, "")
+    const next = { ...cierreConteo, [denom]: clean }
+    setCierreConteo(next)
+    const algunValor = Object.values(next).some((v) => (v ?? "").trim() !== "")
+    setCierreSaldoReal(algunValor ? conteoTotal(next).toFixed(2) : "")
+  }
+
+  function resetCierre() {
+    setCierreConteo({})
+    setCierreSaldoReal("")
+  }
+
   async function handleCierre() {
     if (!sesion?.id) return
     const real = Number(cierreSaldoReal)
@@ -402,7 +421,7 @@ export default function CajaChicaPage() {
           : `Diferencia: ${formatCurrency(diff)}`,
     })
     setOpenCierre(false)
-    setCierreSaldoReal("")
+    resetCierre()
     await reload()
     // Si el usuario tiene abierto el tab de historial (poco comun en el
     // mismo flujo, pero posible), refrescamos los totales.
@@ -1199,12 +1218,19 @@ export default function CajaChicaPage() {
       </Dialog>
 
       {/* Dialog: Cierre */}
-      <Dialog open={openCierre} onOpenChange={setOpenCierre}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog
+        open={openCierre}
+        onOpenChange={(o) => {
+          setOpenCierre(o)
+          if (!o) resetCierre()
+        }}
+      >
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Cerrar Caja</DialogTitle>
             <DialogDescription>
-              Compara el efectivo fisico contra el saldo calculado del sistema.
+              Cuenta el efectivo por denominacion; el saldo real se calcula solo
+              y se compara con el saldo del sistema.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
@@ -1220,16 +1246,8 @@ export default function CajaChicaPage() {
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="cierre-real">Saldo real contado (L)</Label>
-              <Input
-                id="cierre-real"
-                type="number"
-                inputMode="decimal"
-                min={0}
-                step={0.01}
-                value={cierreSaldoReal}
-                onChange={(e) => setCierreSaldoReal(e.target.value)}
-              />
+              <Label>Conteo de efectivo (billetes y monedas)</Label>
+              <ConteoEfectivo conteo={cierreConteo} onChange={handleConteoChange} />
             </div>
 
             {cierreSaldoReal !== "" && (
@@ -1253,7 +1271,10 @@ export default function CajaChicaPage() {
           <DialogFooter className="gap-2 sm:gap-2">
             <Button
               variant="outline"
-              onClick={() => setOpenCierre(false)}
+              onClick={() => {
+                setOpenCierre(false)
+                resetCierre()
+              }}
               disabled={submitting}
             >
               Cancelar
