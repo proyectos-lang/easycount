@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Minus, Trash2, FileText, ShoppingCart, User, Receipt, Warehouse, MapPin, AlertTriangle, UserPlus, Wallet, X, Landmark } from "lucide-react"
+import { Plus, Minus, Trash2, FileText, ShoppingCart, User, Receipt, Warehouse, MapPin, AlertTriangle, UserPlus, Wallet, X, Landmark, Printer, CheckCircle2 } from "lucide-react"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -50,6 +50,8 @@ import { useTenant } from "@/lib/hooks/use-tenant"
 import { useAuth } from "@/lib/contexts/auth-context"
 import { getCuentas, type CuentaConfig } from "@/lib/services/cuentas"
 import { useCajaSesion } from "@/lib/hooks/use-caja-sesion"
+import { printTirilla } from "@/lib/print-tirilla"
+import { buildTirillaVentaHtml, metodoPagoLabel, type TirillaVenta } from "@/lib/utils/tirilla-venta"
 
 interface LineaVenta {
   producto_id: number
@@ -101,6 +103,18 @@ export default function NuevaVentaPage() {
   const [pagosDetalle, setPagosDetalle] = React.useState<PagoLinea[]>([])
   const [cuentas, setCuentas] = React.useState<CuentaConfig[]>([])
   const { sesion: cajaSesion, featurePending: cajaFeaturePending } = useCajaSesion()
+
+  // Venta recien registrada: alimenta el dialogo con las opciones de impresion
+  // (tirilla 80 mm / factura PDF). Es una FOTO de la venta; sobrevive al
+  // resetForm() para que el usuario pueda imprimir despues de guardar.
+  const [ventaExitosa, setVentaExitosa] = React.useState<{
+    numeroFactura: string
+    total: number
+    tirilla: TirillaVenta
+    ventaData: { encabezado: VentaEncabezado; detalles: VentaDetalle[] }
+    cliente: Cliente | undefined
+  } | null>(null)
+  const [imprimiendo, setImprimiendo] = React.useState(false)
   
   const [lineas, setLineas] = React.useState<LineaVenta[]>([])
 
@@ -682,20 +696,80 @@ export default function NuevaVentaPage() {
         }))
       }
       
-      // Genera y descarga el PDF de la factura.
-      await generatePdfFromData(ventaData, selectedCliente)
+      // Foto de la venta para la tirilla termica (80 mm). Se arma AQUI, con el
+      // estado local aun disponible, y sobrevive al resetForm().
+      const razonSocial = await getRazonSocialForPdf()
+      const tirilla: TirillaVenta = {
+        empresa: {
+          nombre:
+            razonSocial?.nombre_comercial ||
+            razonSocial?.nombre_empresa ||
+            user?.razon_social_nombre ||
+            "",
+          rtn: razonSocial?.documento || null,
+          direccion: razonSocial?.direccion || null,
+          telefono: razonSocial?.telefono || null,
+        },
+        numeroFactura: numeroFactura,
+        fechaISO: encabezado.fecha_venta,
+        cliente: selectedCliente?.nombre || "Consumidor Final",
+        lineas: lineas.map((l) => ({
+          nombre: l.producto_nombre,
+          cantidad: l.cantidad,
+          precioUnitario: l.precio_unitario,
+        })),
+        subtotal,
+        descuentoPct: descuentoPctSafe,
+        descuentoMonto: montoDescuento,
+        mostrarIsv,
+        isv,
+        total,
+        pagos: pagosDetalle.map((p) => ({
+          metodo: metodoPagoLabel(
+            p.metodo_pago,
+            cuentas.find((c) => c.id === p.cuenta_id)?.nombre
+          ),
+          monto: Number(p.monto_bruto) || 0,
+        })),
+        valorPagado: valorpago,
+        saldo: Math.max(0, +(total - valorpago).toFixed(2)),
+      }
 
-      // Confirma y deja el formulario en blanco para una nueva venta.
-      toast({
-        title: "Venta registrada",
-        description: `Factura ${ventaData.encabezado.numero_factura} · L ${(ventaData.encabezado.total_venta ?? 0).toFixed(2)}. PDF descargado.`,
-      })
+      // Deja el formulario listo para la siguiente venta y abre el dialogo con
+      // las opciones de impresion (tirilla 80 mm / factura PDF).
       resetForm()
+      setVentaExitosa({
+        numeroFactura: ventaData.encabezado.numero_factura ?? numeroFactura,
+        total: ventaData.encabezado.total_venta ?? total,
+        tirilla,
+        ventaData,
+        cliente: selectedCliente,
+      })
     } catch (err) {
       toast({ title: "Error", description: "Error al guardar la venta", variant: "destructive" })
     } finally {
       setSaving(false)
     }
+  }
+
+  // Imprime la tirilla termica (80 mm) de la venta recien registrada. Mide el
+  // alto real del contenido para que el papel salga del largo EXACTO.
+  function handleImprimirTirilla() {
+    if (!ventaExitosa) return
+    setImprimiendo(true)
+    try {
+      printTirilla(buildTirillaVentaHtml(ventaExitosa.tirilla), { widthMm: 80 })
+    } catch {
+      toast({ title: "Error", description: "No se pudo preparar la tirilla", variant: "destructive" })
+    } finally {
+      setImprimiendo(false)
+    }
+  }
+
+  // Descarga la factura A4 en PDF de la venta recien registrada.
+  async function handleDescargarPdf() {
+    if (!ventaExitosa) return
+    await generatePdfFromData(ventaExitosa.ventaData, ventaExitosa.cliente)
   }
 
   async function generatePdfFromData(
@@ -1702,6 +1776,64 @@ export default function NuevaVentaPage() {
               className="gap-2"
             >
               {savingCliente ? "Guardando..." : "Crear y Seleccionar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialogo post-venta: opciones de impresion (tirilla 80 mm / factura PDF) */}
+      <Dialog
+        open={ventaExitosa !== null}
+        onOpenChange={(o) => { if (!o) setVentaExitosa(null) }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              Venta registrada
+            </DialogTitle>
+          </DialogHeader>
+
+          {ventaExitosa && (
+            <div className="space-y-1 rounded-md border bg-muted/40 px-4 py-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Factura</span>
+                <span className="font-medium">{ventaExitosa.numeroFactura}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total</span>
+                <span className="font-semibold">L {ventaExitosa.total.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+
+          <p className="text-sm text-muted-foreground">
+            ¿Deseas imprimir el comprobante?
+          </p>
+
+          <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+            <Button
+              onClick={handleImprimirTirilla}
+              disabled={imprimiendo}
+              className="w-full gap-2"
+            >
+              <Printer className="h-4 w-4" />
+              Imprimir tirilla (80 mm)
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleDescargarPdf}
+              className="w-full gap-2"
+            >
+              <FileText className="h-4 w-4" />
+              Descargar factura (PDF)
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => setVentaExitosa(null)}
+              className="w-full"
+            >
+              Cerrar / Nueva venta
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -49,7 +49,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Aplica la comisión bancaria configurada en cada cuenta: registra el monto bruto que paga el cliente y el neto que entra al banco.",
       "El efectivo entra automáticamente a la caja chica abierta; lo de banco entra a la cuenta elegida.",
       "Descuenta el stock del almacén y deja rastro en el kardex de inventario.",
-      "Al terminar descarga la factura en PDF automáticamente y deja el formulario en blanco, listo para la siguiente venta.",
+      "Al guardar, el formulario queda en blanco y aparece una ventana con las opciones de impresión: imprimir tirilla térmica de 80 mm (largo exacto, sin espacios en blanco) o descargar la factura A4 en PDF.",
     ],
     queNoHace: [
       "No permite vender en efectivo sin una sesión de caja chica abierta (el sistema lo bloquea).",
@@ -65,7 +65,15 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
           "Busca cada producto en el catálogo y agrégalo; ajusta cantidades con los botones + / −.",
           "Si aplica, ingresa el descuento (%) y activa el impuesto.",
           "En el desglose de pago agrega una línea 'Efectivo' (o 'Banco' y elige la cuenta) por el total.",
-          "Verifica el total y presiona Guardar. Se descarga la factura PDF y el formulario queda en blanco para la siguiente venta.",
+          "Verifica el total y presiona Guardar. El formulario queda en blanco y se abre la ventana de impresión: elige 'Imprimir tirilla (80 mm)' o 'Descargar factura (PDF)', o cierra para seguir con la próxima venta.",
+        ],
+      },
+      {
+        titulo: "Imprimir la tirilla térmica (80 mm)",
+        pasos: [
+          "Al guardar la venta, en la ventana 'Venta registrada' presiona 'Imprimir tirilla (80 mm)'.",
+          "Se abre el diálogo de impresión del navegador ya ajustado al ancho de 80 mm y al largo exacto del contenido (sin papel en blanco de más). Elige tu impresora térmica y confirma.",
+          "Si sale papel en blanco de sobra o se corta la última línea, revisa el tamaño de papel del driver de la impresora: debe estar en 'rollo/continuo' o un tamaño personalizado, no en A4/Carta.",
         ],
       },
       {
@@ -108,10 +116,16 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
         respuesta:
           "El catálogo muestra el stock disponible como referencia. Evita vender sin existencias: el inventario quedaría negativo y la valoración se distorsiona.",
       },
+      {
+        pregunta: "La tirilla sale con mucho espacio en blanco o se corta, ¿por qué?",
+        respuesta:
+          "El sistema calcula el largo exacto del contenido, pero la impresora solo lo respeta si su tamaño de papel en el driver está en 'rollo/continuo' o en un tamaño personalizado. Si el driver está en A4/Carta, el navegador coloca la tirilla sobre esa hoja y reaparece el blanco: cámbialo en la configuración de la impresora del sistema. Si se corta la última línea, es cuestión de milímetros del margen inferior del rollo.",
+      },
     ],
     keywords: [
       "vender", "factura", "pos", "cobrar", "efectivo", "tarjeta", "credito",
       "descuento", "isv", "impuesto", "comision", "ticket", "punto de venta",
+      "tirilla", "termica", "impresora", "80mm", "imprimir", "comprobante", "recibo",
     ],
   },
   {
