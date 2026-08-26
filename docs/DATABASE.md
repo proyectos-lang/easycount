@@ -91,6 +91,9 @@ Qué módulo puede ver cada usuario (el `RouteGuard` bloquea la ruta si no hay p
 | `modulo_id` | bigint | FK → `modulos.id` |
 | `puede_ver` | boolean | default `false` |
 
+### `plataforma_admins` (script 037)
+Allow-list de **super-admins de la plataforma** (el dueño de la app), un nivel por encima del `rol='Admin'` de cada empresa. Columnas: `user_id (uuid PK = auth.users.id), email, nombre, created_at`. RLS encendido **sin política para authenticated** → nadie la lee desde la app; el portal `/plataforma` la consulta con el service role (server-side). Acompañada de dos RPC `SECURITY DEFINER` con `EXECUTE` solo para `service_role`: `plataforma_resumen_empresas()` (métricas cross-tenant por empresa: usuarios, productos, ventas, ingreso, inventario, última venta y última conexión) y `plataforma_db_stats()` (tamaño de la BD y conexiones).
+
 ---
 
 ## Catálogos

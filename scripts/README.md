@@ -41,6 +41,7 @@ SQL Editor de Supabase. Son en su mayoría idempotentes (`IF NOT EXISTS` /
 | 034 | `034-caja-movimientos-fecha.sql` | Agrega `fecha` (timestamptz) a `caja_chica_movimientos` en bases que se crearon sin ella (aditivo + backfill); sin ella la caja chica no registra movimientos y el Flujo de Caja ignora el efectivo |
 | 035 | `035-consolidacion-bancaria.sql` | Consolidación Bancaria: tabla `consolidacion_saldos_iniciales` (override manual del saldo inicial del mes por cuenta) + RLS + módulo |
 | 036 | `036-eliminar-producto-rpc.sql` | RPC `eliminar_producto_en_cascada` (SECURITY DEFINER): borra el producto + sus movimientos de inventario ignorando RLS (alcanza filas mal selladas que rompen el FK); bloquea si tiene ventas o compras |
+| 037 | `037-plataforma-admin.sql` | Portal de plataforma (super-admin): tabla `plataforma_admins` (allow-list) + RPCs `plataforma_resumen_empresas` / `plataforma_db_stats` (SECURITY DEFINER, solo `service_role`). **Ajusta el email sembrado** al de tu cuenta dueña |
 | — | `add-almacen-to-ventas-encabezado.sql` | Agrega `almacen_id` a ventas (aplicar tras 011) |
 
 > **Huecos 006–008:** la numeración salta de 005 a 009. No faltan migraciones;

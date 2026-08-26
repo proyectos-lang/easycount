@@ -4,6 +4,7 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import { Mail, Lock, ArrowRight, Loader2, Eye, EyeOff } from "lucide-react"
 import { useAuth } from "@/lib/contexts/auth-context"
+import { esPlataformaAdmin } from "@/app/plataforma/actions"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
@@ -25,11 +26,17 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = React.useState(false)
   const [showPassword, setShowPassword] = React.useState(false)
 
-  // Si ya esta logueado, redirigir al modulo de Inicio
+  // Si ya esta logueado, redirigir. Las cuentas "solo-plataforma" (super-admin
+  // sin perfil de empresa) no cargan `user`; a esas las mandamos a /plataforma.
   React.useEffect(() => {
-    if (!loading && user) {
+    if (loading) return
+    if (user) {
       router.replace("/")
+      return
     }
+    esPlataformaAdmin().then((ok) => {
+      if (ok) router.replace("/plataforma")
+    })
   }, [user, loading, router])
 
   // Evitar flash de la pantalla de login mientras se restaura la sesion
@@ -76,9 +83,11 @@ export default function LoginPage() {
 
     toast({
       title: "EasyCount",
-        description: "Sesión iniciada correctamente",
+      description: "Sesión iniciada correctamente",
     })
-    router.replace("/")
+    // Super-admin de plataforma (sin empresa) -> portal; el resto -> app.
+    const esPlat = await esPlataformaAdmin()
+    router.replace(esPlat ? "/plataforma" : "/")
   }
 
   return (
