@@ -136,7 +136,17 @@ export async function getDbStats(): Promise<{ data: DbStats | null; error: strin
  */
 export async function getSupabaseProjectStatus(): Promise<ProjectStatus> {
   const token = process.env.SUPABASE_ACCESS_TOKEN
-  const ref = process.env.SUPABASE_PROJECT_REF
+  // El project ref se deriva del subdominio de NEXT_PUBLIC_SUPABASE_URL
+  // (https://<ref>.supabase.co); SUPABASE_PROJECT_REF lo puede sobreescribir
+  // (util si usas dominio propio). Asi basta con SUPABASE_ACCESS_TOKEN.
+  let ref = process.env.SUPABASE_PROJECT_REF
+  if (!ref && process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    try {
+      ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split(".")[0]
+    } catch {
+      /* URL invalida: ref queda undefined */
+    }
+  }
   if (!token || !ref) return { configured: false }
 
   try {

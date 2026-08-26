@@ -124,7 +124,8 @@ export default async function PlataformaPage() {
               )
             ) : (
               <p className="mt-0.5 text-xs text-stone-400">
-                Infra Supabase no configurada (SUPABASE_ACCESS_TOKEN + SUPABASE_PROJECT_REF).
+                Agrega <code>SUPABASE_ACCESS_TOKEN</code> para ver el estado del proyecto (el
+                project ref se toma de la URL).
               </p>
             )}
           </div>
