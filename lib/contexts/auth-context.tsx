@@ -3,6 +3,7 @@
 import * as React from "react"
 import { createClient } from "@/lib/supabase/client"
 import { findModuloByDBName } from "@/lib/constants/modulos"
+import { esPlataformaAdmin } from "@/app/plataforma/actions"
 
 export interface AuthUser {
   usuario_id: string
@@ -19,7 +20,7 @@ export interface AuthUser {
 interface AuthContextValue {
   user: AuthUser | null
   loading: boolean
-  login: (email: string, password: string) => Promise<{ error: string | null }>
+  login: (email: string, password: string) => Promise<{ error: string | null; plataforma?: boolean }>
   logout: () => Promise<void>
   hasModulo: (nombre: string) => boolean
   refreshProfile: () => Promise<void>
@@ -215,7 +216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loadProfile])
 
   const login = React.useCallback(
-    async (email: string, password: string): Promise<{ error: string | null }> => {
+    async (email: string, password: string): Promise<{ error: string | null; plataforma?: boolean }> => {
       const supabase = createClient()
       if (!supabase) {
         return { error: "Supabase no esta configurado. Contacta al administrador." }
@@ -262,6 +263,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           "loadProfile"
         )
         if (!profile) {
+          // Cuenta SOLO-PLATAFORMA (super-admin sin empresa): no tiene perfil en
+          // `usuarios`, pero SI es valida. No cerramos sesion (el guard de
+          // /plataforma la necesita viva) y senalizamos para enrutar al portal.
+          const esPlat = await esPlataformaAdmin().catch(() => false)
+          if (esPlat) {
+            setUser(null)
+            return { error: null, plataforma: true }
+          }
           await supabase.auth.signOut()
           return { error: "Tu cuenta no tiene un perfil asociado o esta inactiva." }
         }

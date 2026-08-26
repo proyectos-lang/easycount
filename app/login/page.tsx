@@ -69,15 +69,21 @@ export default function LoginPage() {
     }
 
     setSubmitting(true)
-    const { error } = await login(email, password)
+    const res = await login(email, password)
     setSubmitting(false)
 
-    if (error) {
+    if (res.error) {
       toast({
         title: "EasyCount: error de autenticación",
-        description: error,
+        description: res.error,
         variant: "destructive",
       })
+      return
+    }
+
+    // Super-admin de plataforma (sin empresa) -> portal; el resto -> la app.
+    if (res.plataforma) {
+      router.replace("/plataforma")
       return
     }
 
@@ -85,9 +91,7 @@ export default function LoginPage() {
       title: "EasyCount",
       description: "Sesión iniciada correctamente",
     })
-    // Super-admin de plataforma (sin empresa) -> portal; el resto -> app.
-    const esPlat = await esPlataformaAdmin()
-    router.replace(esPlat ? "/plataforma" : "/")
+    router.replace("/")
   }
 
   return (
