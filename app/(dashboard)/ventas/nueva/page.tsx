@@ -555,6 +555,33 @@ export default function NuevaVentaPage() {
     })
   }, [total])
 
+  // Pedido puntual (razon social 14): el desglose de pago arranca con una
+  // linea de Efectivo ya creada (sin tener que presionar "Agregar pago"). Su
+  // monto se completa con el total via el efecto de arriba a medida que se
+  // agregan productos. Se siembra una sola vez por venta (el ref se reinicia
+  // en resetForm); si el usuario la borra, no se vuelve a crear.
+  const efectivoSeededRef = React.useRef(false)
+  React.useEffect(() => {
+    if (user?.razon_social_id !== 14) return
+    if (loading) return
+    if (efectivoSeededRef.current) return
+    if (pagosDetalle.length > 0) {
+      efectivoSeededRef.current = true
+      return
+    }
+    efectivoSeededRef.current = true
+    setPagosDetalle([
+      {
+        _id: nextPagoId(),
+        metodo_pago: "Efectivo",
+        cuenta_id: null,
+        porcentaje_comision: 0,
+        monto_bruto: Math.max(0, +total.toFixed(2)),
+      },
+    ])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.razon_social_id, loading, pagosDetalle.length])
+
   const selectedCliente = clientes.find(c => c.id?.toString() === clienteId)
 
   // Stock validation
@@ -1052,6 +1079,7 @@ export default function NuevaVentaPage() {
     setLineas([])
     setClienteId("")
     setPagosDetalle([])
+    efectivoSeededRef.current = false // re-siembra el Efectivo (razon social 14)
     setDescuentoPct(0)
     setAplicaIsv(false) // vuelve al default (sin ISV) para la siguiente venta
     setFecha(new Date().toISOString().split("T")[0])
