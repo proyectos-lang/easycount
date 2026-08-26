@@ -395,11 +395,16 @@ export default function NuevaVentaPage() {
     let metodo: PagoVentaDetalleInput["metodo_pago"] = "Otro"
     let cuentaIdDefault: number | null = null
     let comisionDefault = 0
-    if (cuentas.length > 0) {
+    const efectivoDisponible = cajaFeaturePending || !!cajaSesion
+    // Pedido puntual: la razon social 14 prefiere Efectivo como metodo por
+    // defecto (aun teniendo cuentas bancarias configuradas).
+    if (user?.razon_social_id === 14 && efectivoDisponible) {
+      metodo = "Efectivo"
+    } else if (cuentas.length > 0) {
       metodo = "Banco"
       cuentaIdDefault = cuentas[0].id ?? null
       comisionDefault = cuentas[0].porcentaje_comision ?? 0
-    } else if (cajaFeaturePending || cajaSesion) {
+    } else if (efectivoDisponible) {
       metodo = "Efectivo"
     }
     // Pre-completar con el saldo restante para acelerar el flujo comun
