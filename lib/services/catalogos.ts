@@ -301,14 +301,29 @@ export async function getProductoDependencias(
   return { data: { ventas: v.count, compras: c.count, transacciones: t.count }, error }
 }
 
+/** True cuando el RPC no existe todavia (migracion 036 pendiente). */
+function funcionRpcInexistente(err: SupaErr): boolean {
+  if (!err) return false
+  if (err.code === 'PGRST202') return true
+  return /could not find the function|function .* does not exist|not exist in the schema cache/i.test(
+    err.message || ''
+  )
+}
+
 /**
  * Elimina un producto. Reglas:
- *  - Si tiene VENTAS (ventas_detalle) -> NO se borra (protege el historial).
- *  - Si tiene COMPRAS/RECEPCIONES (compras_detalle) -> tampoco (historial de costo).
+ *  - Si tiene VENTAS (ventas_detalle) o COMPRAS/RECEPCIONES (compras_detalle) ->
+ *    NO se borra (protege el historial financiero).
  *  - En otro caso, borra en cascada sus movimientos de inventario
  *    (transacciones_inventario) y las bitacoras que lo referencian
- *    (ajustes_inventario, ajustes_costo, pedidos_detalle; best-effort), y luego
- *    el producto. `catalogo_link_productos` se borra solo (ON DELETE CASCADE).
+ *    (ajustes_inventario, ajustes_costo, pedidos_detalle), y luego el producto.
+ *    `catalogo_link_productos` cae solo (ON DELETE CASCADE).
+ *
+ * Ruta principal: RPC `eliminar_producto_en_cascada` (SECURITY DEFINER, script
+ * 036). Corre del lado servidor IGNORANDO RLS, por lo que borra tambien los
+ * movimientos con `razon_social_id` mal sellado (NULL / otra empresa) que el
+ * cliente no ve pero que igual bloquean el FK. Si el RPC no existe todavia, cae
+ * al metodo JS.
  */
 export async function deleteProducto(id: number): Promise<{ success: boolean; error: string | null }> {
   if (!isSupabaseConfigured()) {
@@ -323,41 +338,63 @@ export async function deleteProducto(id: number): Promise<{ success: boolean; er
   if (!supabase) return { success: false, error: 'Cliente no disponible' }
 
   try {
-    // 1) Proteccion: ventas y compras bloquean el borrado (re-chequeo en servidor).
-    const ventas = await contarPorProducto(supabase, 'ventas_detalle', id)
-    if (ventas.error) return { success: false, error: ventas.error }
-    if (ventas.count > 0) {
-      return {
-        success: false,
-        error: `No se puede eliminar: el producto tiene ${ventas.count} venta(s) registrada(s). No se borra para conservar el historial de ventas.`,
-      }
+    const { data, error } = await supabase.rpc('eliminar_producto_en_cascada', {
+      p_producto_id: id,
+    })
+    if (!error) {
+      // La funcion devuelve NULL si borro; o un mensaje de bloqueo/validacion.
+      if (data == null) return { success: true, error: null }
+      return { success: false, error: String(data) }
     }
-    const compras = await contarPorProducto(supabase, 'compras_detalle', id)
-    if (compras.error) return { success: false, error: compras.error }
-    if (compras.count > 0) {
-      return {
-        success: false,
-        error: `No se puede eliminar: el producto tiene ${compras.count} compra(s)/recepcion(es) registrada(s).`,
-      }
+    // Migracion 036 pendiente: usar la ruta JS (pasa por RLS).
+    if (funcionRpcInexistente(error)) {
+      return await deleteProductoFallbackJS(supabase, id)
     }
-
-    // 2) Cascada de movimientos e historiales de inventario (hijos que
-    //    bloquearian el FK). transacciones_inventario siempre existe; el resto
-    //    es best-effort (tablas opcionales segun migraciones aplicadas).
-    const ti = await supabase.from('transacciones_inventario').delete().eq('producto_id', id)
-    if (ti.error) return { success: false, error: `No se pudieron eliminar los movimientos de inventario: ${ti.error.message}` }
-    await borrarPorProductoBestEffort(supabase, 'ajustes_inventario', id)
-    await borrarPorProductoBestEffort(supabase, 'ajustes_costo', id)
-    await borrarPorProductoBestEffort(supabase, 'pedidos_detalle', id)
-
-    // 3) Borrar el producto.
-    const { error } = await supabase.from('productos').delete().eq('id', id)
-    if (error) return { success: false, error: error.message }
-    return { success: true, error: null }
+    return { success: false, error: error.message }
   } catch (err) {
     console.error('[Supabase] Error eliminando producto:', err)
     return { success: false, error: 'Error de conexion' }
   }
+}
+
+/**
+ * Fallback sin RPC: mismas reglas pero desde el cliente (pasa por RLS, por lo que
+ * NO alcanza movimientos con `razon_social_id` mal sellado). Se usa solo mientras
+ * no se aplica el script 036.
+ */
+async function deleteProductoFallbackJS(
+  supabase: NonNullable<ReturnType<typeof createClient>>,
+  id: number
+): Promise<{ success: boolean; error: string | null }> {
+  // 1) Proteccion: ventas y compras bloquean el borrado.
+  const ventas = await contarPorProducto(supabase, 'ventas_detalle', id)
+  if (ventas.error) return { success: false, error: ventas.error }
+  if (ventas.count > 0) {
+    return {
+      success: false,
+      error: `No se puede eliminar: el producto tiene ${ventas.count} venta(s) registrada(s). No se borra para conservar el historial de ventas.`,
+    }
+  }
+  const compras = await contarPorProducto(supabase, 'compras_detalle', id)
+  if (compras.error) return { success: false, error: compras.error }
+  if (compras.count > 0) {
+    return {
+      success: false,
+      error: `No se puede eliminar: el producto tiene ${compras.count} compra(s)/recepcion(es) registrada(s).`,
+    }
+  }
+
+  // 2) Cascada de movimientos e historiales de inventario.
+  const ti = await supabase.from('transacciones_inventario').delete().eq('producto_id', id)
+  if (ti.error) return { success: false, error: `No se pudieron eliminar los movimientos de inventario: ${ti.error.message}` }
+  await borrarPorProductoBestEffort(supabase, 'ajustes_inventario', id)
+  await borrarPorProductoBestEffort(supabase, 'ajustes_costo', id)
+  await borrarPorProductoBestEffort(supabase, 'pedidos_detalle', id)
+
+  // 3) Borrar el producto.
+  const { error } = await supabase.from('productos').delete().eq('id', id)
+  if (error) return { success: false, error: error.message }
+  return { success: true, error: null }
 }
 
 export async function uploadProductoImage(file: File): Promise<{ url: string | null; error: string | null }> {
