@@ -44,7 +44,8 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
     queHace: [
       "Genera el número de factura correlativo automáticamente (FC-0001, FC-0002…).",
       "Catálogo de productos con búsqueda y stock disponible por almacén.",
-      "Descuento porcentual sobre el subtotal e impuesto ISV (15 % por defecto, activable por venta).",
+      "Descuento porcentual sobre el subtotal e impuesto ISV (15 %). El ISV viene DESACTIVADO por defecto: actívalo por venta cuando aplique.",
+      "El cliente 'Consumidor Final' queda seleccionado por defecto; cámbialo si la venta es a un cliente registrado.",
       "Pago multi-método en una misma venta: efectivo, banco/tarjeta, link de pago, crédito. Ej.: 500 en efectivo + 1,000 con tarjeta.",
       "Aplica la comisión bancaria configurada en cada cuenta: registra el monto bruto que paga el cliente y el neto que entra al banco.",
       "El efectivo entra automáticamente a la caja chica abierta; lo de banco entra a la cuenta elegida.",

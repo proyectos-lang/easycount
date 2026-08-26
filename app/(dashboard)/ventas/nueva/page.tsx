@@ -93,7 +93,8 @@ export default function NuevaVentaPage() {
   const [clienteId, setClienteId] = React.useState<string>("")
   const [numeroFactura, setNumeroFactura] = React.useState("")
   const [fecha, setFecha] = React.useState(new Date().toISOString().split("T")[0])
-  const [aplicaIsv, setAplicaIsv] = React.useState(true)
+  // ISV desactivado por defecto: la mayoria de ventas se registran sin ISV.
+  const [aplicaIsv, setAplicaIsv] = React.useState(false)
   const [almacenId, setAlmacenId] = React.useState<string>("")
   const [localizacionId, setLocalizacionId] = React.useState<string>("")
   const [descuentoPct, setDescuentoPct] = React.useState<number>(0)
@@ -187,7 +188,13 @@ export default function NuevaVentaPage() {
         },
       })
       
-      setClientes(clientesRes.data || [])
+      const listaClientes = clientesRes.data || []
+      setClientes(listaClientes)
+      // Cliente por defecto: "Consumidor Final" (si existe en el catalogo).
+      const consumidorFinal = listaClientes.find(
+        (c) => (c.nombre || "").trim().toLowerCase() === "consumidor final"
+      )
+      if (consumidorFinal?.id != null) setClienteId(String(consumidorFinal.id))
       setProductos(productosRes.data || [])
       setMarcas(marcasRes.data || [])
       setCategorias(categoriasRes.data || [])
@@ -1041,8 +1048,10 @@ export default function NuevaVentaPage() {
     setClienteId("")
     setPagosDetalle([])
     setDescuentoPct(0)
+    setAplicaIsv(false) // vuelve al default (sin ISV) para la siguiente venta
     setFecha(new Date().toISOString().split("T")[0])
     setStockPorLocalizacion({})
+    // loadData() vuelve a seleccionar "Consumidor Final" por defecto.
     // Recarga el correlativo y los catalogos para reflejar altas recientes
     // (nuevos clientes, productos, correlativo incrementado).
     loadData()
