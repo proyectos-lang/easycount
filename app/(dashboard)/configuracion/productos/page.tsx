@@ -19,6 +19,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  ImageDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -62,6 +63,8 @@ import {
   deleteProducto,
   getProductoDependencias,
   uploadProductoImage,
+  recomprimirFotosProductos,
+  type ProgresoRecompresion,
   getMarcas,
   createMarca,
   getCategorias,
@@ -156,7 +159,12 @@ export default function ProductosConfigPage() {
   // Abre un acordeon donde cada fila es una categoria que se expande para
   // mostrar/agregar sus subcategorias.
   const [manageDialogOpen, setManageDialogOpen] = useState(false)
-  
+
+  // Recompresion de fotos ya subidas (backfill).
+  const [recompOpen, setRecompOpen] = useState(false)
+  const [recomprimiendo, setRecomprimiendo] = useState(false)
+  const [recompProgreso, setRecompProgreso] = useState<ProgresoRecompresion | null>(null)
+
   const [formData, setFormData] = useState<Partial<Producto>>({
     nombre: "",
     codigo_barras: "",
@@ -434,11 +442,9 @@ export default function ProductosConfigPage() {
         toast({ title: "Error", description: "Solo se permiten archivos de imagen", variant: "destructive" })
         return
       }
-      if (file.size > 5 * 1024 * 1024) {
-        toast({ title: "Error", description: "La imagen no debe exceder 5MB", variant: "destructive" })
-        return
-      }
-      
+      // No rechazamos por peso: uploadProductoImage comprime la foto antes de
+      // subir (baja resolucion/peso). Si aun asi supera 5MB, el API lo avisa.
+
       setImageFile(file)
       setImagePreview(URL.createObjectURL(file))
       
@@ -627,6 +633,23 @@ export default function ProductosConfigPage() {
     }
   }
 
+  async function handleRecomprimirFotos() {
+    setRecomprimiendo(true)
+    setRecompProgreso({ total: 0, procesados: 0, comprimidas: 0, errores: 0, bytesAhorrados: 0 })
+    const { data, error } = await recomprimirFotosProductos((p) => setRecompProgreso({ ...p }))
+    setRecomprimiendo(false)
+    if (error) {
+      toast({ title: "Error", description: error, variant: "destructive" })
+      return
+    }
+    const mb = (data.bytesAhorrados / (1024 * 1024)).toFixed(1)
+    toast({
+      title: "Fotos optimizadas",
+      description: `${data.comprimidas} de ${data.total} comprimidas · ${mb} MB ahorrados${data.errores ? ` · ${data.errores} con error` : ""}`,
+    })
+    loadProductos()
+  }
+
   return (
     <div className="space-y-4 md:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -634,10 +657,22 @@ export default function ProductosConfigPage() {
           <h1 className="text-xl md:text-2xl font-bold text-foreground">Configuracion de Productos</h1>
           <p className="text-sm md:text-base text-muted-foreground">Gestiona el catalogo de productos</p>
         </div>
-        <Button onClick={openNewDialog} size="sm" className="w-full sm:w-auto">
-          <Plus className="h-4 w-4 mr-1" />
-          Nuevo Producto
-        </Button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Button
+            onClick={() => { setRecompProgreso(null); setRecompOpen(true) }}
+            size="sm"
+            variant="outline"
+            className="flex-1 sm:flex-none"
+            title="Optimiza el peso de las fotos ya subidas de esta empresa"
+          >
+            <ImageDown className="h-4 w-4 mr-1" />
+            Comprimir fotos
+          </Button>
+          <Button onClick={openNewDialog} size="sm" className="flex-1 sm:flex-none">
+            <Plus className="h-4 w-4 mr-1" />
+            Nuevo Producto
+          </Button>
+        </div>
       </div>
 
       {/* Filtros superiores */}
@@ -1512,6 +1547,56 @@ export default function ProductosConfigPage() {
             >
               {creatingCategoria && <Spinner className="mr-2 h-4 w-4" />}
               Crear Categoria
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Comprimir fotos ya subidas (backfill) */}
+      <Dialog open={recompOpen} onOpenChange={(o) => { if (!recomprimiendo) setRecompOpen(o) }}>
+        <DialogContent className="max-w-sm rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ImageDown className="h-5 w-5 text-stone-700" />
+              Comprimir fotos
+            </DialogTitle>
+            <DialogDescription>
+              Optimiza el peso de las fotos ya subidas de los productos de esta
+              empresa (baja la resolucion; no borra ni cambia los productos).
+              Util si el catalogo carga lento.
+            </DialogDescription>
+          </DialogHeader>
+
+          {recompProgreso && (recomprimiendo || recompProgreso.procesados > 0) ? (
+            <div className="py-2 space-y-2 text-sm">
+              <div className="h-2 w-full rounded-full bg-stone-200 overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 transition-all"
+                  style={{ width: `${recompProgreso.total ? Math.round((recompProgreso.procesados / recompProgreso.total) * 100) : 0}%` }}
+                />
+              </div>
+              <p className="text-muted-foreground">
+                {recompProgreso.procesados} / {recompProgreso.total} procesadas · {recompProgreso.comprimidas} optimizadas
+                {recompProgreso.errores > 0 ? ` · ${recompProgreso.errores} con error` : ""}
+              </p>
+              {recomprimiendo && recompProgreso.actual && (
+                <p className="text-xs text-stone-400 truncate">Procesando: {recompProgreso.actual}</p>
+              )}
+            </div>
+          ) : (
+            <p className="py-2 text-xs text-muted-foreground">
+              Se procesan solo las fotos que se puedan reducir; las ya livianas se
+              saltan. Puede tardar un poco segun la cantidad de fotos.
+            </p>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRecompOpen(false)} disabled={recomprimiendo}>
+              Cerrar
+            </Button>
+            <Button onClick={handleRecomprimirFotos} disabled={recomprimiendo}>
+              {recomprimiendo && <Spinner className="mr-2 h-4 w-4" />}
+              {recomprimiendo ? "Comprimiendo..." : "Comprimir ahora"}
             </Button>
           </DialogFooter>
         </DialogContent>

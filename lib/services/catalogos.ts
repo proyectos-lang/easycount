@@ -1,5 +1,6 @@
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from '@/lib/services/tenant-stamp'
+import { comprimirImagen } from '@/lib/utils/comprimir-imagen'
 
 // ==================== INTERFACES ====================
 
@@ -397,14 +398,23 @@ async function deleteProductoFallbackJS(
   return { success: true, error: null }
 }
 
-export async function uploadProductoImage(file: File): Promise<{ url: string | null; error: string | null }> {
+export async function uploadProductoImage(
+  file: File,
+  opts?: { comprimir?: boolean }
+): Promise<{ url: string | null; error: string | null }> {
   if (!isSupabaseConfigured()) {
     return { url: URL.createObjectURL(file), error: null }
   }
 
   try {
+    // Comprime en el navegador antes de subir: baja resolucion/peso de fotos
+    // muy grandes (celular) para que quepan bajo el limite y carguen rapido.
+    // El backfill pasa `comprimir: false` porque ya viene comprimida.
+    const procesada =
+      opts?.comprimir === false ? file : (await comprimirImagen(file)).file
+
     const formData = new FormData()
-    formData.append('file', file)
+    formData.append('file', procesada)
 
     const res = await fetch('/api/upload-imagen', {
       method: 'POST',
@@ -422,6 +432,83 @@ export async function uploadProductoImage(file: File): Promise<{ url: string | n
     console.error('[Upload] Error subiendo imagen:', err)
     return { url: null, error: 'Error subiendo imagen' }
   }
+}
+
+export interface ProgresoRecompresion {
+  total: number
+  procesados: number
+  comprimidas: number
+  errores: number
+  bytesAhorrados: number
+  /** Nombre del producto en proceso (para feedback en vivo). */
+  actual?: string
+}
+
+/**
+ * Backfill: recomprime las fotos YA subidas de los productos de la empresa
+ * actual (tenant vía RLS). Para cada foto: la descarga, la comprime en el
+ * navegador y, si queda mas liviana, la vuelve a subir y actualiza `foto_url`.
+ * Idempotente: una foto ya optimizada se salta (no se recomprime).
+ *
+ * `onProgress` se llama por cada producto para poder mostrar el avance.
+ */
+export async function recomprimirFotosProductos(
+  onProgress?: (p: ProgresoRecompresion) => void
+): Promise<{ data: ProgresoRecompresion; error: string | null }> {
+  const prog: ProgresoRecompresion = {
+    total: 0,
+    procesados: 0,
+    comprimidas: 0,
+    errores: 0,
+    bytesAhorrados: 0,
+  }
+
+  if (!isSupabaseConfigured()) return { data: prog, error: 'Supabase no configurado' }
+  const supabase = createClient()
+  if (!supabase) return { data: prog, error: 'Cliente no disponible' }
+
+  const { data: productos, error } = await getProductos()
+  if (error) return { data: prog, error }
+
+  const conFoto = (productos || []).filter(
+    (p) => typeof p.foto_url === 'string' && /^https?:\/\//.test(p.foto_url)
+  )
+  prog.total = conFoto.length
+  onProgress?.({ ...prog })
+
+  for (const p of conFoto) {
+    prog.actual = p.nombre
+    onProgress?.({ ...prog })
+    try {
+      const resp = await fetch(p.foto_url as string, { cache: 'no-store' })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const blob = await resp.blob()
+      const nombre = (p.foto_url as string).split('/').pop() || 'foto.jpg'
+      const file = new File([blob], nombre, { type: blob.type || 'image/jpeg' })
+
+      const r = await comprimirImagen(file)
+      if (r.comprimida && r.bytesDespues < r.bytesAntes) {
+        const { url, error: upErr } = await uploadProductoImage(r.file, { comprimir: false })
+        if (upErr || !url) throw new Error(upErr || 'No se pudo subir')
+        const { error: updErr } = await supabase
+          .from('productos')
+          .update({ foto_url: url })
+          .eq('id', p.id as number)
+        if (updErr) throw new Error(updErr.message)
+        prog.comprimidas += 1
+        prog.bytesAhorrados += r.bytesAntes - r.bytesDespues
+      }
+    } catch (err) {
+      console.error('[Recompresion] Error con producto', p.id, err)
+      prog.errores += 1
+    }
+    prog.procesados += 1
+    onProgress?.({ ...prog })
+  }
+
+  prog.actual = undefined
+  onProgress?.({ ...prog })
+  return { data: prog, error: null }
 }
 
 // ==================== MARCAS ====================

@@ -100,7 +100,8 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "Crea y edita productos: nombre, código de barras, marca, categoría/subcategoría, foto y precio de venta sugerido.",
       "Gestiona marcas, categorías y subcategorías desde el mismo módulo.",
       "Muestra el stock total y el costo promedio actuales (informativos).",
-      "La foto se sube al almacenamiento de la nube y aparece en el catálogo de Nueva Venta.",
+      "La foto se sube al almacenamiento de la nube y aparece en el catálogo de Nueva Venta. Las fotos grandes (de celular) se comprimen automáticamente al subir para que carguen rápido.",
+      "Botón 'Comprimir fotos': optimiza de una sola vez el peso de las fotos ya subidas de la empresa (baja la resolución sin borrar ni cambiar los productos). Útil si el catálogo carga lento por fotos de muy alta resolución.",
       "Al crear un producto puedes indicar una cantidad inicial (con su costo, almacén y localización): el sistema genera automáticamente un ingreso manual al inventario para que arranque con existencias.",
       "Elimina productos: si solo tiene movimientos de inventario, se borran en cascada junto con el producto (te avisa cuántos); si tiene ventas o compras registradas, no se borra para proteger el historial.",
     ],
@@ -149,7 +150,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "Porque tiene ventas o compras registradas. Para no perder la trazabilidad de esos documentos, un producto con historial de ventas o compras no se elimina. Si solo tiene movimientos de inventario, sí se puede borrar y esos movimientos se eliminan en cascada con él.",
       },
     ],
-    keywords: ["producto", "codigo de barras", "sku", "precio", "marca", "categoria", "foto", "catalogo", "eliminar", "borrar", "cascada"],
+    keywords: ["producto", "codigo de barras", "sku", "precio", "marca", "categoria", "foto", "catalogo", "eliminar", "borrar", "cascada", "comprimir fotos", "imagen pesada", "resolucion", "carga lenta"],
   },
   {
     modulo: "Almacenes",
