@@ -28,10 +28,7 @@ import { DesgloseProrrateo } from "@/components/recepcion/desglose-prorrateo"
 import {
   previewRecalculoRecepcion, procesarRecalculoRecepcion, type PreviewRecalculoRecepcion,
 } from "@/lib/services/recalculo-recepcion"
-
-function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10)
-}
+import { hoyISO } from "@/lib/utils/fecha"
 
 export default function RecalcularRecepcionPage() {
   const { toast } = useToast()

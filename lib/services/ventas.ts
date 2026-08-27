@@ -3,6 +3,7 @@ import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from '@/lib/servi
 import { registrarMovimientoCaja, getSesionAbierta } from '@/lib/services/caja-chica'
 import { registrarMovimientoCuenta } from '@/lib/services/cuentas'
 import { ajustarStock } from '@/lib/services/stock'
+import { getHondurasNowISO } from '@/lib/utils/honduras-time'
 
 /**
  * True SOLO si el error es "la relacion/tabla no existe" (migracion pendiente):
@@ -538,7 +539,7 @@ export async function crearVenta(
     const newVenta: VentaEncabezado = { 
       ...data.encabezado, 
       id: Date.now(),
-      fecha_venta: new Date().toISOString()
+      fecha_venta: getHondurasNowISO()
     }
     ventas.push(newVenta)
     localStorage.setItem('ventas_encabezado', JSON.stringify(ventas))
@@ -574,7 +575,7 @@ export async function crearVenta(
         cantidad: -detalle.cantidad,
         costo_o_precio_unitario: detalle.costo_promedio_momento,
         referencia_id: newVenta.id!,
-        fecha: new Date().toISOString()
+        fecha: getHondurasNowISO()
       })
     }
     
@@ -710,8 +711,10 @@ export async function crearVenta(
           cantidad: -detalle.cantidad,
           costo_o_precio_unitario: detalle.costo_promedio_momento,
           referencia_id: ventaData.id,
+          // Fecha HN-as-UTC (dia de negocio de Honduras): el kardex la muestra
+          // con .split('T')[0], que asi devuelve el dia local correcto.
+          fecha: getHondurasNowISO(),
           ...stamp
-          // fecha defaults to now() in database
         })
     }
 
@@ -878,7 +881,7 @@ export async function registrarPago(
     const newPago: PagoVenta = { 
       ...pago, 
       id: Date.now(),
-      fecha_pago: new Date().toISOString()
+      fecha_pago: getHondurasNowISO()
     }
     pagos.push(newPago)
     localStorage.setItem('pagos_ventas', JSON.stringify(pagos))
@@ -932,7 +935,9 @@ export async function registrarPago(
     // Insert payment (sello completo: empresa + usuario que registra el pago)
     const { data: pagoData, error: pagoError } = await supabase
       .from('pagos_ventas')
-      .insert({ ...pago, ...stamp })
+      // fecha_pago HN-as-UTC (dia de negocio): el historial/CxC la muestran con
+      // .split('T')[0]. Sin esto caia a now() (UTC real) y de noche adelantaba.
+      .insert({ ...pago, fecha_pago: getHondurasNowISO(), ...stamp })
       .select()
       .single()
 
@@ -2213,6 +2218,7 @@ export async function editarVenta(
         cantidad: -d.cantidad,
         costo_o_precio_unitario: d.costo_promedio_momento,
         referencia_id: ventaId,
+        fecha: getHondurasNowISO(), // dia de negocio HN (kardex usa split)
         ...stamp,
       })
     }

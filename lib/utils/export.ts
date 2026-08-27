@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx"
+import { getHondurasTodayISODate } from "./honduras-time"
 
 /**
  * Exporta un arreglo de objetos a un archivo Excel (.xlsx) con columnas
@@ -34,6 +35,6 @@ export function exportToXlsx(
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, sheetName)
 
-  const fecha = appendDate ? `_${new Date().toISOString().split("T")[0]}` : ""
+  const fecha = appendDate ? `_${getHondurasTodayISODate()}` : ""
   XLSX.writeFile(wb, `${filename}${fecha}.xlsx`)
 }

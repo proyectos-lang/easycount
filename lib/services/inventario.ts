@@ -1,6 +1,7 @@
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from '@/lib/services/tenant-stamp'
 import { aplicarEntradaCompra, ajustarStock } from '@/lib/services/stock'
+import { getHondurasNowISO } from '@/lib/utils/honduras-time'
 
 /**
  * PostgREST corta cada `.select()` en 1000 filas. Este helper pagina con
@@ -605,7 +606,7 @@ export async function procesarIngresoManual(data: IngresoManualData): Promise<{ 
     const savedProds = localStorage.getItem('productos')
     const productos = savedProds ? JSON.parse(savedProds) : []
     
-    const now = new Date().toISOString()
+    const now = getHondurasNowISO()
     
     // Insert transaction
     transacciones.push({
@@ -669,6 +670,7 @@ export async function procesarIngresoManual(data: IngresoManualData): Promise<{ 
           tipo_movimiento: 'Salida Manual',
           cantidad: -data.cantidad,
           costo_o_precio_unitario: Number(prod?.costo_promedio || data.costo_anterior || 0),
+          fecha: getHondurasNowISO(), // dia de negocio HN (kardex usa split)
           ...stamp,
         })
       if (salidaTransError) return { success: false, error: salidaTransError.message }
@@ -690,6 +692,7 @@ export async function procesarIngresoManual(data: IngresoManualData): Promise<{ 
         tipo_movimiento: 'Ingreso Manual',
         cantidad: data.cantidad,
         costo_o_precio_unitario: data.costo_unitario,
+        fecha: getHondurasNowISO(), // dia de negocio HN (kardex usa split)
         ...stamp
       })
 
@@ -731,7 +734,7 @@ export async function procesarTraslado(data: TrasladoData): Promise<{ success: b
     const saved = localStorage.getItem('transacciones_inventario')
     const transacciones: TransaccionInventario[] = saved ? JSON.parse(saved) : []
     
-    const now = new Date().toISOString()
+    const now = getHondurasNowISO()
     const refId = Date.now()
     
     // Salida del origen
@@ -787,6 +790,7 @@ export async function procesarTraslado(data: TrasladoData): Promise<{ success: b
         cantidad: -data.cantidad,
         costo_o_precio_unitario: data.costo_unitario,
         referencia_id: refId,
+        fecha: getHondurasNowISO(), // dia de negocio HN (kardex usa split)
         ...stamp
       })
 
@@ -803,6 +807,7 @@ export async function procesarTraslado(data: TrasladoData): Promise<{ success: b
         cantidad: data.cantidad,
         costo_o_precio_unitario: data.costo_unitario,
         referencia_id: refId,
+        fecha: getHondurasNowISO(), // dia de negocio HN (kardex usa split)
         ...stamp
       })
 
@@ -839,7 +844,7 @@ export async function procesarTrasladosMultiples(
     const saved = localStorage.getItem('transacciones_inventario')
     const transacciones: TransaccionInventario[] = saved ? JSON.parse(saved) : []
     
-    const now = new Date().toISOString()
+    const now = getHondurasNowISO()
     const refIdBase = Date.now()
     
     lineas.forEach((linea, index) => {
@@ -895,6 +900,7 @@ export async function procesarTrasladosMultiples(
       cantidad: number
       costo_o_precio_unitario: number
       referencia_id: number
+      fecha: string
       razon_social_id: number | null
       usuario: string | null
     }[] = []
@@ -911,9 +917,10 @@ export async function procesarTrasladosMultiples(
         cantidad: -linea.cantidad,
         costo_o_precio_unitario: linea.costo_unitario,
         referencia_id: refId,
+        fecha: getHondurasNowISO(), // dia de negocio HN (kardex usa split)
         ...stamp
       })
-      
+
       // Entrada al destino
       insertData.push({
         producto_id: linea.producto_id,
@@ -923,6 +930,7 @@ export async function procesarTrasladosMultiples(
         cantidad: linea.cantidad,
         costo_o_precio_unitario: linea.costo_unitario,
         referencia_id: refId,
+        fecha: getHondurasNowISO(), // dia de negocio HN (kardex usa split)
         ...stamp
       })
     })
@@ -1019,6 +1027,7 @@ export async function procesarAjusteInventario(
       tipo_movimiento: 'Ajuste',
       cantidad: l.delta, // con signo: + entrada, - salida
       costo_o_precio_unitario: l.costo_unitario,
+      fecha: getHondurasNowISO(), // dia de negocio HN (kardex usa split)
       ...stamp,
     })
     if (movErr) {

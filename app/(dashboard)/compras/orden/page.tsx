@@ -451,6 +451,7 @@ export default function OrdenCompraPage() {
   const formatDate = (date?: string | null) => {
     if (!date) return "—"
     return new Date(date).toLocaleDateString("es-HN", {
+      timeZone: "UTC", // fecha_orden se guarda HN-as-UTC (dia de negocio)
       year: "numeric",
       month: "short",
       day: "numeric"

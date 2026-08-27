@@ -54,6 +54,7 @@ import {
 } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { getProductos, getAlmacenes, getLocalizaciones, type Producto, type Almacen, type Localizacion } from "@/lib/services/catalogos"
+import { hoyISO } from "@/lib/utils/fecha"
 import { getStockMultipleProducts, procesarTrasladosMultiples, type TrasladoLineaData } from "@/lib/services/inventario"
 import { getRazonSocial } from "@/lib/services/razon-social"
 import { Spinner } from "@/components/ui/spinner"
@@ -389,7 +390,7 @@ export default function TrasladosPage() {
     doc.text("Generado por EasyCount", pageWidth / 2, 291, { align: "center" })
     
     // Save PDF
-    doc.save(`Traslado_${new Date().toISOString().split('T')[0]}_${Date.now()}.pdf`)
+    doc.save(`Traslado_${hoyISO()}_${Date.now()}.pdf`)
   }
 
   async function handleSubmit() {

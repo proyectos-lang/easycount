@@ -1,4 +1,5 @@
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
+import { getHondurasTodayISODate } from '@/lib/utils/honduras-time'
 
 // ==================== INTERFACES ====================
 
@@ -70,8 +71,9 @@ export async function getDashboardMetrics(
   }
 
   try {
-    const now = new Date()
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+    // Primer dia del mes en curso (Honduras), codificado como UTC para casar con
+    // las columnas de dia-de-negocio HN-as-UTC (fecha_venta, etc.).
+    const firstDayOfMonth = `${getHondurasTodayISODate().slice(0, 7)}-01T00:00:00.000Z`
 
     // Ventas Mes: total facturado del mes actual.
     let ventasMesRes: any = await supabase
@@ -150,11 +152,14 @@ export async function getVentasVsCobros(
   razonSocialId: number | null,
   dias: number = 7
 ): Promise<{ data: VentasVsCobros[]; error: string | null }> {
+  // Eje de dias en horario de Honduras (codificado como UTC para casar con las
+  // columnas de dia-de-negocio HN-as-UTC). Evita que "hoy" caiga fuera del eje
+  // por la noche (cuando toISOString() ya reporta el dia UTC siguiente).
+  const baseUtcMs = new Date(`${getHondurasTodayISODate()}T00:00:00.000Z`).getTime()
   const result: VentasVsCobros[] = []
   for (let i = dias - 1; i >= 0; i--) {
-    const date = new Date()
-    date.setDate(date.getDate() - i)
-    result.push({ fecha: date.toISOString().split('T')[0], ventas: 0, cobros: 0 })
+    const fecha = new Date(baseUtcMs - i * 86400000).toISOString().slice(0, 10)
+    result.push({ fecha, ventas: 0, cobros: 0 })
   }
 
   if (!isSupabaseConfigured()) return { data: result, error: null }
@@ -164,21 +169,19 @@ export async function getVentasVsCobros(
   if (razonSocialId == null) return { data: result, error: null }
 
   try {
-    const startDate = new Date()
-    startDate.setDate(startDate.getDate() - dias + 1)
-    startDate.setHours(0, 0, 0, 0)
+    const startDate = new Date(baseUtcMs - (dias - 1) * 86400000).toISOString()
 
     const [ventasRes, pagosRes] = await Promise.all([
       supabase
         .from('ventas_encabezado')
         .select('total_venta, fecha_venta')
         .eq('razon_social_id', razonSocialId)
-        .gte('fecha_venta', startDate.toISOString()),
+        .gte('fecha_venta', startDate),
       supabase
         .from('pagos_ventas')
         .select('monto, fecha_pago, ventas_encabezado!inner(razon_social_id)')
         .eq('ventas_encabezado.razon_social_id', razonSocialId)
-        .gte('fecha_pago', startDate.toISOString()),
+        .gte('fecha_pago', startDate),
     ])
 
     if (ventasRes.error) console.log('[Dashboard] ventasVsCobros ventas error:', ventasRes.error)

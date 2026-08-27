@@ -1,6 +1,7 @@
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from '@/lib/services/tenant-stamp'
 import { aplicarEntradaCompra } from '@/lib/services/stock'
+import { getHondurasNowISO } from '@/lib/utils/honduras-time'
 
 // ==================== INTERFACES ====================
 
@@ -198,10 +199,11 @@ export async function createCompra(
       return { data: null, error: SESION_INVALIDA_ERROR }
     }
 
-    // Insert encabezado (sello completo: empresa + usuario que crea la orden)
+    // Insert encabezado (sello completo: empresa + usuario que crea la orden).
+    // fecha_orden HN-as-UTC (dia de negocio); si el caller ya la trae, gana.
     const { data: compraData, error: compraError } = await supabase
       .from('compras_encabezado')
-      .insert({ ...encabezado, ...stamp })
+      .insert({ fecha_orden: getHondurasNowISO(), ...encabezado, ...stamp })
       .select()
       .single()
 
@@ -385,7 +387,7 @@ export async function procesarRecepcion(data: RecepcionData): Promise<{ success:
         cantidad: item.cantidad_recibida,
         costo_o_precio_unitario: item.costo_final_local,
         referencia_id: data.compraId,
-        fecha: new Date().toISOString()
+        fecha: getHondurasNowISO()
       })
     }
     
@@ -462,8 +464,9 @@ export async function procesarRecepcion(data: RecepcionData): Promise<{ success:
           cantidad: item.cantidad_recibida,
           costo_o_precio_unitario: item.costo_final_local,
           referencia_id: data.compraId,
+          // Fecha HN-as-UTC (dia de negocio): el kardex la muestra con split.
+          fecha: getHondurasNowISO(),
           ...stamp
-          // fecha defaults to now() in database
         })
 
       if (transError) return { success: false, error: transError.message }

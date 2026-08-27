@@ -53,6 +53,7 @@ import {
 import { DesgloseProrrateo } from "@/components/recepcion/desglose-prorrateo"
 import { type Proveedor, getProveedores } from "@/lib/services/catalogos"
 import { getRazonSocialForPdf } from "@/lib/services/ventas"
+import { hoyISO } from "@/lib/utils/fecha"
 import { type Almacen, type Localizacion, getAlmacenes, getLocalizaciones } from "@/lib/services/catalogos"
 
 export default function RecepcionPage() {
@@ -271,7 +272,7 @@ export default function RecepcionPage() {
     const orderNumber = `OC-${String(compra.id).padStart(5, '0')}`
     doc.text(`No: ${orderNumber}`, 15, 68)
     doc.setFont("helvetica", "normal")
-    doc.text(`Fecha: ${compra.fecha_orden?.split('T')[0] || new Date().toISOString().split('T')[0]}`, pageWidth - 15, 68, { align: "right" })
+    doc.text(`Fecha: ${compra.fecha_orden?.split('T')[0] || hoyISO()}`, pageWidth - 15, 68, { align: "right" })
     
     // Supplier Info
     doc.setDrawColor(200, 200, 200)
@@ -389,6 +390,7 @@ export default function RecepcionPage() {
   const formatDate = (date?: string | null) => {
     if (!date) return "—"
     return new Date(date).toLocaleDateString("es-HN", {
+      timeZone: "UTC", // fecha_orden se guarda HN-as-UTC (dia de negocio)
       year: "numeric",
       month: "short",
       day: "numeric"

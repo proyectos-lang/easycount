@@ -3,6 +3,7 @@ import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from "@/lib/servi
 import { ajustarStock } from "@/lib/services/stock"
 import { registrarMovimientoCaja } from "@/lib/services/caja-chica"
 import { registrarMovimientoCuenta } from "@/lib/services/cuentas"
+import { getHondurasNowISO } from "@/lib/utils/honduras-time"
 
 // ==================== TIPOS ====================
 
@@ -219,6 +220,7 @@ export async function crearDevolucion(
       monto_total: montoTotal,
       destino_reembolso: input.destino.tipo,
       cuenta_id: input.destino.tipo === "cuenta" ? input.destino.cuenta_id : null,
+      fecha: getHondurasNowISO(), // dia de negocio HN (se muestra con split)
       ...stamp,
     })
     .select("id")
@@ -280,6 +282,7 @@ export async function crearDevolucion(
         cantidad: l.cantidad_devuelta,
         costo_o_precio_unitario: ref.costo || l.costo_promedio_momento,
         referencia_id: devolucionId,
+        fecha: getHondurasNowISO(), // dia de negocio HN (kardex usa split)
         ...stamp,
       }
       const { error: kErr } = await supabase.from("transacciones_inventario").insert(filaKardex)

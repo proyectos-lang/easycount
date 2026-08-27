@@ -4,6 +4,7 @@ import { getProductos, type Producto } from "@/lib/services/catalogos"
 import { getCuentas, type CuentaConfig } from "@/lib/services/cuentas"
 import { getSesionAbierta } from "@/lib/services/caja-chica"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
+import { getHondurasNowISO } from "@/lib/utils/honduras-time"
 
 // ==================== TIPOS ====================
 
@@ -128,7 +129,7 @@ function fechaAISO(fecha: string): string {
   }
   const parsed = new Date(s)
   if (!Number.isNaN(parsed.getTime())) return parsed.toISOString()
-  return new Date().toISOString()
+  return getHondurasNowISO() // dia de Honduras si la fecha del Excel no parsea
 }
 
 /** Precio unitario efectivo (neto de descuento), para que el subtotal cuadre con el Excel. */

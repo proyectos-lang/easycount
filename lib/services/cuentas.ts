@@ -4,6 +4,7 @@ import {
   isValidStamp,
   SESION_INVALIDA_ERROR,
 } from "@/lib/services/tenant-stamp"
+import { getHondurasNowISO } from "@/lib/utils/honduras-time"
 
 // ==================== INTERFACES ====================
 
@@ -304,6 +305,9 @@ export async function registrarMovimientoCuenta(input: {
       ref_tipo: input.ref_tipo,
       ref_id: input.ref_id,
       saldo_resultante: saldoResultante,
+      // Fecha HN-as-UTC (dia de negocio): Movimientos/Consolidacion la muestran
+      // con .split('T')[0]/.slice(0,10) y cierre-diario la filtra por dia HN.
+      fecha: getHondurasNowISO(),
       ...stamp,
     })
     .select()
