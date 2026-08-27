@@ -46,6 +46,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Catálogo de productos con búsqueda y stock disponible por almacén.",
       "Descuento porcentual sobre el subtotal e impuesto ISV (15 %). El ISV viene DESACTIVADO por defecto: actívalo por venta cuando aplique.",
       "El cliente 'Consumidor Final' queda seleccionado por defecto; cámbialo si la venta es a un cliente registrado.",
+      "Botón 'Pantalla completa' (arriba a la derecha): expande el módulo al 100% de la pantalla para usarlo como caja/POS físico; se sale con el mismo botón o con ESC.",
       "Pago multi-método en una misma venta: efectivo, banco/tarjeta, link de pago, crédito. Ej.: 500 en efectivo + 1,000 con tarjeta.",
       "Aplica la comisión bancaria configurada en cada cuenta: registra el monto bruto que paga el cliente y el neto que entra al banco.",
       "El efectivo entra automáticamente a la caja chica abierta; lo de banco entra a la cuenta elegida.",
@@ -127,6 +128,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "vender", "factura", "pos", "cobrar", "efectivo", "tarjeta", "credito",
       "descuento", "isv", "impuesto", "comision", "ticket", "punto de venta",
       "tirilla", "termica", "impresora", "80mm", "imprimir", "comprobante", "recibo",
+      "pantalla completa", "pos", "kiosko", "caja",
     ],
   },
   {

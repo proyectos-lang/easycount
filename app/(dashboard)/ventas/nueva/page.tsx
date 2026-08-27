@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Minus, Trash2, FileText, ShoppingCart, User, Receipt, Warehouse, MapPin, AlertTriangle, UserPlus, Wallet, X, Landmark, Printer, CheckCircle2 } from "lucide-react"
+import { Plus, Minus, Trash2, FileText, ShoppingCart, User, Receipt, Warehouse, MapPin, AlertTriangle, UserPlus, Wallet, X, Landmark, Printer, CheckCircle2, Maximize2, Minimize2 } from "lucide-react"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -80,6 +80,10 @@ export default function NuevaVentaPage() {
   const { user } = useAuth()
   // Flag por empresa: si es false, la empresa vende SIN ISV (se oculta el campo).
   const mostrarIsv = user?.flags?.ventas_mostrar_isv ?? true
+
+  // Modo pantalla completa (kiosko POS): el modulo abarca el 100% de la pantalla.
+  const [fullscreen, setFullscreen] = React.useState(false)
+  const posRootRef = React.useRef<HTMLDivElement>(null)
 
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
@@ -1092,6 +1096,30 @@ export default function NuevaVentaPage() {
     loadData()
   }
 
+  // Alterna el modo POS a pantalla completa. Usa la Fullscreen API del
+  // navegador (kiosko real) y, en paralelo, el estado `fullscreen` aplica el
+  // layout fixed inset-0 que cubre el sidebar/topbar del dashboard.
+  function toggleFullscreen() {
+    const next = !fullscreen
+    setFullscreen(next)
+    try {
+      if (next) posRootRef.current?.requestFullscreen?.()
+      else if (document.fullscreenElement) document.exitFullscreen?.()
+    } catch {
+      // Fullscreen API no disponible: el modo in-app (fixed inset-0) igual aplica.
+    }
+  }
+
+  // Si el usuario sale de pantalla completa con ESC/gesto del navegador,
+  // tambien salimos del modo POS para no quedar en un estado inconsistente.
+  React.useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement) setFullscreen(false)
+    }
+    document.addEventListener("fullscreenchange", onFsChange)
+    return () => document.removeEventListener("fullscreenchange", onFsChange)
+  }, [])
+
   if (loading) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex flex-col lg:flex-row">
@@ -1107,98 +1135,113 @@ export default function NuevaVentaPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] lg:h-[calc(100vh-4rem)] lg:overflow-hidden flex flex-col lg:flex-row bg-muted/30">
+    <div
+      ref={posRootRef}
+      className={
+        fullscreen
+          ? "fixed inset-0 z-50 h-screen w-screen overflow-hidden flex flex-col lg:flex-row bg-background"
+          : "min-h-[calc(100vh-4rem)] lg:h-[calc(100vh-4rem)] lg:overflow-hidden flex flex-col lg:flex-row bg-muted/30"
+      }
+    >
       {/* Main Content - Products */}
       <div className="flex-1 flex flex-col p-3 md:p-4 lg:min-h-0 lg:overflow-hidden">
-        {/* Header with Warehouse Selection */}
-        <div className="space-y-3 mb-4">
-          {/* Row 1: Invoice info */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2 md:gap-4">
-              <div className="flex items-center gap-2 bg-primary/10 text-primary px-3 md:px-4 py-1.5 md:py-2 rounded-lg">
-                <Receipt className="h-4 w-4 md:h-5 md:w-5" />
-                <span className="font-mono font-bold text-base md:text-lg">{numeroFactura}</span>
-              </div>
-              <Input 
-                type="date" 
-                value={fecha} 
-                onChange={(e) => setFecha(e.target.value)} 
-                className="w-36 md:w-40 bg-background text-sm"
-              />
+        {/* Row 1: Factura + fecha + pantalla completa */}
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex flex-wrap items-center gap-2 md:gap-3">
+            <div className="flex items-center gap-2 bg-primary/10 text-primary px-3 py-1.5 rounded-lg">
+              <Receipt className="h-4 w-4 md:h-5 md:w-5" />
+              <span className="font-mono font-bold text-base md:text-lg">{numeroFactura}</span>
             </div>
+            <Input
+              type="date"
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
+              className="w-36 md:w-40 bg-background text-sm"
+            />
           </div>
-          
-          {/* Row 2: Warehouse Selection */}
-          <Card className="bg-amber-50/50 border-amber-200">
-            <CardContent className="p-3 md:p-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs uppercase tracking-wide text-amber-800 mb-1.5 flex items-center gap-1.5">
-                    <Warehouse className="h-3.5 w-3.5" />
-                    Almacen de Despacho
-                  </Label>
-                  <Select value={almacenId} onValueChange={handleAlmacenChange}>
-                    <SelectTrigger className="h-10 bg-white border-amber-200">
-                      <SelectValue placeholder="Seleccionar almacen..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {almacenes.map(a => (
-                        <SelectItem key={a.id} value={a.id!.toString()}>
-                          {a.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div>
-                  <Label className="text-xs uppercase tracking-wide text-amber-800 mb-1.5 flex items-center gap-1.5">
-                    <MapPin className="h-3.5 w-3.5" />
-                    Localizacion
-                  </Label>
-                  <Select 
-                    value={localizacionId} 
-                    onValueChange={handleLocalizacionChange}
-                    disabled={!almacenId}
-                  >
-                    <SelectTrigger className="h-10 bg-white border-amber-200">
-                      <SelectValue placeholder={almacenId ? "Seleccionar..." : "Seleccione almacen"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {localizacionesFiltradas.map(l => (
-                        <SelectItem key={l.id} value={l.id!.toString()}>
-                          {l.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              
-              {!almacenId && (
-                <p className="text-xs text-amber-700 mt-2 flex items-center gap-1.5">
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  Seleccione un almacen para poder agregar productos
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={toggleFullscreen}
+            className="gap-2 shrink-0"
+            title={fullscreen ? "Salir de pantalla completa" : "Pantalla completa (modo POS)"}
+          >
+            {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            <span className="hidden sm:inline">{fullscreen ? "Salir" : "Pantalla completa"}</span>
+          </Button>
         </div>
 
-        {/* Catalogo de Productos - siempre visible, ocupa toda la columna */}
-        <Card className="flex-1 overflow-hidden min-h-[280px] lg:min-h-0">
-          <CardContent className="p-3 md:p-4 h-full">
-            <ProductCatalog
-              productos={productos}
-              marcas={marcas}
-              categorias={categorias}
-              idsEnVenta={lineas.map((l) => l.producto_id)}
-              onAdd={(producto) => addProducto(producto)}
-              disabled={!almacenId}
-              localizacionSeleccionada={!!localizacionId}
-              stockPorLocalizacion={stockCatalogo}
-              loadingStock={loadingCatalogo}
-            />
+        {/* Contenedor unificado: despacho + catalogo (todo en una sola tarjeta) */}
+        <Card className="flex-1 flex flex-col overflow-hidden min-h-[280px] lg:min-h-0">
+          <CardContent className="p-3 md:p-4 h-full flex flex-col gap-3 min-h-0">
+            {/* Almacen de despacho + localizacion */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1 flex items-center gap-1.5">
+                  <Warehouse className="h-3.5 w-3.5" />
+                  Almacen de Despacho
+                </Label>
+                <Select value={almacenId} onValueChange={handleAlmacenChange}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Seleccionar almacen..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {almacenes.map(a => (
+                      <SelectItem key={a.id} value={a.id!.toString()}>
+                        {a.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1 flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5" />
+                  Localizacion
+                </Label>
+                <Select
+                  value={localizacionId}
+                  onValueChange={handleLocalizacionChange}
+                  disabled={!almacenId}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder={almacenId ? "Seleccionar..." : "Seleccione almacen"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {localizacionesFiltradas.map(l => (
+                      <SelectItem key={l.id} value={l.id!.toString()}>
+                        {l.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {!almacenId && (
+              <p className="text-xs text-amber-700 flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Seleccione un almacen para poder agregar productos
+              </p>
+            )}
+
+            <Separator />
+
+            {/* Catalogo de productos (ocupa el resto del contenedor) */}
+            <div className="flex-1 min-h-0">
+              <ProductCatalog
+                productos={productos}
+                marcas={marcas}
+                categorias={categorias}
+                idsEnVenta={lineas.map((l) => l.producto_id)}
+                onAdd={(producto) => addProducto(producto)}
+                disabled={!almacenId}
+                localizacionSeleccionada={!!localizacionId}
+                stockPorLocalizacion={stockCatalogo}
+                loadingStock={loadingCatalogo}
+              />
+            </div>
           </CardContent>
         </Card>
       </div>

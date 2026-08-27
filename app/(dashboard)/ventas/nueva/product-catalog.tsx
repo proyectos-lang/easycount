@@ -309,17 +309,22 @@ function ProductGrid({ productos, idsEnVenta, onAdd, disabled, getStock }: ListP
                 </span>
               )}
             </div>
-            <div className="flex flex-col gap-1 p-2 sm:p-2.5 min-w-0">
-              <p className="text-[11px] sm:text-xs font-medium leading-tight line-clamp-2 break-words">
+            <div className="flex flex-col gap-0.5 p-1.5 sm:p-2 min-w-0">
+              <p className="text-[10px] sm:text-[11px] font-medium leading-tight line-clamp-2 break-words">
                 {p.nombre}
               </p>
+              {p.codigo_barras && (
+                <p className="text-[9px] sm:text-[10px] font-mono text-muted-foreground truncate">
+                  {p.codigo_barras}
+                </p>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 mt-0.5">
-                <span className="text-[11px] sm:text-xs font-bold text-primary whitespace-nowrap">
+                <span className="text-[10px] sm:text-[11px] font-bold text-primary whitespace-nowrap">
                   L {(p.precio_venta_sugerido ?? 0).toFixed(2)}
                 </span>
                 <span
                   className={cn(
-                    "text-[10px] sm:text-[11px] font-medium whitespace-nowrap",
+                    "text-[9px] sm:text-[10px] font-medium whitespace-nowrap",
                     stockClass(stock)
                   )}
                 >
@@ -337,23 +342,23 @@ function ProductGrid({ productos, idsEnVenta, onAdd, disabled, getStock }: ListP
 function ProductTable({ productos, idsEnVenta, onAdd, disabled, getStock }: ListProps) {
   return (
     <div className="rounded-lg border overflow-x-auto">
-      <table className="w-full min-w-[34rem] text-xs">
+      <table className="w-full min-w-[34rem] text-[11px]">
         <thead className="bg-muted/60 text-[10px] uppercase tracking-wide text-muted-foreground">
           <tr>
-            <th className="text-left font-medium px-2 sm:px-3 py-2 w-12">Foto</th>
-            <th className="text-left font-medium px-2 sm:px-3 py-2">Nombre</th>
-            <th className="text-left font-medium px-3 py-2 hidden md:table-cell">
+            <th className="text-left font-medium px-2 sm:px-3 py-1.5 w-10">Foto</th>
+            <th className="text-left font-medium px-2 sm:px-3 py-1.5">Nombre</th>
+            <th className="text-left font-medium px-3 py-1.5">
               Codigo
             </th>
-            <th className="text-left font-medium px-3 py-2 hidden lg:table-cell">
+            <th className="text-left font-medium px-3 py-1.5 hidden lg:table-cell">
               Marca
             </th>
-            <th className="text-left font-medium px-3 py-2 hidden lg:table-cell">
+            <th className="text-left font-medium px-3 py-1.5 hidden lg:table-cell">
               Categoria
             </th>
-            <th className="text-right font-medium px-2 sm:px-3 py-2">Stock</th>
-            <th className="text-right font-medium px-2 sm:px-3 py-2">Precio</th>
-            <th className="px-2 sm:px-3 py-2 w-12" />
+            <th className="text-right font-medium px-2 sm:px-3 py-1.5">Stock</th>
+            <th className="text-right font-medium px-2 sm:px-3 py-1.5">Precio</th>
+            <th className="px-2 sm:px-3 py-1.5 w-10" />
           </tr>
         </thead>
         <tbody className="divide-y">
@@ -362,47 +367,47 @@ function ProductTable({ productos, idsEnVenta, onAdd, disabled, getStock }: List
             const stock = getStock(p)
             return (
               <tr key={p.id} className="hover:bg-muted/40">
-                <td className="px-2 sm:px-3 py-2">
+                <td className="px-2 sm:px-3 py-1.5">
                   <ProductImage
                     url={p.foto_url}
                     nombre={p.nombre}
-                    className="h-9 w-9 rounded-md shrink-0"
+                    className="h-8 w-8 rounded-md shrink-0"
                   />
                 </td>
-                <td className="px-2 sm:px-3 py-2 max-w-[10rem]">
+                <td className="px-2 sm:px-3 py-1.5 max-w-[16rem]">
                   <span className="font-medium line-clamp-2 break-words">{p.nombre}</span>
                   {enVenta && (
-                    <Badge variant="secondary" className="mt-1 text-[10px]">
+                    <Badge variant="secondary" className="mt-1 text-[9px]">
                       En venta
                     </Badge>
                   )}
                 </td>
-                <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground hidden md:table-cell whitespace-nowrap">
+                <td className="px-3 py-1.5 font-mono text-[10px] text-muted-foreground whitespace-nowrap">
                   {p.codigo_barras || "-"}
                 </td>
-                <td className="px-3 py-2 text-muted-foreground hidden lg:table-cell">
+                <td className="px-3 py-1.5 text-muted-foreground hidden lg:table-cell">
                   {p.marca_nombre || "-"}
                 </td>
-                <td className="px-3 py-2 text-muted-foreground hidden lg:table-cell">
+                <td className="px-3 py-1.5 text-muted-foreground hidden lg:table-cell">
                   {p.categoria_nombre || "-"}
                 </td>
                 <td
                   className={cn(
-                    "px-2 sm:px-3 py-2 text-right font-medium whitespace-nowrap",
+                    "px-2 sm:px-3 py-1.5 text-right font-medium whitespace-nowrap",
                     stockClass(stock)
                   )}
                 >
                   {stock}
                 </td>
-                <td className="px-2 sm:px-3 py-2 text-right font-bold text-primary whitespace-nowrap">
+                <td className="px-2 sm:px-3 py-1.5 text-right font-bold text-primary whitespace-nowrap">
                   L {(p.precio_venta_sugerido ?? 0).toFixed(2)}
                 </td>
-                <td className="px-2 sm:px-3 py-2 text-right">
+                <td className="px-2 sm:px-3 py-1.5 text-right">
                   <Button
                     type="button"
                     size="icon"
                     variant="outline"
-                    className="h-8 w-8"
+                    className="h-7 w-7"
                     disabled={disabled}
                     onClick={() => onAdd(p)}
                     title="Agregar al carrito"
