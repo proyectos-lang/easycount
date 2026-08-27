@@ -52,6 +52,7 @@ import { getCuentas, type CuentaConfig } from "@/lib/services/cuentas"
 import { useCajaSesion } from "@/lib/hooks/use-caja-sesion"
 import { printTirilla } from "@/lib/print-tirilla"
 import { buildTirillaVentaHtml, metodoPagoLabel, type TirillaVenta } from "@/lib/utils/tirilla-venta"
+import { hoyISO, timestampNaiveLocal } from "@/lib/utils/fecha"
 
 interface LineaVenta {
   producto_id: number
@@ -92,7 +93,8 @@ export default function NuevaVentaPage() {
   
   const [clienteId, setClienteId] = React.useState<string>("")
   const [numeroFactura, setNumeroFactura] = React.useState("")
-  const [fecha, setFecha] = React.useState(new Date().toISOString().split("T")[0])
+  // Fecha local (dia de negocio). NO usar toISOString(): de noche adelanta el dia.
+  const [fecha, setFecha] = React.useState(hoyISO())
   // ISV desactivado por defecto: la mayoria de ventas se registran sin ISV.
   const [aplicaIsv, setAplicaIsv] = React.useState(false)
   const [almacenId, setAlmacenId] = React.useState<string>("")
@@ -680,10 +682,10 @@ export default function NuevaVentaPage() {
       const encabezado = {
         numero_factura: numeroFactura,
         cliente_id: parseInt(clienteId),
-        // Usamos la fecha seleccionada en la parte superior. Combinamos el dia
-        // elegido (YYYY-MM-DD) con la hora actual para conservar el orden
-        // cronologico dentro del mismo dia.
-        fecha_venta: new Date(`${fecha}T${new Date().toTimeString().slice(0, 8)}`).toISOString(),
+        // Usamos la fecha seleccionada en la parte superior + la hora local
+        // actual, en "naive-local" (sin convertir a UTC) para que el dia
+        // guardado sea EXACTAMENTE el elegido y no se corra de noche.
+        fecha_venta: timestampNaiveLocal(fecha),
         aplica_impuesto: isvActivo,
         porcentaje_impuesto: 15,
         descuento: descuentoPctSafe,
@@ -911,7 +913,7 @@ export default function NuevaVentaPage() {
     doc.setFont("helvetica", "normal")
     doc.text(cliente?.nombre || ventaData.encabezado.cliente_nombre || "N/A", 20, clienteY + 6)
     doc.text(cliente?.rtn || "N/A", 80, clienteY + 6)
-    doc.text(ventaData.encabezado.fecha_venta?.split('T')[0] || new Date().toISOString().split('T')[0], pageWidth - 60, clienteY + 6)
+    doc.text(ventaData.encabezado.fecha_venta?.split('T')[0] || hoyISO(), pageWidth - 60, clienteY + 6)
     
     // === DESCRIPCION Header ===
     const descY = 110
@@ -1082,7 +1084,7 @@ export default function NuevaVentaPage() {
     efectivoSeededRef.current = false // re-siembra el Efectivo (razon social 14)
     setDescuentoPct(0)
     setAplicaIsv(false) // vuelve al default (sin ISV) para la siguiente venta
-    setFecha(new Date().toISOString().split("T")[0])
+    setFecha(hoyISO())
     setStockPorLocalizacion({})
     // loadData() vuelve a seleccionar "Consumidor Final" por defecto.
     // Recarga el correlativo y los catalogos para reflejar altas recientes
