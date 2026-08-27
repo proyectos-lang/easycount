@@ -42,21 +42,21 @@ export function ConteoEfectivo({
           const sub = d * cant
           return (
             <div key={d} className="flex items-center gap-2">
-              <span className="w-14 shrink-0 text-right font-mono text-sm font-medium">
+              <span className="w-12 shrink-0 text-right font-mono text-sm font-medium">
                 {etiquetaDenom(d)}
               </span>
-              <span className="text-muted-foreground">×</span>
+              <span className="shrink-0 text-muted-foreground">×</span>
               <Input
                 type="number"
                 inputMode="numeric"
                 min={0}
                 step={1}
-                className="h-8 w-16 text-right"
+                className="h-9 min-w-0 flex-1 text-right text-base tabular-nums"
                 value={conteo[d] ?? ""}
                 onChange={(e) => onChange(d, e.target.value)}
                 placeholder="0"
               />
-              <span className="ml-auto w-24 text-right font-mono text-xs text-muted-foreground">
+              <span className="w-20 shrink-0 text-right font-mono text-xs text-muted-foreground">
                 {formatCurrency(sub)}
               </span>
             </div>

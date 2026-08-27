@@ -1225,7 +1225,7 @@ export default function CajaChicaPage() {
           if (!o) resetCierre()
         }}
       >
-        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Cerrar Caja</DialogTitle>
             <DialogDescription>
