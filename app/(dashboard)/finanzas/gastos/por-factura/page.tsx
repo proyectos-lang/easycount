@@ -25,12 +25,13 @@ import {
 } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { useToast } from "@/hooks/use-toast"
-import { 
-  getConceptosGasto, 
+import {
+  getConceptosGasto,
   createGasto,
   uploadComprobante,
   type ConceptoGasto,
 } from "@/lib/services/gastos"
+import { hoyISO } from "@/lib/utils/fecha"
 
 export default function RegistrarGastoPorFacturaPage() {
   const router = useRouter()
@@ -133,7 +134,7 @@ export default function RegistrarGastoPorFacturaPage() {
       const extractedData = json.data
       
       setIaExtractedData(extractedData)
-      setIaFecha(extractedData.fecha || new Date().toISOString().split('T')[0])
+      setIaFecha(extractedData.fecha || hoyISO())
       setIaMonto(extractedData.monto_total || 0)
       setIaDescripcion(extractedData.items?.join(', ') || '')
       

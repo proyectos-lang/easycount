@@ -95,6 +95,7 @@ import {
   createProveedor,
   type Proveedor,
 } from "@/lib/services/proveedores"
+import { hoyISO } from "@/lib/utils/fecha"
 
 export default function GastosPage() {
   const { toast } = useToast()
@@ -124,9 +125,8 @@ export default function GastosPage() {
   // ============== NUEVO GASTO ==============
   const [gastoDialogOpen, setGastoDialogOpen] = React.useState(false)
   const [gastoConceptoId, setGastoConceptoId] = React.useState<number | null>(null)
-  const [gastoFecha, setGastoFecha] = React.useState(
-    new Date().toISOString().split("T")[0]
-  )
+  // Fecha local (dia de negocio). NO usar toISOString(): de noche adelanta el dia.
+  const [gastoFecha, setGastoFecha] = React.useState(hoyISO())
   const [gastoMonto, setGastoMonto] = React.useState<number>(0)
   const [gastoDescripcion, setGastoDescripcion] = React.useState("")
   const [gastoComprobante, setGastoComprobante] = React.useState<File | null>(null)
@@ -261,7 +261,7 @@ export default function GastosPage() {
   // ============== NUEVO GASTO ==============
   function resetGastoForm() {
     setGastoConceptoId(null)
-    setGastoFecha(new Date().toISOString().split("T")[0])
+    setGastoFecha(hoyISO())
     setGastoMonto(0)
     setGastoDescripcion("")
     setGastoComprobante(null)
