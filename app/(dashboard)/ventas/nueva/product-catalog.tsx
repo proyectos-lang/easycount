@@ -310,16 +310,16 @@ function ProductGrid({ productos, idsEnVenta, onAdd, disabled, getStock }: ListP
               )}
             </div>
             <div className="flex flex-col gap-1 p-2 sm:p-2.5 min-w-0">
-              <p className="text-[13px] sm:text-sm font-medium leading-tight line-clamp-2 break-words">
+              <p className="text-[11px] sm:text-xs font-medium leading-tight line-clamp-2 break-words">
                 {p.nombre}
               </p>
               <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 mt-0.5">
-                <span className="text-[13px] sm:text-sm font-bold text-primary whitespace-nowrap">
+                <span className="text-[11px] sm:text-xs font-bold text-primary whitespace-nowrap">
                   L {(p.precio_venta_sugerido ?? 0).toFixed(2)}
                 </span>
                 <span
                   className={cn(
-                    "text-[11px] sm:text-xs font-medium whitespace-nowrap",
+                    "text-[10px] sm:text-[11px] font-medium whitespace-nowrap",
                     stockClass(stock)
                   )}
                 >
@@ -337,8 +337,8 @@ function ProductGrid({ productos, idsEnVenta, onAdd, disabled, getStock }: ListP
 function ProductTable({ productos, idsEnVenta, onAdd, disabled, getStock }: ListProps) {
   return (
     <div className="rounded-lg border overflow-x-auto">
-      <table className="w-full min-w-[34rem] text-sm">
-        <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
+      <table className="w-full min-w-[34rem] text-xs">
+        <thead className="bg-muted/60 text-[10px] uppercase tracking-wide text-muted-foreground">
           <tr>
             <th className="text-left font-medium px-2 sm:px-3 py-2 w-12">Foto</th>
             <th className="text-left font-medium px-2 sm:px-3 py-2">Nombre</th>
@@ -377,7 +377,7 @@ function ProductTable({ productos, idsEnVenta, onAdd, disabled, getStock }: List
                     </Badge>
                   )}
                 </td>
-                <td className="px-3 py-2 font-mono text-xs text-muted-foreground hidden md:table-cell whitespace-nowrap">
+                <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground hidden md:table-cell whitespace-nowrap">
                   {p.codigo_barras || "-"}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground hidden lg:table-cell">
