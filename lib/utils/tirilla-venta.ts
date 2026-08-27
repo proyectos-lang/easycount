@@ -45,6 +45,10 @@ export interface TirillaVenta {
   pagos: TirillaPago[]
   valorPagado: number
   saldo: number
+  /** Efectivo con el que pagó el cliente (para mostrar el vuelto). Opcional. */
+  efectivoRecibido?: number | null
+  /** Vuelto/cambio a devolver (efectivoRecibido − efectivo aplicado). Opcional. */
+  vuelto?: number | null
 }
 
 /** Escapa `< > &` para no romper el HTML con nombres/direcciones del usuario. */
@@ -126,6 +130,12 @@ export function buildTirillaVentaHtml(v: TirillaVenta): string {
       ? `<div class="row bold"><span>SALDO PENDIENTE</span><span>${formatCurrency(v.saldo)}</span></div>`
       : ""
 
+  const vueltoHtml =
+    v.vuelto != null && v.vuelto > 0
+      ? `<div class="row"><span>Efectivo recibido</span><span>${formatCurrency(v.efectivoRecibido ?? 0)}</span></div>` +
+        `<div class="row bold"><span>Vuelto</span><span>${formatCurrency(v.vuelto)}</span></div>`
+      : ""
+
   return `<!DOCTYPE html>
 <html lang="es"><head><meta charset="UTF-8">
 <style id="page-style">
@@ -183,6 +193,7 @@ export function buildTirillaVentaHtml(v: TirillaVenta): string {
   ${pagosHtml}
   <div class="row"><span>Pagado</span><span>${formatCurrency(v.valorPagado)}</span></div>
   ${saldoHtml}
+  ${vueltoHtml}
   <div class="line"></div>
   <div class="foot">Gracias por su compra</div>
 </body></html>`

@@ -115,6 +115,10 @@ export default function NuevaVentaPage() {
   // queda como cuenta por cobrar (CXC).
   type PagoLinea = PagoVentaDetalleInput & { _id: string }
   const [pagosDetalle, setPagosDetalle] = React.useState<PagoLinea[]>([])
+  // Efectivo con el que paga el cliente por linea (solo para calcular el
+  // vuelto). NO se persiste: lo que se registra es `monto_bruto` (el monto de
+  // la venta); el vuelto es una ayuda para el cajero. Clave = _id de la linea.
+  const [efectivoRecibido, setEfectivoRecibido] = React.useState<Record<string, string>>({})
   const [cuentas, setCuentas] = React.useState<CuentaConfig[]>([])
   const { sesion: cajaSesion, featurePending: cajaFeaturePending } = useCajaSesion()
 
@@ -443,6 +447,10 @@ export default function NuevaVentaPage() {
 
   function eliminarPagoLinea(id: string) {
     setPagosDetalle((prev) => prev.filter((p) => p._id !== id))
+    setEfectivoRecibido((prev) => {
+      const { [id]: _omit, ...rest } = prev
+      return rest
+    })
   }
 
   async function handleCreateCliente() {
@@ -748,6 +756,18 @@ export default function NuevaVentaPage() {
         }))
       }
       
+      // Efectivo recibido / vuelto (solo lineas Efectivo con "recibido" puesto).
+      const lineasConVuelto = pagosDetalle.filter(
+        (p) => p.metodo_pago === "Efectivo" && (efectivoRecibido[p._id] ?? "") !== ""
+      )
+      const efectivoRecibidoTotal = +lineasConVuelto
+        .reduce((a, p) => a + (Number(efectivoRecibido[p._id]) || 0), 0)
+        .toFixed(2)
+      const efectivoAplicado = +lineasConVuelto
+        .reduce((a, p) => a + (Number(p.monto_bruto) || 0), 0)
+        .toFixed(2)
+      const vueltoTotal = +(efectivoRecibidoTotal - efectivoAplicado).toFixed(2)
+
       // Foto de la venta para la tirilla termica (80 mm). Se arma AQUI, con el
       // estado local aun disponible, y sobrevive al resetForm().
       const razonSocial = await getRazonSocialForPdf()
@@ -792,6 +812,8 @@ export default function NuevaVentaPage() {
         })),
         valorPagado: valorpago,
         saldo: Math.max(0, +(total - valorpago).toFixed(2)),
+        efectivoRecibido: efectivoRecibidoTotal > 0 ? efectivoRecibidoTotal : null,
+        vuelto: vueltoTotal > 0 ? vueltoTotal : null,
       }
 
       // Deja el formulario listo para la siguiente venta y abre el dialogo con
@@ -1085,6 +1107,7 @@ export default function NuevaVentaPage() {
     setLineas([])
     setClienteId("")
     setPagosDetalle([])
+    setEfectivoRecibido({})
     efectivoSeededRef.current = false // re-siembra el Efectivo (razon social 14)
     setDescuentoPct(0)
     setAplicaIsv(false) // vuelve al default (sin ISV) para la siguiente venta
@@ -1617,6 +1640,43 @@ export default function NuevaVentaPage() {
                         className="pl-6 h-8 text-right text-sm"
                       />
                     </div>
+
+                    {linea.metodo_pago === "Efectivo" && (
+                      <div className="space-y-1">
+                        <div className="relative">
+                          <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-xs text-muted-foreground">
+                            L
+                          </span>
+                          <Input
+                            type="number"
+                            inputMode="decimal"
+                            min={0}
+                            step={0.01}
+                            value={efectivoRecibido[linea._id] ?? ""}
+                            placeholder="Con cuanto paga (efectivo recibido)"
+                            onChange={(e) =>
+                              setEfectivoRecibido((prev) => ({ ...prev, [linea._id]: e.target.value }))
+                            }
+                            className="pl-6 h-8 text-right text-sm"
+                          />
+                        </div>
+                        {(efectivoRecibido[linea._id] ?? "") !== "" &&
+                          (() => {
+                            const recibido = Number(efectivoRecibido[linea._id]) || 0
+                            const vuelto = +(recibido - monto).toFixed(2)
+                            return (
+                              <p
+                                className={`text-xs flex justify-between font-semibold ${
+                                  vuelto < 0 ? "text-destructive" : "text-emerald-600"
+                                }`}
+                              >
+                                <span>{vuelto < 0 ? "Falta" : "Vuelto"}</span>
+                                <span>L {Math.abs(vuelto).toFixed(2)}</span>
+                              </p>
+                            )
+                          })()}
+                      </div>
+                    )}
 
                     {requiereCuenta && monto > 0 && comision > 0 && (
                       <p className="text-[10px] text-muted-foreground flex justify-between leading-none">

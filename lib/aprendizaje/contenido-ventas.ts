@@ -50,6 +50,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Pago multi-método en una misma venta: efectivo, banco/tarjeta, link de pago, crédito. Ej.: 500 en efectivo + 1,000 con tarjeta.",
       "Aplica la comisión bancaria configurada en cada cuenta: registra el monto bruto que paga el cliente y el neto que entra al banco.",
       "El efectivo entra automáticamente a la caja chica abierta; lo de banco entra a la cuenta elegida.",
+      "En pagos en efectivo puedes escribir con cuánto paga el cliente (efectivo recibido) y el sistema calcula el vuelto; se registra el monto de la venta, no el recibido. Ej.: venta L 800, recibido L 1,000 → vuelto L 200 (se registran L 800).",
       "Descuenta el stock del almacén y deja rastro en el kardex de inventario.",
       "Al guardar, el formulario queda en blanco y aparece una ventana con las opciones de impresión: imprimir tirilla térmica de 80 mm (largo exacto, sin espacios en blanco) o descargar la factura A4 en PDF.",
     ],
@@ -129,6 +130,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "descuento", "isv", "impuesto", "comision", "ticket", "punto de venta",
       "tirilla", "termica", "impresora", "80mm", "imprimir", "comprobante", "recibo",
       "pantalla completa", "pos", "kiosko", "caja",
+      "vuelto", "cambio", "efectivo recibido", "con cuanto paga",
     ],
   },
   {
