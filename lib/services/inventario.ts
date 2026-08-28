@@ -55,6 +55,12 @@ export interface ProductoValoracion {
 
 // ==================== KARDEX ====================
 
+type KardexRow = TransaccionInventario & {
+  productos?: { nombre?: string; codigo_barras?: string } | null
+  almacenes?: { nombre?: string } | null
+  localizaciones?: { nombre?: string } | null
+}
+
 export async function getKardexByProducto(productoId: number): Promise<{ data: TransaccionInventario[]; error: string | null }> {
   if (!isSupabaseConfigured()) {
     const saved = localStorage.getItem('transacciones_inventario')
@@ -69,27 +75,31 @@ export async function getKardexByProducto(productoId: number): Promise<{ data: T
   if (!supabase) return { data: [], error: 'Cliente no disponible' }
 
   try {
-    const { data, error } = await supabase
-      .from('transacciones_inventario')
-      .select(`
-        *,
-        productos (nombre, codigo_barras),
-        almacenes (nombre),
-        localizaciones (nombre)
-      `)
-      .eq('producto_id', productoId)
-      .order('fecha', { ascending: false })
+    // Pagina sin tope: un producto puede superar 1000 movimientos y el kardex
+    // debe traer TODA su historia (el saldo acumulado depende de ello).
+    const { data, error } = await fetchAllRows<KardexRow>(() =>
+      supabase
+        .from('transacciones_inventario')
+        .select(`
+          *,
+          productos (nombre, codigo_barras),
+          almacenes (nombre),
+          localizaciones (nombre)
+        `)
+        .eq('producto_id', productoId)
+        .order('fecha', { ascending: false })
+    )
 
-    if (error) return { data: [], error: error.message }
-    
-    const formattedData = (data || []).map(t => ({
+    if (error) return { data: [], error }
+
+    const formattedData = data.map(t => ({
       ...t,
       producto_nombre: t.productos?.nombre || '',
       producto_codigo: t.productos?.codigo_barras || '',
       almacen_nombre: t.almacenes?.nombre || '',
       localizacion_nombre: t.localizaciones?.nombre || ''
     }))
-    
+
     return { data: formattedData, error: null }
   } catch (err) {
     console.error('[Supabase] Error obteniendo kardex:', err)

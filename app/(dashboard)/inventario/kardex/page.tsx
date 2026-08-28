@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Package, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, FileSpreadsheet } from "lucide-react"
+import { Package, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, FileSpreadsheet, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -24,7 +24,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { getProductos, getAlmacenes, getLocalizaciones, type Producto, type Almacen, type Localizacion } from "@/lib/services/catalogos"
-import { getAllTransacciones, type TransaccionInventario } from "@/lib/services/inventario"
+import { getAllTransacciones, getKardexByProducto, type TransaccionInventario } from "@/lib/services/inventario"
 import { exportToXlsx } from "@/lib/utils/export"
 
 export default function KardexPage() {
@@ -50,6 +50,14 @@ export default function KardexPage() {
   const [busquedaProducto, setBusquedaProducto] = React.useState("")
   // Pestana activa: kardex por producto (default) o historial general.
   const [vista, setVista] = React.useState<"kardex" | "historial">("kardex")
+
+  // Kardex bajo demanda: al presionar "Buscar" se trae del servidor TODA la
+  // historia del producto (sin tope de 500 de la carga general). kardexData es
+  // esa historia; kardexProductoId es el producto al que corresponde (para
+  // detectar cuando el usuario cambio de producto y falta volver a buscar).
+  const [kardexData, setKardexData] = React.useState<TransaccionInventario[]>([])
+  const [kardexProductoId, setKardexProductoId] = React.useState("")
+  const [buscandoKardex, setBuscandoKardex] = React.useState(false)
 
   React.useEffect(() => {
     loadData()
@@ -123,15 +131,16 @@ export default function KardexPage() {
   // inicial" (lo acumulado antes del rango) y las filas del rango arrancan de
   // ahi. Sin filtro de fecha, arranca en 0 (desde el primer ingreso).
   const kardex = React.useMemo(() => {
-    if (!filtroProductoId) return null
-    const pid = parseInt(filtroProductoId)
+    if (!kardexProductoId) return null
     const alm = filtroAlmacenId ? parseInt(filtroAlmacenId) : null
     const loc = filtroLocalizacionId ? parseInt(filtroLocalizacionId) : null
 
-    const delProducto = transacciones
+    // kardexData ya viene acotado al producto buscado (toda su historia desde el
+    // servidor); aqui solo refinamos por almacen/localizacion/tipo sin volver a
+    // consultar.
+    const delProducto = kardexData
       .filter(
         (t) =>
-          t.producto_id === pid &&
           (alm == null || t.almacen_id === alm) &&
           (loc == null || t.localizacion_id === loc) &&
           (!filtroTipoMovimiento || t.tipo_movimiento === filtroTipoMovimiento)
@@ -162,7 +171,27 @@ export default function KardexPage() {
     // por fecha), para distinguir "producto sin historia" de "sin movimientos en
     // el rango" (donde el cargue quedo resumido en el Saldo inicial).
     return { filas, saldoInicial, saldoFinal, totalMovimientos: delProducto.length }
-  }, [transacciones, filtroProductoId, filtroAlmacenId, filtroLocalizacionId, filtroTipoMovimiento, filtroFechaInicio, filtroFechaFin])
+  }, [kardexData, kardexProductoId, filtroAlmacenId, filtroLocalizacionId, filtroTipoMovimiento, filtroFechaInicio, filtroFechaFin])
+
+  // Estados del kardex bajo demanda.
+  const kardexPendiente = esKardex && !!filtroProductoId && filtroProductoId !== kardexProductoId
+
+  async function buscarKardex() {
+    if (!filtroProductoId) {
+      toast({ title: "Elige un producto", description: "Selecciona un producto para ver su kardex", variant: "destructive" })
+      return
+    }
+    setBuscandoKardex(true)
+    const res = await getKardexByProducto(parseInt(filtroProductoId))
+    if (res.error) {
+      toast({ title: "Error", description: res.error, variant: "destructive" })
+      setBuscandoKardex(false)
+      return
+    }
+    setKardexData(res.data)
+    setKardexProductoId(filtroProductoId)
+    setBuscandoKardex(false)
+  }
 
   function getTipoMovimientoBadge(tipo: string) {
     switch (tipo) {
@@ -184,7 +213,7 @@ export default function KardexPage() {
   function exportToExcel() {
     // Modo Kardex: exporta el kardex del producto con Entrada/Salida/Saldo.
     if (esKardex) {
-      if (!kardex || kardex.filas.length === 0) {
+      if (!kardex || kardexPendiente || kardex.filas.length === 0) {
         toast({ title: "Sin datos", description: "No hay movimientos para exportar", variant: "destructive" })
         return
       }
@@ -253,6 +282,8 @@ export default function KardexPage() {
     setFiltroLocalizacionId("")
     setFiltroTipoMovimiento("")
     setBusquedaProducto("")
+    setKardexData([])
+    setKardexProductoId("")
   }
 
   return (
@@ -268,7 +299,7 @@ export default function KardexPage() {
         <Button
           onClick={exportToExcel}
           className="gap-2 w-full sm:w-auto"
-          disabled={esKardex ? !kardex || kardex.filas.length === 0 : transaccionesFiltradas.length === 0}
+          disabled={esKardex ? !kardex || kardexPendiente || kardex.filas.length === 0 : transaccionesFiltradas.length === 0}
         >
           <FileSpreadsheet className="h-4 w-4" />
           <span>Exportar Excel</span>
@@ -287,9 +318,13 @@ export default function KardexPage() {
           </CardTitle>
           <CardDescription>
             {esKardex
-              ? kardex
-                ? `${kardex.filas.length} movimiento(s) · Saldo actual: ${kardex.saldoFinal}`
-                : "Elige un producto para ver su kardex con saldo acumulado."
+              ? !filtroProductoId
+                ? "Elige un producto y presiona Buscar kardex."
+                : kardexPendiente
+                  ? "Presiona Buscar kardex para traer toda la historia del producto."
+                  : kardex
+                    ? `${kardex.filas.length} movimiento(s) · Saldo actual: ${kardex.saldoFinal}`
+                    : "Presiona Buscar kardex."
               : `${transaccionesFiltradas.length} movimiento(s) ${transaccionesFiltradas.length !== transacciones.length ? `de ${transacciones.length} total` : ""}`}
           </CardDescription>
         </CardHeader>
@@ -444,8 +479,23 @@ export default function KardexPage() {
                 </Select>
               </div>
 
-              {/* Spacer */}
-              <div className="hidden lg:block" />
+              {/* Buscar (solo kardex): trae del servidor TODA la historia del producto */}
+              {esKardex ? (
+                <Button
+                  onClick={buscarKardex}
+                  disabled={!filtroProductoId || buscandoKardex}
+                  className="gap-2"
+                >
+                  {buscandoKardex ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                  ) : (
+                    <Search className="h-4 w-4" />
+                  )}
+                  <span>{buscandoKardex ? "Buscando..." : "Buscar kardex"}</span>
+                </Button>
+              ) : (
+                <div className="hidden lg:block" />
+              )}
 
               {/* Limpiar */}
               <Button
@@ -463,11 +513,25 @@ export default function KardexPage() {
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-          ) : (esKardex ? !kardex || kardex.totalMovimientos === 0 : transaccionesFiltradas.length === 0) ? (
+          ) : (esKardex
+                ? (!filtroProductoId || kardexPendiente || !kardex || kardex.totalMovimientos === 0)
+                : transaccionesFiltradas.length === 0) ? (
             <div className="text-center py-8 text-muted-foreground">
               <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
               {esKardex && !filtroProductoId ? (
-                <p>Busca y elige un producto en "Producto (kardex)" para ver su kardex con el saldo acumulado.</p>
+                <p>Busca y elige un producto en el campo <strong>Producto (kardex)</strong> y presiona <strong>Buscar kardex</strong>.</p>
+              ) : esKardex && kardexPendiente ? (
+                <div className="space-y-3">
+                  <p>Presiona <strong>Buscar kardex</strong> para traer toda la historia de este producto.</p>
+                  <Button onClick={buscarKardex} disabled={buscandoKardex} className="gap-2">
+                    {buscandoKardex ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                    ) : (
+                      <Search className="h-4 w-4" />
+                    )}
+                    <span>{buscandoKardex ? "Buscando..." : "Buscar kardex"}</span>
+                  </Button>
+                </div>
               ) : esKardex ? (
                 <p>Este producto no tiene movimientos con los filtros seleccionados.</p>
               ) : (
