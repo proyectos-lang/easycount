@@ -76,6 +76,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
         pasos: [
           "Al guardar la venta, en la ventana 'Venta registrada' presiona 'Imprimir tirilla (80 mm)'.",
           "Se abre el diálogo de impresión del navegador ya ajustado al ancho de 80 mm y al largo exacto del contenido (sin papel en blanco de más). Elige tu impresora térmica y confirma.",
+          "Según la configuración de tu empresa, la tirilla puede incluir el código de cada producto debajo de su nombre (se activa de forma centralizada para tu empresa).",
           "Si sale papel en blanco de sobra o se corta la última línea, revisa el tamaño de papel del driver de la impresora: debe estar en 'rollo/continuo' o un tamaño personalizado, no en A4/Carta.",
         ],
       },

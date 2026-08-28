@@ -12,15 +12,19 @@
 export interface FeatureFlags {
   /** Muestra el campo/ISV (15%) en Nueva Venta. Si es false, la empresa vende sin ISV. */
   ventas_mostrar_isv: boolean
+  /** Imprime el codigo del producto debajo de su nombre en la tirilla termica. */
+  tirilla_mostrar_codigo: boolean
 }
 
 export const DEFAULT_FLAGS: FeatureFlags = {
   ventas_mostrar_isv: true,
+  tirilla_mostrar_codigo: false,
 }
 
 /** Etiquetas legibles para el portal (que flags se pueden togglear por empresa). */
 export const FLAG_LABELS: Record<keyof FeatureFlags, string> = {
   ventas_mostrar_isv: "Mostrar ISV en ventas",
+  tirilla_mostrar_codigo: "Mostrar codigo del producto en la tirilla",
 }
 
 /**
@@ -34,5 +38,9 @@ export function mergeFlags(config: Record<string, unknown> | null | undefined): 
       c.ventas_mostrar_isv === undefined
         ? DEFAULT_FLAGS.ventas_mostrar_isv
         : Boolean(c.ventas_mostrar_isv),
+    tirilla_mostrar_codigo:
+      c.tirilla_mostrar_codigo === undefined
+        ? DEFAULT_FLAGS.tirilla_mostrar_codigo
+        : Boolean(c.tirilla_mostrar_codigo),
   }
 }

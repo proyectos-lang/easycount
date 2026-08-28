@@ -804,6 +804,7 @@ export default function NuevaVentaPage() {
           nombre: l.producto_nombre,
           cantidad: l.cantidad,
           precioUnitario: l.precio_unitario,
+          codigo: l.producto_codigo,
         })),
         subtotal,
         descuentoPct: descuentoPctSafe,
@@ -822,6 +823,7 @@ export default function NuevaVentaPage() {
         saldo: Math.max(0, +(total - valorpago).toFixed(2)),
         efectivoRecibido: efectivoRecibidoTotal > 0 ? efectivoRecibidoTotal : null,
         vuelto: vueltoTotal > 0 ? vueltoTotal : null,
+        mostrarCodigoProducto: user?.flags?.tirilla_mostrar_codigo ?? false,
       }
 
       // Deja el formulario listo para la siguiente venta y abre el dialogo con

@@ -21,6 +21,8 @@ export interface TirillaLinea {
   nombre: string
   cantidad: number
   precioUnitario: number
+  /** Codigo del producto; se imprime bajo el nombre si mostrarCodigoProducto. */
+  codigo?: string | null
 }
 
 export interface TirillaPago {
@@ -49,6 +51,8 @@ export interface TirillaVenta {
   efectivoRecibido?: number | null
   /** Vuelto/cambio a devolver (efectivoRecibido − efectivo aplicado). Opcional. */
   vuelto?: number | null
+  /** Si es true, imprime el codigo de cada producto bajo su nombre. */
+  mostrarCodigoProducto?: boolean
 }
 
 /** Escapa `< > &` para no romper el HTML con nombres/direcciones del usuario. */
@@ -102,8 +106,13 @@ export function buildTirillaVentaHtml(v: TirillaVenta): string {
   const itemsHtml = v.lineas
     .map((l) => {
       const lineaTotal = l.cantidad * l.precioUnitario
+      const codigoHtml =
+        v.mostrarCodigoProducto && l.codigo
+          ? `<div class="item-code">Cod: ${esc(l.codigo)}</div>`
+          : ""
       return `<div class="item">
   <div class="item-name">${esc(l.nombre)}</div>
+  ${codigoHtml}
   <div class="row">
     <span>${formatNumber(l.cantidad)} x ${formatCurrency(l.precioUnitario)}</span>
     <span>${formatCurrency(lineaTotal)}</span>
@@ -170,6 +179,7 @@ export function buildTirillaVentaHtml(v: TirillaVenta): string {
   .line   { border-top: 1px solid #000; margin: 5px 0; }
   .item       { margin: 4px 0; }
   .item-name  { font-size: 12px; font-weight: 800; word-wrap: break-word; }
+  .item-code  { font-size: 10px; font-weight: 700; word-wrap: break-word; }
   .row    { display: flex; justify-content: space-between; font-size: 12px; margin: 2px 0; gap: 8px; }
   .row span:last-child { white-space: nowrap; text-align: right; }
   .row.bold   { font-weight: 800; }
