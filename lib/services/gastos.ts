@@ -3,7 +3,7 @@
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from "@/lib/services/tenant-stamp"
 import { registrarMovimientoCaja, getSesionAbierta } from "@/lib/services/caja-chica"
-import { registrarMovimientoCuenta } from "@/lib/services/cuentas"
+import { registrarMovimientoCuenta, recalcCadenaSaldoCuenta } from "@/lib/services/cuentas"
 
 // ==================== TIPOS ====================
 
@@ -386,8 +386,40 @@ export async function deleteGasto(id: number): Promise<{ success: boolean; error
   const supabase = createClient()
   if (!supabase) return { success: false, error: 'Cliente no disponible' }
 
+  // Cuentas bancarias afectadas por los pagos de este gasto (para recalcular su
+  // saldo despues de borrar los movimientos).
+  const { data: movsCuenta } = await supabase
+    .from('cuenta_movimientos')
+    .select('cuenta_id')
+    .eq('ref_tipo', 'gasto')
+    .eq('ref_id', id)
+  const cuentasAfectadas = [...new Set((movsCuenta ?? []).map((m) => Number(m.cuenta_id)))]
+
+  // Borra el gasto.
   const { error } = await supabase.from('gastos').delete().eq('id', id)
   if (error) return { success: false, error: error.message }
+
+  // Revierte la tesoreria del gasto: borra sus movimientos de caja (efectivo) y
+  // de banco (ref_tipo='gasto'). Sin esto, el gasto borrado seguia contando como
+  // "pagado" en caja / Cierre Diario y descuadraba el saldo. Los abonos del
+  // gasto SON estos movimientos (no hay tabla gastos_pagos_detalle).
+  await supabase
+    .from('caja_chica_movimientos')
+    .delete()
+    .eq('ref_tipo', 'gasto')
+    .eq('ref_id', id)
+  await supabase
+    .from('cuenta_movimientos')
+    .delete()
+    .eq('ref_tipo', 'gasto')
+    .eq('ref_id', id)
+
+  // Recalcula el saldo real (cadena + cache) de cada cuenta afectada. La caja
+  // chica no lo necesita: su saldo se calcula como suma de montos.
+  for (const cId of cuentasAfectadas) {
+    await recalcCadenaSaldoCuenta(cId)
+  }
+
   return { success: true, error: null }
 }
 
