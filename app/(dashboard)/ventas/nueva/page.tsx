@@ -216,11 +216,19 @@ export default function NuevaVentaPage() {
       // solo Efectivo / Credito (modo degradado).
       setCuentas((cuentasRes.data || []).filter((c) => c.activo ?? true))
       
-      // Set default almacen if only one exists
-      if (almacenesRes.data && almacenesRes.data.length === 1) {
+      // Preseleccion: si hay una localizacion marcada como "Punto de venta"
+      // (config 041), se abre ESA (con su almacen) automaticamente. Si no,
+      // cae al default de almacen unico.
+      const locs = localizacionesRes.data || []
+      const puntoVenta = locs.find((l) => l.es_punto_venta)
+      if (puntoVenta) {
+        setAlmacenId(String(puntoVenta.almacen_id))
+        setLocalizacionesFiltradas(locs.filter((l) => l.almacen_id === puntoVenta.almacen_id))
+        setLocalizacionId(String(puntoVenta.id))
+      } else if (almacenesRes.data && almacenesRes.data.length === 1) {
         const defaultAlmacenId = String(almacenesRes.data[0].id)
         setAlmacenId(defaultAlmacenId)
-        const filtradas = (localizacionesRes.data || []).filter(l => l.almacen_id === almacenesRes.data[0].id)
+        const filtradas = locs.filter(l => l.almacen_id === almacenesRes.data[0].id)
         setLocalizacionesFiltradas(filtradas)
         if (filtradas.length === 1) {
           setLocalizacionId(String(filtradas[0].id))

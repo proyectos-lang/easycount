@@ -135,6 +135,7 @@ Catálogos simples: `id` (PK), `nombre` (NOT NULL), `razon_social_id` (FK tenant
 ### `almacenes` y `localizaciones`
 - `almacenes`: `id`, `nombre` (NOT NULL), `ubicacion`, `razon_social_id`, `usuario`.
 - `localizaciones`: `id`, `nombre` (NOT NULL), `almacen_id` (FK → `almacenes.id`), `razon_social_id`, `usuario`. El stock se lleva a nivel almacén + localización.
+- `localizaciones_config` (script 041): config por localización — `localizacion_id` (PK, FK → `localizaciones.id` ON DELETE CASCADE), `razon_social_id`, `es_punto_venta` (bool), `usuario`, `updated_at`, `created_at`. La localización con `es_punto_venta = true` (única por empresa: al marcar una se desmarcan las demás) se **preselecciona automáticamente** (almacén + localización) en Nueva Venta. RLS: el admin de la empresa lee y escribe sus propias filas (`razon_social_id = app_current_tenant()`), a diferencia de `razon_social_config` que solo escribe el portal.
 
 ---
 

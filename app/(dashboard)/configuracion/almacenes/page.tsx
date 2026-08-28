@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Warehouse, MapPin, Pencil, Trash2, Loader2 } from "lucide-react"
+import { Plus, Warehouse, MapPin, Pencil, Trash2, Loader2, Store } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -24,6 +25,7 @@ import {
   getLocalizaciones,
   saveLocalizacion,
   deleteLocalizacion,
+  setPuntoVentaLocalizacion,
 } from "@/lib/services/catalogos"
 
 export default function AlmacenesConfigPage() {
@@ -208,6 +210,23 @@ export default function AlmacenesConfigPage() {
     }
   }
 
+  async function handleTogglePuntoVenta(localizacion: Localizacion) {
+    if (!localizacion.id || !selectedAlmacen?.id) return
+    const activar = !localizacion.es_punto_venta
+    const { error } = await setPuntoVentaLocalizacion(localizacion.id, activar)
+    if (error) {
+      toast({ title: "Error", description: error, variant: "destructive" })
+      return
+    }
+    toast({
+      title: activar ? "Punto de venta asignado" : "Punto de venta quitado",
+      description: activar
+        ? `"${localizacion.nombre}" se preseleccionara al registrar una venta.`
+        : undefined,
+    })
+    await loadLocalizaciones(selectedAlmacen.id)
+  }
+
   return (
     <div className="p-6">
       <div className="mb-6">
@@ -345,16 +364,36 @@ export default function AlmacenesConfigPage() {
                     key={loc.id}
                     className="group flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
                   >
-                    <div className="flex items-center gap-3">
-                      <MapPin className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">{loc.nombre}</p>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <MapPin className="h-5 w-5 text-muted-foreground shrink-0" />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium">{loc.nombre}</p>
+                          {loc.es_punto_venta && (
+                            <Badge variant="secondary" className="gap-1 text-[10px]">
+                              <Store className="h-3 w-3" />
+                              Punto de venta
+                            </Badge>
+                          )}
+                        </div>
                         {loc.descripcion && (
                           <p className="text-sm text-muted-foreground">{loc.descripcion}</p>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1">
+                      {/* Punto de venta: siempre visible (define el default de Nueva Venta). */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`h-8 w-8 ${loc.es_punto_venta ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
+                        onClick={() => handleTogglePuntoVenta(loc)}
+                        title={loc.es_punto_venta ? "Quitar como punto de venta" : "Marcar como punto de venta (se preselecciona en Nueva Venta)"}
+                        aria-label="Punto de venta"
+                      >
+                        <Store className="h-4 w-4" />
+                      </Button>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -371,6 +410,7 @@ export default function AlmacenesConfigPage() {
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
+                      </div>
                     </div>
                   </div>
                 ))}

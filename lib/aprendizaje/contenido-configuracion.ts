@@ -161,6 +161,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "Crea almacenes con nombre y ubicación (ej. Tienda Centro, Bodega Principal).",
       "Dentro de cada almacén, crea localizaciones (ej. Estante A, Vitrina).",
       "El inventario se controla por almacén + localización: ventas, recepciones y traslados exigen indicar ambos.",
+      "Marca una localización como 'Punto de venta' (ícono de tienda): esa se preselecciona automáticamente (almacén + localización) al abrir Nueva Venta. Solo puede haber un punto de venta por empresa; al marcar otro se cambia.",
     ],
     queNoHace: [
       "No elimina almacenes con movimientos de inventario asociados (perderías la trazabilidad).",
@@ -184,7 +185,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "Sí, al menos una genérica (ej. 'General'): el sistema siempre registra los movimientos con almacén y localización.",
       },
     ],
-    keywords: ["bodega", "sucursal", "estante", "ubicacion", "localizacion"],
+    keywords: ["bodega", "sucursal", "estante", "ubicacion", "localizacion", "punto de venta", "pos", "preseleccionar"],
   },
   {
     modulo: "Clientes",

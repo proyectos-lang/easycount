@@ -64,6 +64,8 @@ export interface Localizacion {
   nombre: string
   descripcion?: string
   created_at?: string
+  /** Marcada como "Punto de venta": se preselecciona en Nueva Venta. */
+  es_punto_venta?: boolean
 }
 
 export interface Cliente {
@@ -930,11 +932,65 @@ export async function getLocalizaciones(almacenId?: number): Promise<{ data: Loc
 
     const { data, error } = await query
     if (error) return { data: [], error: error.message }
-    return { data: data || [], error: null }
+
+    // Merge del flag "Punto de venta" desde localizaciones_config (tabla nueva,
+    // script 041). Si aun no existe, es_punto_venta queda false (sin romper).
+    let posSet = new Set<number>()
+    try {
+      const { data: cfg } = await supabase
+        .from('localizaciones_config')
+        .select('localizacion_id, es_punto_venta')
+      posSet = new Set(
+        (cfg || []).filter((c) => c.es_punto_venta).map((c) => Number(c.localizacion_id))
+      )
+    } catch {
+      /* tabla pendiente: sin puntos de venta marcados */
+    }
+    const merged = (data || []).map((l) => ({ ...l, es_punto_venta: posSet.has(Number(l.id)) }))
+    return { data: merged, error: null }
   } catch (err) {
     console.error('[Supabase] Error obteniendo localizaciones:', err)
     return { data: [], error: 'Error de conexion' }
   }
+}
+
+/**
+ * Marca (o desmarca) una localizacion como "Punto de venta". Solo puede haber
+ * UN punto de venta por empresa: al marcar uno, se desmarcan los demas. La
+ * localizacion marcada se preselecciona en Nueva Venta.
+ */
+export async function setPuntoVentaLocalizacion(
+  localizacion_id: number,
+  value: boolean
+): Promise<{ error: string | null }> {
+  if (!isSupabaseConfigured()) return { error: null }
+  const supabase = createClient()
+  if (!supabase) return { error: 'Cliente no disponible' }
+  const stamp = await getTenantStamp(supabase)
+  if (!isValidStamp(stamp)) return { error: SESION_INVALIDA_ERROR }
+
+  const ahora = new Date().toISOString()
+  if (value) {
+    // Punto de venta unico: apaga los demas de la empresa.
+    await supabase
+      .from('localizaciones_config')
+      .update({ es_punto_venta: false, updated_at: ahora })
+      .eq('razon_social_id', stamp.razon_social_id)
+      .eq('es_punto_venta', true)
+  }
+  const { error } = await supabase
+    .from('localizaciones_config')
+    .upsert(
+      {
+        localizacion_id,
+        razon_social_id: stamp.razon_social_id,
+        es_punto_venta: value,
+        usuario: stamp.usuario,
+        updated_at: ahora,
+      },
+      { onConflict: 'localizacion_id' }
+    )
+  return { error: error?.message ?? null }
 }
 
 export async function saveLocalizacion(
