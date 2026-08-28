@@ -158,7 +158,10 @@ export default function KardexPage() {
       filas.push({ ...t, saldo })
     }
     const saldoFinal = filas.length > 0 ? filas[filas.length - 1].saldo : saldoInicial
-    return { filas, saldoInicial, saldoFinal }
+    // totalMovimientos = todos los movimientos del producto (antes de recortar
+    // por fecha), para distinguir "producto sin historia" de "sin movimientos en
+    // el rango" (donde el cargue quedo resumido en el Saldo inicial).
+    return { filas, saldoInicial, saldoFinal, totalMovimientos: delProducto.length }
   }, [transacciones, filtroProductoId, filtroAlmacenId, filtroLocalizacionId, filtroTipoMovimiento, filtroFechaInicio, filtroFechaFin])
 
   function getTipoMovimientoBadge(tipo: string) {
@@ -460,11 +463,13 @@ export default function KardexPage() {
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-          ) : (esKardex ? !kardex || kardex.filas.length === 0 : transaccionesFiltradas.length === 0) ? (
+          ) : (esKardex ? !kardex || kardex.totalMovimientos === 0 : transaccionesFiltradas.length === 0) ? (
             <div className="text-center py-8 text-muted-foreground">
               <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
               {esKardex && !filtroProductoId ? (
                 <p>Busca y elige un producto en "Producto (kardex)" para ver su kardex con el saldo acumulado.</p>
+              ) : esKardex ? (
+                <p>Este producto no tiene movimientos con los filtros seleccionados.</p>
               ) : (
                 <p>No hay movimientos {transacciones.length > 0 ? "con los filtros seleccionados" : "registrados"}</p>
               )}
@@ -491,6 +496,15 @@ export default function KardexPage() {
                         Saldo inicial (antes del rango)
                       </TableCell>
                       <TableCell className="text-right font-mono font-semibold">{kardex.saldoInicial}</TableCell>
+                    </TableRow>
+                  )}
+                  {kardex.filas.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
+                        No hay movimientos en el rango elegido. El <strong>cargue inicial</strong> y los
+                        movimientos anteriores estan resumidos arriba en el <strong>Saldo inicial</strong>.
+                        Quita la <strong>Fecha Inicio</strong> para ver el cargue inicial como movimiento.
+                      </TableCell>
                     </TableRow>
                   )}
                   {kardex.filas.map((t) => (
