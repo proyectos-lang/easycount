@@ -46,6 +46,8 @@ export default function KardexPage() {
   const [filtroAlmacenId, setFiltroAlmacenId] = React.useState("")
   const [filtroLocalizacionId, setFiltroLocalizacionId] = React.useState("")
   const [filtroTipoMovimiento, setFiltroTipoMovimiento] = React.useState("")
+  // Busqueda para el selector de producto (para no scrollear cientos).
+  const [busquedaProducto, setBusquedaProducto] = React.useState("")
 
   React.useEffect(() => {
     loadData()
@@ -93,6 +95,70 @@ export default function KardexPage() {
     })
   }, [transacciones, filtroFechaInicio, filtroFechaFin, filtroProductoId, filtroAlmacenId, filtroLocalizacionId, filtroTipoMovimiento])
 
+  // ¿Estamos en modo "Kardex por producto"? (hay un producto seleccionado)
+  const esKardex = !!filtroProductoId
+
+  // Productos para el selector, filtrados por la busqueda de texto.
+  const productosParaSelect = React.useMemo(() => {
+    const q = busquedaProducto.trim().toLowerCase()
+    if (!q) return productos
+    return productos.filter(
+      (p) =>
+        (p.nombre || "").toLowerCase().includes(q) ||
+        (p.codigo_barras || "").toLowerCase().includes(q)
+    )
+  }, [productos, busquedaProducto])
+
+  const productoSel = React.useMemo(
+    () => productos.find((p) => String(p.id) === filtroProductoId) || null,
+    [productos, filtroProductoId]
+  )
+
+  // Kardex del producto seleccionado: TODOS sus movimientos (respetando
+  // almacen/localizacion/tipo si se filtro) ordenados cronologicamente, con el
+  // SALDO acumulado despues de cada movimiento. El saldo considera SIEMPRE toda
+  // la historia previa, asi que al filtrar por fechas se calcula un "saldo
+  // inicial" (lo acumulado antes del rango) y las filas del rango arrancan de
+  // ahi. Sin filtro de fecha, arranca en 0 (desde el primer ingreso).
+  const kardex = React.useMemo(() => {
+    if (!filtroProductoId) return null
+    const pid = parseInt(filtroProductoId)
+    const alm = filtroAlmacenId ? parseInt(filtroAlmacenId) : null
+    const loc = filtroLocalizacionId ? parseInt(filtroLocalizacionId) : null
+
+    const delProducto = transacciones
+      .filter(
+        (t) =>
+          t.producto_id === pid &&
+          (alm == null || t.almacen_id === alm) &&
+          (loc == null || t.localizacion_id === loc) &&
+          (!filtroTipoMovimiento || t.tipo_movimiento === filtroTipoMovimiento)
+      )
+      .sort((a, b) => {
+        const fa = a.fecha || "", fb = b.fecha || ""
+        if (fa !== fb) return fa < fb ? -1 : 1
+        return (a.id ?? 0) - (b.id ?? 0)
+      })
+
+    let saldo = 0
+    let saldoInicial = 0
+    const filas: (TransaccionInventario & { saldo: number })[] = []
+    for (const t of delProducto) {
+      saldo = +(saldo + Number(t.cantidad || 0)).toFixed(4)
+      const fecha = t.fecha?.split("T")[0] || ""
+      const antesDelRango = !!filtroFechaInicio && fecha < filtroFechaInicio
+      const despuesDelRango = !!filtroFechaFin && fecha > filtroFechaFin
+      if (antesDelRango) {
+        saldoInicial = saldo // lo acumulado antes del rango
+        continue
+      }
+      if (despuesDelRango) continue
+      filas.push({ ...t, saldo })
+    }
+    const saldoFinal = filas.length > 0 ? filas[filas.length - 1].saldo : saldoInicial
+    return { filas, saldoInicial, saldoFinal }
+  }, [transacciones, filtroProductoId, filtroAlmacenId, filtroLocalizacionId, filtroTipoMovimiento, filtroFechaInicio, filtroFechaFin])
+
   function getTipoMovimientoBadge(tipo: string) {
     switch (tipo) {
       case 'Entrada Compra':
@@ -111,6 +177,44 @@ export default function KardexPage() {
   }
 
   function exportToExcel() {
+    // Modo Kardex: exporta el kardex del producto con Entrada/Salida/Saldo.
+    if (esKardex) {
+      if (!kardex || kardex.filas.length === 0) {
+        toast({ title: "Sin datos", description: "No hay movimientos para exportar", variant: "destructive" })
+        return
+      }
+      const rows: Record<string, unknown>[] = []
+      if (filtroFechaInicio || filtroFechaFin) {
+        rows.push({
+          Fecha: "", Hora: "", 'Tipo Movimiento': "Saldo inicial (antes del rango)",
+          Almacen: "", Localizacion: "", Entrada: "", Salida: "", Saldo: kardex.saldoInicial,
+          'Costo/Precio': "",
+        })
+      }
+      for (const t of kardex.filas) {
+        rows.push({
+          Fecha: t.fecha?.split('T')[0] || '',
+          Hora: t.fecha?.split('T')[1]?.substring(0, 8) || '',
+          'Tipo Movimiento': t.tipo_movimiento,
+          Almacen: t.almacen_nombre || '',
+          Localizacion: t.localizacion_nombre || '',
+          Entrada: t.cantidad > 0 ? t.cantidad : '',
+          Salida: t.cantidad < 0 ? Math.abs(t.cantidad) : '',
+          Saldo: t.saldo,
+          'Costo/Precio': t.costo_o_precio_unitario,
+        })
+      }
+      const nombre = productoSel ? productoSel.nombre.replace(/[^\w]+/g, "_").slice(0, 40) : "producto"
+      exportToXlsx(rows, {
+        sheetName: "Kardex",
+        filename: `Kardex_${nombre}`,
+        colWidths: [12, 10, 18, 16, 16, 10, 10, 12, 12],
+      })
+      toast({ title: "Exportado", description: "El kardex se descargo correctamente" })
+      return
+    }
+
+    // Modo historial general.
     if (transaccionesFiltradas.length === 0) {
       toast({ title: "Sin datos", description: "No hay transacciones para exportar", variant: "destructive" })
       return
@@ -143,6 +247,7 @@ export default function KardexPage() {
     setFiltroAlmacenId("")
     setFiltroLocalizacionId("")
     setFiltroTipoMovimiento("")
+    setBusquedaProducto("")
   }
 
   return (
@@ -150,10 +255,16 @@ export default function KardexPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-<h1 className="text-xl md:text-2xl font-bold tracking-tight">Historial de Transacciones</h1>
-<p className="text-sm md:text-base text-muted-foreground">Movimientos de inventario</p>
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight">Kardex de Inventario</h1>
+          <p className="text-sm md:text-base text-muted-foreground">
+            Elige un producto para ver su kardex con saldo acumulado, o revisa el historial de todos los movimientos.
+          </p>
         </div>
-        <Button onClick={exportToExcel} className="gap-2 w-full sm:w-auto" disabled={transaccionesFiltradas.length === 0}>
+        <Button
+          onClick={exportToExcel}
+          className="gap-2 w-full sm:w-auto"
+          disabled={esKardex ? !kardex || kardex.filas.length === 0 : transaccionesFiltradas.length === 0}
+        >
           <FileSpreadsheet className="h-4 w-4" />
           <span>Exportar Excel</span>
         </Button>
@@ -162,9 +273,15 @@ export default function KardexPage() {
       {/* Filters and Table */}
       <Card className="rounded-2xl shadow-sm border border-stone-200">
         <CardHeader className="p-4 md:p-6">
-          <CardTitle className="text-lg">Movimientos</CardTitle>
+          <CardTitle className="text-lg">
+            {esKardex && productoSel
+              ? `Kardex: ${productoSel.codigo_barras ? `[${productoSel.codigo_barras}] ` : ""}${productoSel.nombre}`
+              : "Movimientos"}
+          </CardTitle>
           <CardDescription>
-            {transaccionesFiltradas.length} movimiento(s) {transaccionesFiltradas.length !== transacciones.length && `de ${transacciones.length} total`}
+            {esKardex && kardex
+              ? `${kardex.filas.length} movimiento(s) · Saldo actual: ${kardex.saldoFinal}`
+              : `${transaccionesFiltradas.length} movimiento(s) ${transaccionesFiltradas.length !== transacciones.length ? `de ${transacciones.length} total` : ""}`}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 md:p-6 pt-0 space-y-4">
@@ -193,23 +310,36 @@ export default function KardexPage() {
                 />
               </div>
 
-              {/* Producto */}
+              {/* Producto (con busqueda) */}
               <div>
-                <Label className="text-xs text-stone-600 mb-1.5 block">Producto</Label>
-                <Select 
-                  value={filtroProductoId || "all"} 
+                <Label className="text-xs text-stone-600 mb-1.5 block">Producto (kardex)</Label>
+                <Select
+                  value={filtroProductoId || "all"}
                   onValueChange={(v) => setFiltroProductoId(v === "all" ? "" : v)}
                 >
                   <SelectTrigger className="bg-white border-stone-200">
                     <SelectValue placeholder="Todos" />
                   </SelectTrigger>
                   <SelectContent>
+                    <div className="p-2">
+                      <Input
+                        autoFocus
+                        placeholder="Buscar por nombre o codigo..."
+                        value={busquedaProducto}
+                        onChange={(e) => setBusquedaProducto(e.target.value)}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        className="h-8"
+                      />
+                    </div>
                     <SelectItem value="all">Todos los productos</SelectItem>
-                    {productos.map(p => (
+                    {productosParaSelect.slice(0, 100).map(p => (
                       <SelectItem key={p.id} value={p.id!.toString()}>
                         {p.codigo_barras ? `[${p.codigo_barras}] ` : ''}{p.nombre}
                       </SelectItem>
                     ))}
+                    {productosParaSelect.length === 0 && (
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground">Sin resultados</div>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -302,12 +432,60 @@ export default function KardexPage() {
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-          ) : transaccionesFiltradas.length === 0 ? (
+          ) : (esKardex ? !kardex || kardex.filas.length === 0 : transaccionesFiltradas.length === 0) ? (
             <div className="text-center py-8 text-muted-foreground">
               <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No hay movimientos {transacciones.length > 0 ? "con los filtros seleccionados" : "registrados"}</p>
             </div>
+          ) : esKardex && kardex ? (
+            /* ===== Kardex por producto: cronologico + saldo acumulado ===== */
+            <div className="overflow-x-auto border rounded-lg">
+              <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                <TableHeader sticky>
+                  <TableRow className="bg-stone-50">
+                    <TableHead className="font-semibold">Fecha</TableHead>
+                    <TableHead className="font-semibold">Tipo Movimiento</TableHead>
+                    <TableHead className="font-semibold">Almacen</TableHead>
+                    <TableHead className="font-semibold">Localizacion</TableHead>
+                    <TableHead className="font-semibold text-right">Entrada</TableHead>
+                    <TableHead className="font-semibold text-right">Salida</TableHead>
+                    <TableHead className="font-semibold text-right">Saldo</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(filtroFechaInicio || filtroFechaFin) && (
+                    <TableRow className="bg-stone-100/60">
+                      <TableCell colSpan={6} className="text-sm font-medium text-muted-foreground">
+                        Saldo inicial (antes del rango)
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-semibold">{kardex.saldoInicial}</TableCell>
+                    </TableRow>
+                  )}
+                  {kardex.filas.map((t) => (
+                    <TableRow key={t.id}>
+                      <TableCell className="whitespace-nowrap">
+                        <div>
+                          <p className="font-medium">{t.fecha?.split('T')[0]}</p>
+                          <p className="text-xs text-muted-foreground">{t.fecha?.split('T')[1]?.substring(0, 8)}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>{getTipoMovimientoBadge(t.tipo_movimiento)}</TableCell>
+                      <TableCell>{t.almacen_nombre || '-'}</TableCell>
+                      <TableCell>{t.localizacion_nombre || '-'}</TableCell>
+                      <TableCell className="text-right font-mono text-green-600">
+                        {t.cantidad > 0 ? t.cantidad : ''}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-red-600">
+                        {t.cantidad < 0 ? Math.abs(t.cantidad) : ''}
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-semibold">{t.saldo}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           ) : (
+            /* ===== Historial general (todos los productos) ===== */
             <div className="overflow-x-auto border rounded-lg">
               <Table containerClassName="max-h-[60vh] overflow-y-auto">
                 <TableHeader sticky>

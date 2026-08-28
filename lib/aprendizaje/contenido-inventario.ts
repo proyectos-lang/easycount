@@ -8,9 +8,11 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
       "El libro mayor del inventario: cada entrada, salida, traslado y ajuste de cada producto, con filtros y export a Excel.",
     queHace: [
       "Muestra todos los movimientos de inventario: Entrada Compra, Salida Venta, Traslados, Ajustes y Entradas por Devolución.",
-      "Filtros por producto, almacén, localización, tipo de movimiento y rango de fechas.",
+      "Filtros por producto, almacén, localización, tipo de movimiento y rango de fechas. El selector de producto tiene búsqueda por nombre o código.",
+      "Al elegir un producto entra en modo Kardex: lista sus movimientos en orden cronológico (desde el primer ingreso) con el SALDO acumulado (existencias) después de cada movimiento, separando Entradas y Salidas.",
+      "Si filtras por fechas, calcula el 'Saldo inicial' (lo acumulado antes del rango) para que el saldo de cada fila siga siendo real.",
       "Cada movimiento indica cantidad, costo/precio unitario y referencia al documento origen (compra, venta, devolución…).",
-      "Exporta el resultado filtrado a Excel.",
+      "Exporta a Excel: el historial general, o el kardex del producto con Entrada/Salida/Saldo.",
     ],
     queNoHace: [
       "No permite editar ni borrar movimientos: el kardex es el registro histórico. Los errores se corrigen con movimientos de ajuste, no borrando.",
@@ -18,12 +20,12 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
     ],
     operaciones: [
       {
-        titulo: "Auditar los movimientos de un producto",
+        titulo: "Ver el Kardex de un producto (con saldo acumulado)",
         pasos: [
           "Abre Inventario → Historial de Transacciones.",
-          "Filtra por el producto (y opcionalmente el almacén o rango de fechas).",
-          "Revisa la secuencia: cada venta debe tener su 'Salida Venta', cada compra su 'Entrada Compra'.",
-          "Si el stock no cuadra con la realidad física, registra un ajuste en Movimientos Manuales.",
+          "En 'Producto (kardex)' escribe el nombre o código y selecciónalo (opcional: filtra por almacén, localización o rango de fechas).",
+          "Se muestra el kardex cronológico: cada fila con Entrada/Salida y el Saldo (existencias) resultante. El encabezado indica el Saldo actual.",
+          "Revisa la secuencia: cada venta debe tener su 'Salida Venta', cada compra su 'Entrada Compra'. Si el stock no cuadra con lo físico, registra un ajuste en Movimientos Manuales.",
         ],
       },
       {
@@ -41,7 +43,7 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
           "Causas típicas: ventas o recepciones no registradas, mermas o robos. Audita el kardex del producto para encontrar el faltante y regístralo como ajuste en Movimientos Manuales (cantidad negativa o positiva).",
       },
     ],
-    keywords: ["kardex", "movimientos", "auditar", "trazabilidad", "entradas", "salidas", "libro"],
+    keywords: ["kardex", "movimientos", "auditar", "trazabilidad", "entradas", "salidas", "libro", "saldo", "saldo acumulado", "existencias", "buscar producto"],
   },
   {
     modulo: "Movimientos Manuales",
