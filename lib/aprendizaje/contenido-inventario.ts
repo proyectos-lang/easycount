@@ -9,8 +9,9 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
     queHace: [
       "Muestra todos los movimientos de inventario: Entrada Compra, Salida Venta, Traslados, Ajustes y Entradas por Devolución.",
       "Filtros por producto, almacén, localización, tipo de movimiento y rango de fechas. El selector de producto tiene búsqueda por nombre o código.",
-      "Al elegir un producto entra en modo Kardex: lista sus movimientos en orden cronológico (desde el primer ingreso) con el SALDO acumulado (existencias) después de cada movimiento, separando Entradas y Salidas.",
-      "Si filtras por fechas, calcula el 'Saldo inicial' (lo acumulado antes del rango) para que el saldo de cada fila siga siendo real.",
+      "Dos pestañas: 'Kardex por producto' e 'Historial general'. En Kardex eliges un producto, presionas 'Buscar kardex' y trae TODA su historia desde el servidor (sin límite de filas), en orden cronológico con el SALDO acumulado (existencias) tras cada movimiento, separando Entradas y Salidas.",
+      "El kardex NO carga solo al seleccionar: hay que presionar 'Buscar kardex' para garantizar que se traiga la historia completa. Los filtros de fecha, almacén, localización y tipo refinan sobre lo ya traído, sin volver a consultar.",
+      "Si filtras por fechas, calcula el 'Saldo inicial' (lo acumulado antes del rango) para que el saldo de cada fila siga siendo real; el cargue inicial y todo lo anterior a la 'Fecha Inicio' quedan resumidos ahí. Quita la 'Fecha Inicio' para ver el cargue inicial como movimiento.",
       "Cada movimiento indica cantidad, costo/precio unitario y referencia al documento origen (compra, venta, devolución…).",
       "Exporta a Excel: el historial general, o el kardex del producto con Entrada/Salida/Saldo.",
     ],
@@ -22,9 +23,11 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
       {
         titulo: "Ver el Kardex de un producto (con saldo acumulado)",
         pasos: [
-          "Abre Inventario → Historial de Transacciones.",
-          "En 'Producto (kardex)' escribe el nombre o código y selecciónalo (opcional: filtra por almacén, localización o rango de fechas).",
-          "Se muestra el kardex cronológico: cada fila con Entrada/Salida y el Saldo (existencias) resultante. El encabezado indica el Saldo actual.",
+          "Abre Inventario → Historial de Transacciones y quédate en la pestaña 'Kardex por producto'.",
+          "En 'Producto (kardex)' escribe el nombre o código y selecciónalo.",
+          "Presiona 'Buscar kardex': trae toda la historia del producto desde el servidor.",
+          "Se muestra el kardex cronológico: cada fila con Entrada/Salida y el Saldo (existencias) resultante. El encabezado indica el Saldo actual. (Opcional: refina por almacén, localización, tipo o rango de fechas.)",
+          "Para ver el cargue inicial como movimiento, deja vacía la 'Fecha Inicio'.",
           "Revisa la secuencia: cada venta debe tener su 'Salida Venta', cada compra su 'Entrada Compra'. Si el stock no cuadra con lo físico, registra un ajuste en Movimientos Manuales.",
         ],
       },
@@ -42,8 +45,18 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
         respuesta:
           "Causas típicas: ventas o recepciones no registradas, mermas o robos. Audita el kardex del producto para encontrar el faltante y regístralo como ajuste en Movimientos Manuales (cantidad negativa o positiva).",
       },
+      {
+        pregunta: "En el kardex solo veo 'Saldo inicial' y no el cargue inicial del producto",
+        respuesta:
+          "Es porque pusiste una 'Fecha Inicio' posterior a la fecha del cargue: el kardex resume todo lo anterior al rango en el 'Saldo inicial'. Quita la 'Fecha Inicio' (o ponla igual/antes de la fecha del cargue) y el cargue aparecerá como el primer movimiento.",
+      },
+      {
+        pregunta: "¿Por qué el kardex ya no se muestra al seleccionar el producto?",
+        respuesta:
+          "Para asegurar que se traiga TODA la historia del producto (sin el límite de filas de la vista general), el kardex se consulta al presionar 'Buscar kardex'. Si cambias de producto, vuelve a presionarlo.",
+      },
     ],
-    keywords: ["kardex", "movimientos", "auditar", "trazabilidad", "entradas", "salidas", "libro", "saldo", "saldo acumulado", "existencias", "buscar producto"],
+    keywords: ["kardex", "movimientos", "auditar", "trazabilidad", "entradas", "salidas", "libro", "saldo", "saldo acumulado", "saldo inicial", "existencias", "buscar producto", "buscar kardex", "cargue inicial"],
   },
   {
     modulo: "Movimientos Manuales",
