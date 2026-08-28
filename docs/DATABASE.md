@@ -276,6 +276,8 @@ Cuentas de tesorería (bancos, POS, links de pago) con su comisión.
 ### `cuenta_movimientos`
 Movimientos de cada cuenta bancaria (depósitos por ventas, transferencias desde caja, pagos de gastos). Definida en [scripts/011-tesoreria-caja-chica.sql](../scripts/011-tesoreria-caja-chica.sql): `cuenta_id` (FK → `cuentas_config`), `tipo`, `monto`, `concepto`, `ref_tipo`/`ref_id` (trazabilidad), `saldo_resultante`, `usuario`, `razon_social_id`.
 
+> **Integridad de tesorería (script 039).** Los movimientos de caja/banco de una venta/gasto/devolución llevan `ref_tipo` + `ref_id` al padre. Triggers `AFTER DELETE` (función `tg_limpiar_tesoreria_ref`) en `gastos`, `ventas_encabezado` y `devoluciones_encabezado` borran esos movimientos automáticamente al eliminar el padre y recalculan la cadena `saldo_resultante` + el cache `cuentas_config.saldo`, para que **nunca** quede tesorería huérfana. **El saldo de caja chica se calcula como SUMA de `monto`** (con signo) en la app (`getSaldoActual`), no desde el último `saldo_resultante`: así es inmune a movimientos borrados. La Consolidación Bancaria también suma los movimientos crudos.
+
 ### `caja_chica_sesiones`
 Sesiones de caja (apertura → movimientos → cierre). **Solo puede haber una sesión `Abierta` por empresa** (índice único parcial `uq_caja_sesion_abierta_por_razon`).
 

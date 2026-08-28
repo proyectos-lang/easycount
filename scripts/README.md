@@ -43,6 +43,7 @@ SQL Editor de Supabase. Son en su mayoría idempotentes (`IF NOT EXISTS` /
 | 036 | `036-eliminar-producto-rpc.sql` | RPC `eliminar_producto_en_cascada` (SECURITY DEFINER): borra el producto + sus movimientos de inventario ignorando RLS (alcanza filas mal selladas que rompen el FK); bloquea si tiene ventas o compras |
 | 037 | `037-plataforma-admin.sql` | Portal de plataforma (super-admin): tabla `plataforma_admins` (allow-list) + RPCs `plataforma_resumen_empresas` / `plataforma_db_stats` (SECURITY DEFINER, solo `service_role`). **Ajusta el email sembrado** al de tu cuenta dueña |
 | 038 | `038-razon-social-config.sql` | Mini-personalizaciones por empresa: tabla `razon_social_config` (JSONB de feature flags) + RLS (cada empresa LEE su fila; solo el `service_role`/portal ESCRIBE). Defaults en `lib/constants/feature-flags.ts`. Primer flag: `ventas_mostrar_isv` (oculta el ISV en Nueva Venta) |
+| 039 | `039-tesoreria-limpieza-automatica.sql` | Red de seguridad: función + triggers `AFTER DELETE` en `gastos`/`ventas_encabezado`/`devoluciones_encabezado` que borran automáticamente los movimientos de tesorería (`caja_chica_movimientos`/`cuenta_movimientos` con ese `ref_tipo`/`ref_id`) y recalculan el saldo de las cuentas. Garantiza que borrar un padre nunca deje tesorería huérfana |
 | — | `add-almacen-to-ventas-encabezado.sql` | Agrega `almacen_id` a ventas (aplicar tras 011) |
 
 > **Huecos 006–008:** la numeración salta de 005 a 009. No faltan migraciones;
