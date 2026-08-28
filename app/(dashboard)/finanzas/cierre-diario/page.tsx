@@ -103,6 +103,9 @@ function todayISO(): string {
 function formatTime(iso: string): string {
   try {
     return new Date(iso).toLocaleTimeString("es-HN", {
+      // Los movimientos se guardan HN-as-UTC (hora de Honduras codificada como
+      // UTC). Sin timeZone:'UTC' el navegador restaria 6h (8am se veria 2am).
+      timeZone: "UTC",
       hour: "2-digit",
       minute: "2-digit",
     })
@@ -786,6 +789,8 @@ function formatHora(iso: string): string {
   if (!iso) return "-"
   try {
     return new Date(iso).toLocaleTimeString("es-HN", {
+      // Movimientos HN-as-UTC: leer la hora tal cual (sin restar 6h).
+      timeZone: "UTC",
       hour: "2-digit",
       minute: "2-digit",
     })
