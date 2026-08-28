@@ -48,6 +48,8 @@ export default function KardexPage() {
   const [filtroTipoMovimiento, setFiltroTipoMovimiento] = React.useState("")
   // Busqueda para el selector de producto (para no scrollear cientos).
   const [busquedaProducto, setBusquedaProducto] = React.useState("")
+  // Pestana activa: kardex por producto (default) o historial general.
+  const [vista, setVista] = React.useState<"kardex" | "historial">("kardex")
 
   React.useEffect(() => {
     loadData()
@@ -95,8 +97,8 @@ export default function KardexPage() {
     })
   }, [transacciones, filtroFechaInicio, filtroFechaFin, filtroProductoId, filtroAlmacenId, filtroLocalizacionId, filtroTipoMovimiento])
 
-  // ¿Estamos en modo "Kardex por producto"? (hay un producto seleccionado)
-  const esKardex = !!filtroProductoId
+  // Modo "Kardex por producto" segun la pestana activa (necesita un producto).
+  const esKardex = vista === "kardex"
 
   // Productos para el selector, filtrados por la busqueda de texto.
   const productosParaSelect = React.useMemo(() => {
@@ -274,17 +276,43 @@ export default function KardexPage() {
       <Card className="rounded-2xl shadow-sm border border-stone-200">
         <CardHeader className="p-4 md:p-6">
           <CardTitle className="text-lg">
-            {esKardex && productoSel
-              ? `Kardex: ${productoSel.codigo_barras ? `[${productoSel.codigo_barras}] ` : ""}${productoSel.nombre}`
+            {esKardex
+              ? productoSel
+                ? `Kardex: ${productoSel.codigo_barras ? `[${productoSel.codigo_barras}] ` : ""}${productoSel.nombre}`
+                : "Kardex por producto"
               : "Movimientos"}
           </CardTitle>
           <CardDescription>
-            {esKardex && kardex
-              ? `${kardex.filas.length} movimiento(s) · Saldo actual: ${kardex.saldoFinal}`
+            {esKardex
+              ? kardex
+                ? `${kardex.filas.length} movimiento(s) · Saldo actual: ${kardex.saldoFinal}`
+                : "Elige un producto para ver su kardex con saldo acumulado."
               : `${transaccionesFiltradas.length} movimiento(s) ${transaccionesFiltradas.length !== transacciones.length ? `de ${transacciones.length} total` : ""}`}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 md:p-6 pt-0 space-y-4">
+          {/* Pestanas: Kardex por producto / Historial general */}
+          <div className="inline-flex rounded-lg border border-stone-200 bg-stone-50 p-0.5">
+            <button
+              type="button"
+              onClick={() => setVista("kardex")}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                vista === "kardex" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Kardex por producto
+            </button>
+            <button
+              type="button"
+              onClick={() => setVista("historial")}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                vista === "historial" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Historial general
+            </button>
+          </div>
+
           {/* Filters */}
           <div className="p-4 bg-stone-50 rounded-lg border border-stone-200">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
@@ -435,7 +463,11 @@ export default function KardexPage() {
           ) : (esKardex ? !kardex || kardex.filas.length === 0 : transaccionesFiltradas.length === 0) ? (
             <div className="text-center py-8 text-muted-foreground">
               <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No hay movimientos {transacciones.length > 0 ? "con los filtros seleccionados" : "registrados"}</p>
+              {esKardex && !filtroProductoId ? (
+                <p>Busca y elige un producto en "Producto (kardex)" para ver su kardex con el saldo acumulado.</p>
+              ) : (
+                <p>No hay movimientos {transacciones.length > 0 ? "con los filtros seleccionados" : "registrados"}</p>
+              )}
             </div>
           ) : esKardex && kardex ? (
             /* ===== Kardex por producto: cronologico + saldo acumulado ===== */

@@ -990,7 +990,16 @@ export async function setPuntoVentaLocalizacion(
       },
       { onConflict: 'localizacion_id' }
     )
-  return { error: error?.message ?? null }
+  if (error) {
+    // Mensaje claro si falta la migracion (tabla nueva sin aplicar).
+    if (/does not exist|localizaciones_config|schema cache|PGRST205|relation .* does not exist/i.test(error.message)) {
+      return {
+        error: 'Falta activar la funcion: aplica scripts/041-localizaciones-punto-venta.sql en Supabase.',
+      }
+    }
+    return { error: error.message }
+  }
+  return { error: null }
 }
 
 export async function saveLocalizacion(
