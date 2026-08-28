@@ -270,7 +270,7 @@ export default function ValoracionPage() {
       'Valor Comercial': p.valor_comercial,
       'Margen Potencial': p.margen_potencial,
       'Dias Sin Venta': p.dias_sin_venta ?? 'Sin ventas',
-      'Ultima Venta': p.ultima_venta ? new Date(p.ultima_venta).toLocaleDateString('es-HN') : 'Nunca'
+      'Ultima Venta': p.ultima_venta ? new Date(p.ultima_venta).toLocaleDateString('es-HN', { timeZone: 'UTC' }) : 'Nunca'
     }))
 
     data.push({

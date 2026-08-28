@@ -638,7 +638,13 @@ export async function crearVenta(
     }
 
     // 1. Insert venta encabezado with almacen_id (sello completo: empresa + usuario)
+    // fecha_venta HN-as-UTC por defecto si el caller no la envia (p.ej. aprobar
+    // pedido): sin esto caia al DEFAULT now() de la BD (UTC real) y de noche
+    // adelantaba el dia -> descuadre con caja/cierre. `ventas_encabezado` NO
+    // esta en el backstop 040 (fecha elegible por el usuario), asi que el
+    // default va aqui, con paridad a la rama localStorage.
     const encabezadoConAlmacen = {
+      fecha_venta: getHondurasNowISO(),
       ...data.encabezado,
       valorpago: valorpagoCalculado,
       estado_pago: estadoPagoCalculado,
@@ -1291,7 +1297,8 @@ export async function getVentasDiariasMesActual(): Promise<{ data: VentaDiaria[]
       .from('ventas_encabezado')
       .select('fecha_venta, total_venta')
       .gte('fecha_venta', `${year}-${mm}-01T00:00:00`)
-      .lte('fecha_venta', finMes.toISOString())
+      // Cota superior naive (sin offset) para no arrastrar 6h del mes siguiente.
+      .lte('fecha_venta', `${year}-${mm}-${String(diasEnMes).padStart(2, '0')}T23:59:59`)
     if (error) return { data: [], error: error.message }
     for (const v of (data || []) as { fecha_venta: string | null; total_venta: number | null }[]) {
       acumular(v.fecha_venta, v.total_venta)
@@ -1549,10 +1556,13 @@ export async function getVentasDashboard(anio?: number, mes?: number): Promise<{
     if (tenantId != null) ventasQuery = ventasQuery.eq('razon_social_id', tenantId)
 
     if (anio) {
-      const startDate = new Date(anio, mes ? mes - 1 : 0, 1).toISOString()
-      const endDate = mes 
-        ? new Date(anio, mes, 0, 23, 59, 59).toISOString()
-        : new Date(anio, 11, 31, 23, 59, 59).toISOString()
+      // Limites naive (sin offset) para casar con fecha_venta HN-as-UTC y no
+      // desfasar 6h los bordes de mes/ano.
+      const mm = mes ? String(mes).padStart(2, '0') : null
+      const startDate = mm ? `${anio}-${mm}-01T00:00:00` : `${anio}-01-01T00:00:00`
+      const endDate = mm
+        ? `${anio}-${mm}-${String(new Date(anio, mes!, 0).getDate()).padStart(2, '0')}T23:59:59`
+        : `${anio}-12-31T23:59:59`
       ventasQuery = ventasQuery.gte('fecha_venta', startDate).lte('fecha_venta', endDate)
     }
     
@@ -1993,6 +2003,21 @@ export async function eliminarVentaCompletamente(
     }
     if (venta.razon_social_id !== stamp.razon_social_id) {
       return { error: 'La venta no pertenece a la empresa activa' }
+    }
+
+    // ----- 0.b Bloqueo: no eliminar si tiene devoluciones ------------------
+    // La devolucion ya devolvio stock (+cantidad) y dinero de ESTA venta; al
+    // borrar la venta, revertirEfectosVenta re-suma la cantidad ORIGINAL al
+    // stock -> quedaria inflado por lo devuelto (y el kardex de la devolucion
+    // huerfano). Igual que editarVenta, exigimos anular la devolucion primero.
+    const { count: devCount, error: devErr } = await supabase
+      .from('devoluciones_encabezado')
+      .select('id', { count: 'exact', head: true })
+      .eq('venta_id', ventaId)
+    if (!devErr && (devCount || 0) > 0) {
+      return {
+        error: 'Esta factura tiene devoluciones asociadas. Anula la devolución antes de eliminar la venta.',
+      }
     }
 
     // ----- 1-3. Revertir inventario, tesoreria y pagos ---------------------

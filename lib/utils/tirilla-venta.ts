@@ -76,6 +76,9 @@ export function metodoPagoLabel(metodo: string, cuentaNombre?: string | null): s
 function fmtFechaHora(iso: string): string {
   try {
     return new Date(iso).toLocaleString("es-HN", {
+      // fecha_venta se guarda HN-as-UTC: leer en UTC para no restar 6h
+      // (una venta de las 19:00 se imprimia 13:00 sin esto).
+      timeZone: "UTC",
       day: "2-digit",
       month: "2-digit",
       year: "numeric",

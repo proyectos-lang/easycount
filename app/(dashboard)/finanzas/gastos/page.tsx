@@ -437,6 +437,9 @@ export default function GastosPage() {
   function formatDateTime(dateStr: string | null | undefined) {
     if (!dateStr) return "-"
     return new Date(dateStr).toLocaleString("es-HN", {
+      // Los abonos (fecha_pago) vienen de movimientos HN-as-UTC: leer en UTC
+      // para mostrar la hora real de Honduras (sin restar 6h).
+      timeZone: "UTC",
       day: "numeric",
       month: "short",
       hour: "2-digit",

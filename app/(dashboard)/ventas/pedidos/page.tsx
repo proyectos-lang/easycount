@@ -55,6 +55,20 @@ const ESTADO_PEDIDO_BADGE: Record<string, string> = {
   Rechazado: "bg-red-100 text-red-700",
 }
 
+/**
+ * `created_at` y `fecha_expiracion` de los pedidos/links se guardan en UTC real
+ * (now() / toISOString). Se muestran convirtiendo a la zona local (Honduras),
+ * NO con `.split('T')[0]` (que enseñaria el dia UTC y de noche lo adelanta).
+ */
+function fechaLocal(iso?: string | null): string {
+  if (!iso) return ""
+  try {
+    return new Date(iso).toLocaleDateString("es-HN")
+  } catch {
+    return iso.split("T")[0]
+  }
+}
+
 export default function PedidosCatalogoPage() {
   const { toast } = useToast()
 
@@ -85,7 +99,7 @@ export default function PedidosCatalogoPage() {
     }
     const rows: Record<string, unknown>[] = pedidos.map((p) => ({
       Pedido: p.numero_pedido || "",
-      Fecha: p.created_at?.split("T")[0] || "",
+      Fecha: fechaLocal(p.created_at),
       Cliente: p.cliente_nombre,
       Telefono: p.cliente_telefono || "",
       Link: p.link_nombre || "",
@@ -158,7 +172,7 @@ export default function PedidosCatalogoPage() {
                         .map((p) => (
                           <TableRow key={p.id}>
                             <TableCell className="font-mono">{p.numero_pedido}</TableCell>
-                            <TableCell className="text-sm">{p.created_at?.split("T")[0]}</TableCell>
+                            <TableCell className="text-sm">{fechaLocal(p.created_at)}</TableCell>
                             <TableCell>{p.cliente_nombre}</TableCell>
                             <TableCell className="text-sm">{p.cliente_telefono || "—"}</TableCell>
                             <TableCell className="text-right font-medium">{formatCurrency(Number(p.total || 0))}</TableCell>
@@ -216,9 +230,9 @@ export default function PedidosCatalogoPage() {
                             <Badge variant="secondary" className={ESTADO_LINK_BADGE[l.estado]}>{l.estado}</Badge>
                           </TableCell>
                           <TableCell className="text-sm">
-                            {l.fecha_expiracion ? l.fecha_expiracion.split("T")[0] : "Sin límite"}
+                            {l.fecha_expiracion ? fechaLocal(l.fecha_expiracion) : "Sin límite"}
                           </TableCell>
-                          <TableCell className="text-sm">{l.created_at?.split("T")[0]}</TableCell>
+                          <TableCell className="text-sm">{fechaLocal(l.created_at)}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
                               <Button
@@ -558,11 +572,15 @@ function RevisarPedidoDialog({ pedido, onDone }: { pedido: PedidoEncabezado; onD
           monto_neto: +(total * (1 - comision / 100)).toFixed(2),
         }]
       }
-      const totalNeto = pagosDetalle.length > 0
-        ? +pagosDetalle.reduce((a, p) => a + (p.monto_neto ?? p.monto_bruto), 0).toFixed(2)
+      // BRUTO (lo que factura/paga el cliente), igual que Nueva Venta: asi
+      // `total_venta` cuadra con la suma de las lineas y `saldo = total - pago`
+      // no queda negativo. La comision bancaria es un costo aparte (no reduce la
+      // venta ni el abono).
+      const sumaBruto = pagosDetalle.length > 0
+        ? +pagosDetalle.reduce((a, p) => a + p.monto_bruto, 0).toFixed(2)
         : total
-      const valorpago = metodoPago === "Credito" ? 0 : totalNeto
-      const estadoPago = valorpago <= 0 ? "Pendiente" : valorpago >= totalNeto - 0.005 ? "Pagado" : "Parcial"
+      const valorpago = metodoPago === "Credito" ? 0 : sumaBruto
+      const estadoPago = valorpago <= 0 ? "Pendiente" : valorpago >= total - 0.005 ? "Pagado" : "Parcial"
 
       const res = await crearVenta({
         encabezado: {
@@ -573,7 +591,7 @@ function RevisarPedidoDialog({ pedido, onDone }: { pedido: PedidoEncabezado; onD
           descuento: 0,
           subtotal: total,
           impuesto_total: 0,
-          total_venta: totalNeto,
+          total_venta: total,
           estado_pago: estadoPago as "Pendiente" | "Parcial" | "Pagado",
           valorpago,
         },
@@ -624,7 +642,7 @@ function RevisarPedidoDialog({ pedido, onDone }: { pedido: PedidoEncabezado; onD
           </DialogTitle>
           <DialogDescription>
             {pedido.cliente_nombre}
-            {pedido.cliente_telefono ? ` · ${pedido.cliente_telefono}` : ""} · {pedido.created_at?.split("T")[0]}
+            {pedido.cliente_telefono ? ` · ${pedido.cliente_telefono}` : ""} · {fechaLocal(pedido.created_at)}
             {pedido.link_nombre ? ` · Link: ${pedido.link_nombre}` : ""}
           </DialogDescription>
         </DialogHeader>

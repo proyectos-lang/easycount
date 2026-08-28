@@ -258,7 +258,9 @@ async function getEstadoResultadosCalculado(supabase: ReturnType<typeof createCl
   if (!supabase) return { data: null, error: 'Cliente no disponible' }
 
   const primerDia = `${anio}-${String(mes).padStart(2, '0')}-01`
-  const ultimoDia = new Date(anio, mes, 0).toISOString().split('T')[0]
+  // Cota superior CON hora: `fecha_venta` es timestamptz; con fecha sola
+  // (`<= 'YYYY-MM-DD'` = medianoche) se perdian TODAS las ventas del ultimo dia.
+  const ultimoDia = `${new Date(anio, mes, 0).toISOString().split('T')[0]}T23:59:59`
 
   // Aislamiento multi-tenant: solo consideramos ventas/gastos de la empresa
   // del usuario logueado. Si la sesion no esta vinculada (caso edge), no

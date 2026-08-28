@@ -282,12 +282,21 @@ export async function cerrarSesion(input: {
 async function getSaldoActual(sesion_id: number): Promise<number> {
   const supabase = createClient()
   if (!supabase) return 0
-  const { data, error } = await supabase
-    .from("caja_chica_movimientos")
-    .select("monto")
-    .eq("sesion_id", sesion_id)
-  if (error || !data) return 0
-  const suma = data.reduce((acc, m) => acc + Number(m.monto || 0), 0)
+  // Paginado: PostgREST corta cada select en 1000 filas; una sesion larga
+  // (abierta varios dias) puede superarlo y subcontaria el saldo.
+  let suma = 0
+  const PAGE = 1000
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("caja_chica_movimientos")
+      .select("monto")
+      .eq("sesion_id", sesion_id)
+      .order("id", { ascending: true })
+      .range(from, from + PAGE - 1)
+    if (error || !data) break
+    for (const m of data) suma += Number(m.monto || 0)
+    if (data.length < PAGE) break
+  }
   return +suma.toFixed(2)
 }
 
@@ -415,7 +424,9 @@ export async function registrarMovimientoCaja(input: {
 
 export async function getMovimientosSesion(
   sesion_id: number,
-  limit = 500,
+  // Alto por defecto para que una sesion larga (abierta varios dias) entre
+  // completa y el saldo acumulado se recalcule bien (ver guard rows.length<limit).
+  limit = 2000,
   // 'desc' (default) -> mas reciente arriba (pestaña "actual").
   // 'asc'            -> Apertura -> ... -> Cierre (modal de sesion cerrada).
   order: "asc" | "desc" = "desc"

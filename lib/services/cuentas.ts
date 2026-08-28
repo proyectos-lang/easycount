@@ -319,11 +319,15 @@ export async function registrarMovimientoCuenta(input: {
     return { data: null, error: mErr.message }
   }
 
-  // 3. UPDATE saldo cacheado
-  await supabase
+  // 3. UPDATE saldo cacheado. Si falla, el movimiento ya quedo insertado; en vez
+  // de dejar el cache desviado en silencio, lo reconciliamos desde la suma real.
+  const { error: saldoErr } = await supabase
     .from("cuentas_config")
     .update({ saldo: saldoResultante })
     .eq("id", input.cuenta_id)
+  if (saldoErr) {
+    await recalcCadenaSaldoCuenta(input.cuenta_id)
+  }
 
   return { data: mov as CuentaMovimiento, error: null }
 }

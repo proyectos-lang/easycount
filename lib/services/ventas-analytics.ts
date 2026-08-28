@@ -55,13 +55,15 @@ export interface PagosResumen {
  */
 function buildDateRange(anio?: number, mes?: number): { start?: string; end?: string } {
   if (!anio) return {}
-  const m0 = mes ? mes - 1 : 0
-  const m1 = mes ?? 12
-  // El ultimo dia se obtiene con `new Date(year, m1, 0)` (dia 0 del mes
-  // siguiente = ultimo del mes pedido).
-  const start = new Date(anio, m0, 1).toISOString()
-  const end = new Date(anio, m1, 0, 23, 59, 59).toISOString()
-  return { start, end }
+  // Limites en strings naive (sin offset) para casar con las fechas HN-as-UTC
+  // y NO desfasar los bordes 6h (medianoche local -> 06:00Z). Solo usamos Date
+  // para el NUMERO del ultimo dia del mes, no para el instante.
+  if (mes) {
+    const mm = String(mes).padStart(2, "0")
+    const dd = String(new Date(anio, mes, 0).getDate()).padStart(2, "0")
+    return { start: `${anio}-${mm}-01T00:00:00`, end: `${anio}-${mm}-${dd}T23:59:59` }
+  }
+  return { start: `${anio}-01-01T00:00:00`, end: `${anio}-12-31T23:59:59` }
 }
 
 /**
