@@ -271,18 +271,24 @@ export async function cerrarSesion(input: {
 
 // ==================== MOVIMIENTOS ====================
 
-/** Saldo actual de una sesion (= saldo_resultante del ultimo movimiento). */
+/**
+ * Saldo actual de una sesion = SUMA de `monto` (con signo) de TODOS sus
+ * movimientos. NO usamos el ultimo `saldo_resultante` porque es una foto que
+ * queda OBSOLETA cuando se borra/edita una venta (se elimina su movimiento de
+ * caja pero el saldo_resultante de los posteriores no se recalcula, inflando el
+ * saldo). Convencion de signos: Apertura=+saldo_inicial, Ingreso=+, Salida=-,
+ * Cierre=0 -> la suma da el saldo real, inmune a borrados.
+ */
 async function getSaldoActual(sesion_id: number): Promise<number> {
   const supabase = createClient()
   if (!supabase) return 0
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("caja_chica_movimientos")
-    .select("saldo_resultante")
+    .select("monto")
     .eq("sesion_id", sesion_id)
-    .order("id", { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  return Number(data?.saldo_resultante ?? 0)
+  if (error || !data) return 0
+  const suma = data.reduce((acc, m) => acc + Number(m.monto || 0), 0)
+  return +suma.toFixed(2)
 }
 
 /**
@@ -455,7 +461,22 @@ export async function getMovimientosSesion(
     }
     return { data: [], error: error.message }
   }
-  return { data: data || [], error: null }
+
+  const rows = (data || []) as CajaMovimiento[]
+  // Recalcula `saldo_resultante` como suma ACUMULADA de `monto` (con signo) en
+  // orden cronologico, para que la lista muestre un saldo consistente aunque se
+  // hayan borrado movimientos (ventas eliminadas dejaban el saldo inflado).
+  // Solo si trajimos la sesion completa (sin truncar por `limit`); si se
+  // trunca, no podriamos sumar los movimientos mas viejos y quedaria mal.
+  if (rows.length < limit) {
+    const cronologico = asc ? rows : [...rows].reverse()
+    let acc = 0
+    for (const m of cronologico) {
+      acc = +(acc + Number(m.monto || 0)).toFixed(2)
+      m.saldo_resultante = acc
+    }
+  }
+  return { data: rows, error: null }
 }
 
 /**

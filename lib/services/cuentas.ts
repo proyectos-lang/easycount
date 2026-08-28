@@ -370,6 +370,42 @@ export async function recalcSaldoCuenta(
   return { saldoAnterior, saldoRecalculado, error: null }
 }
 
+/**
+ * Recalcula la CADENA de saldos de una cuenta: recorre sus movimientos por `id`
+ * (orden de insercion) sumando Ingresos - Egresos y reescribe el
+ * `saldo_resultante` de cada uno que haya quedado desfasado, y actualiza el
+ * cache `cuentas_config.saldo` al saldo final.
+ *
+ * Se usa tras BORRAR movimientos (p. ej. al eliminar/editar una venta pagada
+ * por banco): el `saldo_resultante` es una foto que queda obsoleta al borrar un
+ * movimiento intermedio. Asi la lista de Movimientos y el saldo quedan con
+ * datos REALES sin depender de valores viejos.
+ */
+export async function recalcCadenaSaldoCuenta(
+  cuenta_id: number
+): Promise<{ saldoFinal: number; error: string | null }> {
+  const supabase = createClient()
+  if (!supabase) return { saldoFinal: 0, error: "Cliente no disponible" }
+
+  const { data: movs, error } = await supabase
+    .from("cuenta_movimientos")
+    .select("id, tipo, monto, saldo_resultante")
+    .eq("cuenta_id", cuenta_id)
+    .order("id", { ascending: true })
+  if (error) return { saldoFinal: 0, error: error.message }
+
+  let acc = 0
+  for (const m of movs || []) {
+    const delta = m.tipo === "Ingreso" ? Number(m.monto || 0) : -Number(m.monto || 0)
+    acc = +(acc + delta).toFixed(2)
+    if (Number(m.saldo_resultante ?? 0) !== acc) {
+      await supabase.from("cuenta_movimientos").update({ saldo_resultante: acc }).eq("id", m.id)
+    }
+  }
+  await supabase.from("cuentas_config").update({ saldo: acc }).eq("id", cuenta_id)
+  return { saldoFinal: acc, error: null }
+}
+
 export async function getMovimientosCuenta(
   cuenta_id: number,
   opts: { desde?: string; hasta?: string; limit?: number } = {}

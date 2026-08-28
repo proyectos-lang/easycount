@@ -1,7 +1,7 @@
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from '@/lib/services/tenant-stamp'
 import { registrarMovimientoCaja, getSesionAbierta } from '@/lib/services/caja-chica'
-import { registrarMovimientoCuenta } from '@/lib/services/cuentas'
+import { registrarMovimientoCuenta, recalcCadenaSaldoCuenta } from '@/lib/services/cuentas'
 import { ajustarStock } from '@/lib/services/stock'
 import { getHondurasNowISO } from '@/lib/utils/honduras-time'
 
@@ -1922,29 +1922,15 @@ async function revertirEfectosVenta(
     .eq('razon_social_id', stamp.razon_social_id)
 
   // ----- 2. Revertir tesoreria (bancos + caja) ---------------------------
+  // Cuentas bancarias afectadas por esta venta (para recalcular su cadena de
+  // saldos DESPUES de borrar sus movimientos).
   const { data: movsCuenta } = await supabase
     .from('cuenta_movimientos')
-    .select('cuenta_id, monto, tipo')
+    .select('cuenta_id')
     .eq('ref_tipo', 'venta')
     .eq('ref_id', ventaId)
     .eq('razon_social_id', stamp.razon_social_id)
-
-  for (const mc of movsCuenta ?? []) {
-    const { data: cuenta } = await supabase
-      .from('cuentas_config')
-      .select('saldo')
-      .eq('id', mc.cuenta_id)
-      .eq('razon_social_id', stamp.razon_social_id)
-      .single()
-    if (cuenta) {
-      const delta = mc.tipo === 'Ingreso' ? -Number(mc.monto || 0) : Number(mc.monto || 0)
-      await supabase
-        .from('cuentas_config')
-        .update({ saldo: +(Number(cuenta.saldo ?? 0) + delta).toFixed(2) })
-        .eq('id', mc.cuenta_id)
-        .eq('razon_social_id', stamp.razon_social_id)
-    }
-  }
+  const cuentasAfectadas = [...new Set((movsCuenta ?? []).map((m) => Number(m.cuenta_id)))]
 
   await supabase
     .from('cuenta_movimientos')
@@ -1959,6 +1945,14 @@ async function revertirEfectosVenta(
     .eq('ref_tipo', 'venta')
     .eq('ref_id', ventaId)
     .eq('razon_social_id', stamp.razon_social_id)
+
+  // Recalcula el saldo REAL (cadena + cache) de cada cuenta afectada. Asi el
+  // saldo y la lista de Movimientos no quedan con "fotos" viejas que incluyan
+  // la venta borrada. La caja chica no necesita esto: su saldo se calcula como
+  // suma de montos y su lista se recalcula al leerse (getMovimientosSesion).
+  for (const cId of cuentasAfectadas) {
+    await recalcCadenaSaldoCuenta(cId)
+  }
 
   // ----- 3. Borrar registros de pago -------------------------------------
   await supabase
