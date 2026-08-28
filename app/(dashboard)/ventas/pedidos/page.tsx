@@ -557,7 +557,10 @@ function RevisarPedidoDialog({ pedido, onDone }: { pedido: PedidoEncabezado; onD
     try {
       const numeroFactura = await getNextCorrelativo()
 
-      // Desglose de pago: una linea con el metodo elegido (Credito = sin pago).
+      // Desglose de pago: una linea con el metodo elegido. Se registra SIEMPRE
+      // (incluido Credito) para que el Historial muestre el metodo y no "—".
+      // Credito va con monto 0 (no es dinero cobrado): no genera movimiento de
+      // tesoreria y el saldo queda como cuenta por cobrar (valorpago=0).
       let pagosDetalle: PagoVentaDetalleInput[] = []
       if (metodoPago === "Efectivo") {
         pagosDetalle = [{ metodo_pago: "Efectivo", monto_bruto: total, porcentaje_comision: 0, monto_neto: total }]
@@ -571,6 +574,8 @@ function RevisarPedidoDialog({ pedido, onDone }: { pedido: PedidoEncabezado; onD
           porcentaje_comision: comision,
           monto_neto: +(total * (1 - comision / 100)).toFixed(2),
         }]
+      } else if (metodoPago === "Credito") {
+        pagosDetalle = [{ metodo_pago: "Credito", monto_bruto: 0, porcentaje_comision: 0, monto_neto: 0 }]
       }
       // BRUTO (lo que factura/paga el cliente), igual que Nueva Venta: asi
       // `total_venta` cuadra con la suma de las lineas y `saldo = total - pago`
