@@ -278,6 +278,8 @@ Movimientos de cada cuenta bancaria (depósitos por ventas, transferencias desde
 
 > **Integridad de tesorería (script 039).** Los movimientos de caja/banco de una venta/gasto/devolución llevan `ref_tipo` + `ref_id` al padre. Triggers `AFTER DELETE` (función `tg_limpiar_tesoreria_ref`) en `gastos`, `ventas_encabezado` y `devoluciones_encabezado` borran esos movimientos automáticamente al eliminar el padre y recalculan la cadena `saldo_resultante` + el cache `cuentas_config.saldo`, para que **nunca** quede tesorería huérfana. **El saldo de caja chica se calcula como SUMA de `monto`** (con signo) en la app (`getSaldoActual`), no desde el último `saldo_resultante`: así es inmune a movimientos borrados. La Consolidación Bancaria también suma los movimientos crudos.
 
+> **Backstop de hora de Honduras (script 040).** Toda fecha de transacción se guarda en HN codificada como UTC (`getHondurasNowISO` = `now()-6h`, HN es UTC-6 sin DST) y se muestra con `.split('T')[0]` / `timeZone:'UTC'`. Como respaldo, triggers `BEFORE INSERT` (funciones `tg_forzar_fecha_hn` / `tg_forzar_fecha_pago_hn`) en `transacciones_inventario`, `cuenta_movimientos`, `caja_chica_movimientos`, `pagos_ventas` y `devoluciones_encabezado` **fuerzan** la `fecha`/`fecha_pago` a HN si llega NULL (tomaría el DEFAULT `now()` = UTC real) o "en UTC real" (a menos de 3h de `now()`, típico de un cliente con la app cacheada vieja). Una fecha HN correcta (~6h antes de `now()`) no se toca. `ventas_encabezado.fecha_venta` y `gastos.fecha_gasto` quedan fuera (el usuario puede elegir su fecha).
+
 ### `caja_chica_sesiones`
 Sesiones de caja (apertura → movimientos → cierre). **Solo puede haber una sesión `Abierta` por empresa** (índice único parcial `uq_caja_sesion_abierta_por_razon`).
 
