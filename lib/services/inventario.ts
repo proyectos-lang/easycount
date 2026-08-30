@@ -556,21 +556,34 @@ export async function getStockMultipleProducts(
   if (!supabase) return { data: {}, error: 'Cliente no disponible' }
 
   try {
-    const { data, error } = await supabase
-      .from('transacciones_inventario')
-      .select('producto_id, cantidad')
-      .in('producto_id', productoIds)
-      .eq('localizacion_id', localizacionId)
-
-    if (error) return { data: {}, error: error.message }
-    
     const stockMap: Record<number, number> = {}
     productoIds.forEach(pid => { stockMap[pid] = 0 })
-    
-    ;(data || []).forEach(t => {
-      stockMap[t.producto_id] = (stockMap[t.producto_id] || 0) + (t.cantidad || 0)
-    })
-    
+
+    // Catalogos grandes (>1000 productos): el filtro .in() con miles de ids
+    // reventaria la URL, y el resultado se corta en 1000 filas. Por eso
+    // troceamos los ids en lotes y paginamos el resultado de cada lote (con
+    // orden estable para que el .range() no salte ni repita filas).
+    const CHUNK = 300
+    const PAGE = 1000
+    for (let i = 0; i < productoIds.length; i += CHUNK) {
+      const ids = productoIds.slice(i, i + CHUNK)
+      for (let from = 0, guard = 0; guard < 500; guard++, from += PAGE) {
+        const { data, error } = await supabase
+          .from('transacciones_inventario')
+          .select('producto_id, cantidad')
+          .in('producto_id', ids)
+          .eq('localizacion_id', localizacionId)
+          .order('id', { ascending: true })
+          .range(from, from + PAGE - 1)
+        if (error) return { data: {}, error: error.message }
+        const rows = data || []
+        for (const t of rows) {
+          stockMap[t.producto_id] = (stockMap[t.producto_id] || 0) + (t.cantidad || 0)
+        }
+        if (rows.length < PAGE) break
+      }
+    }
+
     return { data: stockMap, error: null }
   } catch (err) {
     console.error('[Supabase] Error obteniendo stock multiple:', err)

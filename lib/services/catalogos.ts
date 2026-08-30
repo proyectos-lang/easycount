@@ -100,35 +100,48 @@ export async function getProductos(): Promise<{ data: Producto[]; error: string 
   const supabase = createClient()
   if (!supabase) return { data: [], error: 'Cliente no disponible' }
 
+  // Pagina sin tope: PostgREST corta cada select en 1000 filas y el catalogo
+  // puede superarlo. Traemos todas las paginas.
+  async function fetchPaged(cols: string): Promise<{ data: any[] | null; error: { message: string } | null }> {
+    const PAGE = 1000
+    const acc: any[] = []
+    for (let from = 0, guard = 0; guard < 200; guard++, from += PAGE) {
+      const result = await supabase!
+        .from('productos')
+        .select(cols)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1)
+      if (result.error) return { data: null, error: result.error }
+      const rows = (result.data || []) as any[]
+      acc.push(...rows)
+      if (rows.length < PAGE) break
+    }
+    return { data: acc, error: null }
+  }
+
   try {
     // Intentamos primero con el join a subcategorias (post-migracion 015).
     // Si la columna o la tabla no existen aun, caemos al select clasico
     // sin romper la pagina. Asi el feature de subcategorias se "enciende"
     // automaticamente cuando el script 015 se ejecuta.
-    let result = await supabase
-      .from('productos')
-      .select('*, marcas(nombre), categorias(nombre), subcategorias(nombre)')
-      .order('id', { ascending: true })
+    let res = await fetchPaged('*, marcas(nombre), categorias(nombre), subcategorias(nombre)')
 
     if (
-      result.error &&
+      res.error &&
       /subcategoria|column.*does not exist|relation.*does not exist/i.test(
-        result.error.message
+        res.error.message
       )
     ) {
       console.log(
         '[catalogos] subcategorias no disponibles, fallback sin join'
       )
-      result = await supabase
-        .from('productos')
-        .select('*, marcas(nombre), categorias(nombre)')
-        .order('id', { ascending: true })
+      res = await fetchPaged('*, marcas(nombre), categorias(nombre)')
     }
 
-    if (result.error) return { data: [], error: result.error.message }
+    if (res.error) return { data: [], error: res.error.message }
 
     // Flatten join data
-    const productos = (result.data || []).map((p: any) => ({
+    const productos = (res.data || []).map((p: any) => ({
       ...p,
       marca_nombre: p.marcas?.nombre || null,
       categoria_nombre: p.categorias?.nombre || null,
