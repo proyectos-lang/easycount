@@ -1,9 +1,12 @@
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react"
-import { Search, RotateCcw, Plus, Minus, Download, Undo2, Loader2, FileText } from "lucide-react"
+import { Search, RotateCcw, Plus, Minus, Download, Undo2, Loader2, FileText, Printer } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -34,6 +37,11 @@ import {
   type DevolucionEncabezado,
 } from "@/lib/services/devoluciones"
 import { generarFacturaPdf, type FacturaPdfLinea } from "@/lib/utils/factura-pdf"
+import { buildTirillaDevolucionHtml } from "@/lib/utils/tirilla-devolucion"
+import { tirillaLogoUrl } from "@/lib/utils/tirilla-logos"
+import { printTirilla } from "@/lib/print-tirilla"
+import { useAuth } from "@/lib/contexts/auth-context"
+import { getHondurasNowISO } from "@/lib/utils/honduras-time"
 import { hoyISO } from "@/lib/utils/fecha"
 
 interface LineaDev extends VentaDetalle {
@@ -41,8 +49,22 @@ interface LineaDev extends VentaDetalle {
   a_devolver: number
 }
 
+/** Datos necesarios para imprimir/descargar el comprobante de una devolucion. */
+interface DevolucionImprimible {
+  numeroDevolucion: string
+  numeroFactura: string
+  clienteNombre: string
+  clienteRtn: string | null
+  lineas: FacturaPdfLinea[]
+  monto: number
+  reembolsoMetodo: string
+  motivo: string | null
+  fecha: string
+}
+
 export default function DevolucionesPage() {
   const { toast } = useToast()
+  const { user } = useAuth()
   const [ventas, setVentas] = useState<VentaEncabezado[]>([])
   const [cuentas, setCuentas] = useState<CuentaConfig[]>([])
   const [busqueda, setBusqueda] = useState("")
@@ -64,6 +86,11 @@ export default function DevolucionesPage() {
   // RTN de clientes por id (para la factura de devolucion) e id en generacion.
   const [clientesRtn, setClientesRtn] = useState<Record<number, string>>({})
   const [generandoFactura, setGenerandoFactura] = useState<number | null>(null)
+  const [generandoTirilla, setGenerandoTirilla] = useState<number | null>(null)
+
+  // Dialogo de comprobante tras registrar una devolucion (tirilla / PDF).
+  const [devolucionExitosa, setDevolucionExitosa] = useState<DevolucionImprimible | null>(null)
+  const [imprimiendoDev, setImprimiendoDev] = useState(false)
 
   const cargarHistorial = useCallback(async () => {
     setLoadingHist(true)
@@ -175,11 +202,12 @@ export default function DevolucionesPage() {
       toast({ title: "Devolución registrada", description: `${res.data?.numero_devolucion} · ${formatCurrency(montoTotal)}` })
     }
 
-    // Factura de devolución (mismo formato que la factura normal), con los
-    // productos específicos devueltos. Se arma con los datos aún en pantalla.
+    // Comprobante de devolución: abre un diálogo para imprimir tirilla (80 mm)
+    // o descargar la factura (PDF), con los productos específicos devueltos y
+    // los datos de la factura original. Se arma con los datos aún en pantalla.
     if (res.data) {
       const cuentaNombre = destinoTipo === "cuenta" ? cuentas.find((c) => c.id === Number(cuentaId))?.nombre : null
-      await generarFacturaDevolucion({
+      setDevolucionExitosa({
         numeroDevolucion: res.data.numero_devolucion,
         numeroFactura: ventaSel.numero_factura || "",
         clienteNombre: ventaSel.cliente_nombre || "N/A",
@@ -190,6 +218,7 @@ export default function DevolucionesPage() {
         monto: montoTotal,
         reembolsoMetodo: destinoTipo === "caja" ? "Efectivo (caja chica)" : `Cuenta bancaria${cuentaNombre ? " - " + cuentaNombre : ""}`,
         motivo: motivo || null,
+        fecha: getHondurasNowISO(),
       })
     }
 
@@ -216,63 +245,107 @@ export default function DevolucionesPage() {
     toast({ title: "Exportado", description: "El archivo Excel se descargo correctamente" })
   }
 
-  // Genera y descarga la factura de devolucion (mismo layout que la factura normal).
-  async function generarFacturaDevolucion(opts: {
-    numeroDevolucion: string
-    numeroFactura: string
-    clienteNombre: string
-    clienteRtn: string | null
-    lineas: FacturaPdfLinea[]
-    monto: number
-    reembolsoMetodo: string
-    motivo: string | null
-    fecha?: string
-  }) {
+  // Descarga la factura de devolucion (A4 PDF, mismo layout que la factura normal).
+  async function descargarFacturaDevolucion(d: DevolucionImprimible) {
     const empresa = await getRazonSocialForPdf()
     const res = await generarFacturaPdf({
       tipo: "devolucion",
       empresa,
-      numeroDocumento: opts.numeroDevolucion,
-      facturaReferencia: opts.numeroFactura,
-      clienteNombre: opts.clienteNombre,
-      clienteRtn: opts.clienteRtn,
-      fecha: opts.fecha || hoyISO(),
-      lineas: opts.lineas,
-      subtotal: opts.monto,
+      numeroDocumento: d.numeroDevolucion,
+      facturaReferencia: d.numeroFactura,
+      clienteNombre: d.clienteNombre,
+      clienteRtn: d.clienteRtn,
+      fecha: d.fecha || hoyISO(),
+      lineas: d.lineas,
+      subtotal: d.monto,
       mostrarIsv: false,
-      total: opts.monto,
-      reembolsoMetodo: opts.reembolsoMetodo,
-      motivo: opts.motivo,
-      filename: `Devolucion_${opts.numeroDevolucion}`,
+      total: d.monto,
+      reembolsoMetodo: d.reembolsoMetodo,
+      motivo: d.motivo,
+      filename: `Devolucion_${d.numeroDevolucion}`,
     })
     if (!res.ok) {
       toast({ title: "Error", description: res.error || "No se pudo generar la factura de devolucion", variant: "destructive" })
     }
   }
 
-  // Reimprime la factura de una devolucion del historial (trae sus lineas).
+  // Imprime la tirilla termica (80 mm) de una devolucion.
+  async function imprimirTirillaDevolucion(d: DevolucionImprimible) {
+    const empresa = await getRazonSocialForPdf()
+    const html = buildTirillaDevolucionHtml({
+      empresa: {
+        nombre: empresa?.nombre_comercial || empresa?.nombre_empresa || "",
+        rtn: empresa?.documento || null,
+        direccion: empresa?.direccion || null,
+        telefono: empresa?.telefono || null,
+        logoUrl: tirillaLogoUrl(user?.razon_social_id),
+      },
+      numeroDevolucion: d.numeroDevolucion,
+      numeroFactura: d.numeroFactura,
+      fechaISO: d.fecha || getHondurasNowISO(),
+      cliente: d.clienteNombre,
+      lineas: d.lineas.map((l) => ({ nombre: l.nombre, cantidad: l.cantidad, precioUnitario: l.precioUnitario })),
+      total: d.monto,
+      reembolso: d.reembolsoMetodo,
+      motivo: d.motivo,
+      mostrarCodigoProducto: user?.flags?.tirilla_mostrar_codigo ?? false,
+    })
+    printTirilla(html, { widthMm: 80 })
+  }
+
+  // Reconstruye los datos imprimibles de una devolucion del historial.
+  async function cargarImprimible(d: DevolucionEncabezado): Promise<DevolucionImprimible | null> {
+    const det = await getDetallesDevolucion(d.id)
+    if (det.error) {
+      toast({ title: "Error", description: det.error, variant: "destructive" })
+      return null
+    }
+    return {
+      numeroDevolucion: d.numero_devolucion || "",
+      numeroFactura: d.numero_factura || "",
+      clienteNombre: d.cliente_nombre || "N/A",
+      clienteRtn: d.cliente_rtn || null,
+      lineas: det.data.map((l) => ({ nombre: l.producto_nombre, cantidad: l.cantidad_devuelta, precioUnitario: l.precio_unitario })),
+      monto: Number(d.monto_total || 0),
+      reembolsoMetodo: d.destino_reembolso === "caja" ? "Efectivo (caja chica)" : "Cuenta bancaria",
+      motivo: d.motivo || null,
+      fecha: d.fecha,
+    }
+  }
+
   async function reimprimirFactura(d: DevolucionEncabezado) {
     setGenerandoFactura(d.id)
     try {
-      const det = await getDetallesDevolucion(d.id)
-      if (det.error) {
-        toast({ title: "Error", description: det.error, variant: "destructive" })
-        return
-      }
-      await generarFacturaDevolucion({
-        numeroDevolucion: d.numero_devolucion || "",
-        numeroFactura: d.numero_factura || "",
-        clienteNombre: d.cliente_nombre || "N/A",
-        clienteRtn: d.cliente_rtn || null,
-        lineas: det.data.map((l) => ({ nombre: l.producto_nombre, cantidad: l.cantidad_devuelta, precioUnitario: l.precio_unitario })),
-        monto: Number(d.monto_total || 0),
-        reembolsoMetodo: d.destino_reembolso === "caja" ? "Efectivo (caja chica)" : "Cuenta bancaria",
-        motivo: d.motivo || null,
-        fecha: d.fecha,
-      })
+      const imp = await cargarImprimible(d)
+      if (imp) await descargarFacturaDevolucion(imp)
     } finally {
       setGenerandoFactura(null)
     }
+  }
+
+  async function reimprimirTirilla(d: DevolucionEncabezado) {
+    setGenerandoTirilla(d.id)
+    try {
+      const imp = await cargarImprimible(d)
+      if (imp) await imprimirTirillaDevolucion(imp)
+    } finally {
+      setGenerandoTirilla(null)
+    }
+  }
+
+  // Handlers del dialogo post-devolucion (tirilla / PDF).
+  async function handleImprimirTirillaDev() {
+    if (!devolucionExitosa) return
+    setImprimiendoDev(true)
+    try {
+      await imprimirTirillaDevolucion(devolucionExitosa)
+    } finally {
+      setImprimiendoDev(false)
+    }
+  }
+  async function handleDescargarPdfDev() {
+    if (!devolucionExitosa) return
+    await descargarFacturaDevolucion(devolucionExitosa)
   }
 
   return (
@@ -488,7 +561,7 @@ export default function DevolucionesPage() {
                         <TableHead>Cliente</TableHead>
                         <TableHead>Reembolso</TableHead>
                         <TableHead className="text-right">Monto</TableHead>
-                        <TableHead className="text-right">Factura</TableHead>
+                        <TableHead className="text-right">Comprobante</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -501,21 +574,38 @@ export default function DevolucionesPage() {
                           <TableCell><Badge variant="secondary">{d.destino_reembolso === "caja" ? "Efectivo" : "Banco"}</Badge></TableCell>
                           <TableCell className="text-right font-medium text-red-700">{formatCurrency(Number(d.monto_total || 0))}</TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="gap-1"
-                              disabled={generandoFactura === d.id}
-                              onClick={() => reimprimirFactura(d)}
-                              title="Descargar factura de devolución"
-                            >
-                              {generandoFactura === d.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <FileText className="h-4 w-4" />
-                              )}
-                              <span className="hidden sm:inline">Factura</span>
-                            </Button>
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="gap-1"
+                                disabled={generandoTirilla === d.id}
+                                onClick={() => reimprimirTirilla(d)}
+                                title="Imprimir tirilla (80 mm)"
+                              >
+                                {generandoTirilla === d.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Printer className="h-4 w-4" />
+                                )}
+                                <span className="hidden lg:inline">Tirilla</span>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="gap-1"
+                                disabled={generandoFactura === d.id}
+                                onClick={() => reimprimirFactura(d)}
+                                title="Descargar factura (PDF)"
+                              >
+                                {generandoFactura === d.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <FileText className="h-4 w-4" />
+                                )}
+                                <span className="hidden lg:inline">PDF</span>
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -561,6 +651,39 @@ export default function DevolucionesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Comprobante de devolución: tirilla 80 mm / factura PDF */}
+      <Dialog open={devolucionExitosa !== null} onOpenChange={(o) => { if (!o) setDevolucionExitosa(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Devolución registrada</DialogTitle>
+          </DialogHeader>
+          {devolucionExitosa && (
+            <div className="space-y-1 rounded-md border bg-muted/40 px-4 py-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Devolución</span>
+                <span className="font-medium">{devolucionExitosa.numeroDevolucion}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total devuelto</span>
+                <span className="font-semibold">{formatCurrency(devolucionExitosa.monto)}</span>
+              </div>
+            </div>
+          )}
+          <p className="text-sm text-muted-foreground">¿Deseas imprimir el comprobante de devolución?</p>
+          <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+            <Button onClick={handleImprimirTirillaDev} disabled={imprimiendoDev} className="w-full gap-2">
+              <Printer className="h-4 w-4" /> Imprimir tirilla (80 mm)
+            </Button>
+            <Button variant="outline" onClick={handleDescargarPdfDev} className="w-full gap-2">
+              <FileText className="h-4 w-4" /> Descargar factura (PDF)
+            </Button>
+            <Button variant="ghost" onClick={() => setDevolucionExitosa(null)} className="w-full">
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

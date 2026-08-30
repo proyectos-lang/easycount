@@ -43,7 +43,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Registrar una venta: elegir cliente y productos, aplicar descuento e impuesto, y cobrar con uno o varios métodos de pago.",
     queHace: [
       "Genera el número de factura correlativo automáticamente (FC-0001, FC-0002…).",
-      "Catálogo de productos con búsqueda y stock disponible por almacén.",
+      "Catálogo de productos con búsqueda y stock disponible por almacén. El botón 'Seleccionar todo' agrega de una vez todas las referencias que coinciden con tu búsqueda/filtros.",
       "Lector de código de barras (si tu empresa lo tiene activo): al escanear un producto, el sistema lo ubica por su código y lo agrega solo a la venta. Un escáner USB/Bluetooth funciona como teclado, no requiere configuración extra.",
       "Descuento porcentual sobre el subtotal e impuesto ISV (15 %). El ISV viene DESACTIVADO por defecto: actívalo por venta cuando aplique.",
       "El cliente 'Consumidor Final' queda seleccionado por defecto; cámbialo si la venta es a un cliente registrado.",
@@ -332,7 +332,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Reembolsa el dinero al destino que elijas: efectivo de caja chica o egreso de una cuenta bancaria.",
       "Pide confirmación con un resumen (productos, cantidades, monto, destino) antes de ejecutar.",
       "Genera un correlativo DEV-0001, guarda el motivo, y mantiene un historial exportable a Excel.",
-      "Al procesar la devolución descarga automáticamente una factura de devolución (mismo formato que la factura normal) con los datos de la factura original y los productos específicos devueltos. Desde el Historial puedes volver a descargarla.",
+      "Al procesar la devolución abre un diálogo para imprimir su comprobante: tirilla térmica (80 mm) o factura de devolución en PDF (mismo formato que la factura normal), con los datos de la factura original y los productos específicos devueltos. Desde el Historial puedes volver a imprimir cualquiera de los dos.",
       "El Estado de Resultados descuenta automáticamente las devoluciones (ventas netas).",
     ],
     queNoHace: [
@@ -351,7 +351,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
           "Elige a dónde devolver el dinero: Caja Chica (efectivo) o una cuenta bancaria.",
           "Escribe el motivo (opcional) y presiona 'Procesar devolución'.",
           "Revisa el resumen del diálogo de confirmación y confirma.",
-          "Al confirmar se descarga automáticamente la factura de devolución (PDF) con los productos devueltos.",
+          "Al confirmar se abre un diálogo para imprimir el comprobante: tirilla (80 mm) o factura de devolución (PDF) con los productos devueltos.",
           "Verifica el resultado en la pestaña 'Historial'.",
         ],
       },
@@ -360,7 +360,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
         pasos: [
           "Entra a la pestaña 'Historial'.",
           "Revisa devolución, fecha, factura, cliente, vía de reembolso y monto.",
-          "Usa el botón 'Factura' de cada fila para volver a descargar su factura de devolución.",
+          "Usa los botones 'Tirilla' y 'PDF' de cada fila para volver a imprimir el comprobante de esa devolución.",
           "Presiona 'Exportar a Excel' para descargar el listado completo.",
         ],
       },

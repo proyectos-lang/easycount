@@ -51,6 +51,7 @@ import { useAuth } from "@/lib/contexts/auth-context"
 import { getCuentas, type CuentaConfig } from "@/lib/services/cuentas"
 import { useCajaSesion } from "@/lib/hooks/use-caja-sesion"
 import { printTirilla } from "@/lib/print-tirilla"
+import { tirillaLogoUrl } from "@/lib/utils/tirilla-logos"
 import { buildTirillaVentaHtml, metodoPagoLabel, type TirillaVenta } from "@/lib/utils/tirilla-venta"
 import { hoyISO, timestampNaiveLocal } from "@/lib/utils/fecha"
 
@@ -64,13 +65,6 @@ interface LineaVenta {
   subtotal: number
   utilidad_linea: number
   stock_disponible: number
-}
-
-// Logo estatico a imprimir arriba de la tirilla, por empresa (asset en /public).
-// Pedido puntual: la empresa 14 (Inversiones Mi Olanchito) lleva su logo. Para
-// sumar otra empresa, agrega { id: "/archivo.png" } y coloca el PNG en /public.
-const TIRILLA_LOGOS: Record<number, string> = {
-  14: "/logoolanchito.png",
 }
 
 export default function NuevaVentaPage() {
@@ -480,6 +474,39 @@ export default function NuevaVentaPage() {
         stock_disponible: stockDisponible
       }])
     }
+  }
+
+  // Agrega en lote todas las referencias filtradas (boton "Seleccionar todo").
+  // Omite las que ya estan en la venta y carga su stock en la localizacion.
+  async function agregarProductos(lista: Producto[]) {
+    const existentes = new Set(lineas.map((l) => l.producto_id))
+    const nuevos = lista.filter((p) => p.id != null && !existentes.has(p.id))
+    if (nuevos.length === 0) {
+      toast({ title: "Ya estan en la venta", description: "Esas referencias ya fueron agregadas" })
+      return
+    }
+    let stockMap: Record<number, number> = {}
+    if (localizacionId) {
+      const ids = nuevos.map((p) => p.id!).filter(Boolean)
+      const r = await getStockMultipleProducts(ids, Number(localizacionId))
+      stockMap = r.data || {}
+      setStockPorLocalizacion((prev) => ({ ...prev, ...stockMap }))
+    }
+    setLineas((prev) => [
+      ...prev,
+      ...nuevos.map((p) => ({
+        producto_id: p.id!,
+        producto_nombre: p.nombre,
+        producto_codigo: p.codigo_barras,
+        cantidad: 1,
+        precio_unitario: p.precio_venta_sugerido,
+        costo_promedio: p.costo_promedio || 0,
+        subtotal: p.precio_venta_sugerido,
+        utilidad_linea: calculateUtilidadLinea(1, p.precio_venta_sugerido, p.costo_promedio || 0),
+        stock_disponible: stockMap[p.id!] || 0,
+      })),
+    ])
+    toast({ title: "Agregados", description: `${nuevos.length} producto(s) agregado(s) a la venta` })
   }
 
   function updateCantidad(index: number, delta: number) {
@@ -917,10 +944,7 @@ export default function NuevaVentaPage() {
           // Logo estatico de la tirilla si la empresa tiene uno asignado. URL
           // absoluta: la tirilla se renderiza en un iframe blob (origen opaco),
           // por lo que una ruta relativa no resolveria.
-          logoUrl:
-            user?.razon_social_id != null && TIRILLA_LOGOS[user.razon_social_id]
-              ? `${window.location.origin}${TIRILLA_LOGOS[user.razon_social_id]}`
-              : null,
+          logoUrl: tirillaLogoUrl(user?.razon_social_id),
         },
         numeroFactura: numeroFactura,
         fechaISO: encabezado.fecha_venta,
@@ -1254,29 +1278,16 @@ export default function NuevaVentaPage() {
     loadData()
   }
 
-  // Alterna el modo POS a pantalla completa. Usa la Fullscreen API del
-  // navegador (kiosko real) y, en paralelo, el estado `fullscreen` aplica el
-  // layout fixed inset-0 que cubre el sidebar/topbar del dashboard.
+  // Alterna el modo POS a pantalla completa. IMPORTANTE: solo usamos el layout
+  // in-app (fixed inset-0 que cubre el sidebar/topbar), NO la Fullscreen API del
+  // navegador. Con la Fullscreen API, el navegador solo pinta el subarbol del
+  // elemento en fullscreen y los portales de Radix (Select de cliente/metodo y
+  // el modal de impresion) se renderizan en document.body -> quedaban invisibles
+  // e inutilizables. Con el modo CSS, todo el documento se pinta y los portales
+  // funcionan normalmente.
   function toggleFullscreen() {
-    const next = !fullscreen
-    setFullscreen(next)
-    try {
-      if (next) posRootRef.current?.requestFullscreen?.()
-      else if (document.fullscreenElement) document.exitFullscreen?.()
-    } catch {
-      // Fullscreen API no disponible: el modo in-app (fixed inset-0) igual aplica.
-    }
+    setFullscreen((v) => !v)
   }
-
-  // Si el usuario sale de pantalla completa con ESC/gesto del navegador,
-  // tambien salimos del modo POS para no quedar en un estado inconsistente.
-  React.useEffect(() => {
-    const onFsChange = () => {
-      if (!document.fullscreenElement) setFullscreen(false)
-    }
-    document.addEventListener("fullscreenchange", onFsChange)
-    return () => document.removeEventListener("fullscreenchange", onFsChange)
-  }, [])
 
   if (loading) {
     return (
@@ -1403,6 +1414,7 @@ export default function NuevaVentaPage() {
                 buscando={buscandoProductos}
                 searchValue={busquedaTexto}
                 onSearchChange={setBusquedaTexto}
+                onAddTodos={agregarProductos}
               />
             </div>
           </CardContent>

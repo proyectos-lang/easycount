@@ -281,7 +281,7 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
       "Gastos del día y pagos a gastos (efectivo y banco).",
       "Devoluciones (notas de crédito) registradas en el día, con su factura y monto reembolsado.",
       "Detalle de la caja: sesiones y movimientos del día.",
-      "Exporta el cierre completo a PDF con el nombre de la empresa.",
+      "Imprime el cierre en dos formatos: tirilla térmica (80 mm) o PDF A4, ambos con el nombre de la empresa.",
     ],
     queNoHace: [
       "No cierra la caja (eso se hace en Caja Chica); este módulo solo reporta.",
@@ -296,7 +296,7 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
           "Revisa el resumen: ventas, efectivo, banco, crédito y comisiones.",
           "Expande cada cuenta bancaria para ver sus movimientos.",
           "Compara los ingresos en efectivo con el arqueo de caja antes de cerrarla.",
-          "Genera el PDF si necesitas archivar o enviar el corte.",
+          "Imprime el corte con 'Tirilla (80 mm)' para la impresora térmica o 'PDF (A4)' para archivar o enviar.",
         ],
       },
     ],
@@ -307,7 +307,7 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
           "Verifica salidas de caja no registradas y ventas cobradas con método incorrecto (ej. marcada Banco cuando fue efectivo). El detalle de ingresos en efectivo del cierre lista cada movimiento con su venta.",
       },
     ],
-    keywords: ["corte", "dia", "resumen diario", "cuadre", "reporte dia", "pdf"],
+    keywords: ["corte", "dia", "resumen diario", "cuadre", "reporte dia", "pdf", "tirilla", "termica", "imprimir cierre"],
   },
   {
     modulo: "Analisis Financiero",

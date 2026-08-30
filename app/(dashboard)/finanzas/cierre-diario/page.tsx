@@ -79,6 +79,10 @@ import {
   type DevolucionDelDia,
 } from "@/lib/services/cierre-diario"
 import { getRazonSocialForPdf } from "@/lib/services/ventas"
+import { printTirilla } from "@/lib/print-tirilla"
+import { buildTirillaCierreHtml } from "@/lib/utils/tirilla-cierre"
+import { tirillaLogoUrl } from "@/lib/utils/tirilla-logos"
+import { useAuth } from "@/lib/contexts/auth-context"
 
 // ==================== UTIL ====================
 
@@ -143,6 +147,7 @@ const MOV_LABEL: Record<string, string> = {
 
 export default function CierreDiarioPage() {
   const { toast } = useToast()
+  const { user } = useAuth()
   const [fecha, setFecha] = React.useState<string>(() => todayISO())
   const [data, setData] = React.useState<CierreDiarioData | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -383,6 +388,64 @@ export default function CierreDiarioPage() {
     }
   }
 
+  // ---- Generador de TIRILLA termica (80 mm) --------------------------------
+  async function imprimirCierreTirilla() {
+    if (!data) return
+    try {
+      const rs = await getRazonSocialForPdf().catch(() => null)
+      const r = data.resumen
+      const resumen = [
+        { label: "Estado de caja", value: estadoCaja },
+        { label: "Tickets", value: String(r.cantidad_tickets) },
+        { label: "Total ventas", value: formatCurrency(r.total_ventas) },
+        { label: "Ingresos efectivo", value: formatCurrency(r.ingresos_efectivo) },
+        { label: "Ingresos banco (bruto)", value: formatCurrency(r.ingresos_banco_bruto) },
+        { label: "Comisiones", value: `(${formatCurrency(r.comisiones_total)})` },
+        { label: "Ingresos banco (neto)", value: formatCurrency(r.ingresos_banco_neto) },
+        { label: "Credito otorgado", value: formatCurrency(r.credito_total) },
+        { label: "Egresos gastos (ef.)", value: `(${formatCurrency(r.egresos_gastos_efectivo)})` },
+        { label: "Egresos gastos (bco.)", value: `(${formatCurrency(r.egresos_gastos_banco)})` },
+      ]
+      const html = buildTirillaCierreHtml({
+        empresa: {
+          nombre: rs?.nombre_comercial || rs?.nombre_empresa || "",
+          rtn: rs?.documento || null,
+          logoUrl: tirillaLogoUrl(user?.razon_social_id),
+        },
+        fechaTexto: formatFechaLarga(fecha),
+        resumen,
+        bancos: data.bancos.map((b) => ({
+          banco: b.banco,
+          ingresos: b.total_ingresos,
+          egresos: b.total_egresos,
+          saldoFinal: b.saldo_final_dia,
+        })),
+        productos: data.productos.map((p) => ({
+          nombre: p.producto_nombre,
+          codigo: p.producto_codigo,
+          cantidad: p.cantidad,
+          total: p.total_vendido,
+        })),
+        movimientosCaja: data.caja.movimientos.map((m) => ({
+          hora: formatTime(m.fecha),
+          tipo: MOV_LABEL[m.tipo] ?? m.tipo,
+          concepto: m.concepto,
+          monto: m.monto,
+        })),
+        gastos: data.pagosGastos.map((p) => ({
+          hora: formatTime(p.fecha_pago),
+          detalle: `${p.proveedor_nombre ?? "—"} ${p.concepto_gasto ?? p.concepto ?? ""}`.trim(),
+          metodo: p.cuenta_nombre ? `${p.metodo_pago} (${p.cuenta_nombre})` : p.metodo_pago,
+          monto: p.monto,
+        })),
+      })
+      printTirilla(html, { widthMm: 80 })
+    } catch (err) {
+      console.error("[cierre-diario] error tirilla:", err)
+      toast({ title: "Error", description: "No se pudo preparar la tirilla del cierre.", variant: "destructive" })
+    }
+  }
+
   // ==================== RENDER ====================
 
   return (
@@ -430,12 +493,23 @@ export default function CierreDiarioPage() {
 
           <Button
             size="sm"
+            variant="outline"
+            onClick={imprimirCierreTirilla}
+            disabled={!data || loading}
+            className="h-9"
+          >
+            <Printer className="mr-1 h-4 w-4" />
+            Tirilla (80 mm)
+          </Button>
+
+          <Button
+            size="sm"
             onClick={imprimirCierre}
             disabled={!data || loading}
             className="h-9 bg-stone-800 hover:bg-stone-900"
           >
             <Printer className="mr-1 h-4 w-4" />
-            Imprimir Cierre
+            PDF (A4)
           </Button>
         </div>
       </div>

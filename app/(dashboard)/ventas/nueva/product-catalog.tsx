@@ -57,6 +57,8 @@ interface ProductCatalogProps {
   searchValue?: string
   /** Cambios del texto de busqueda (si se controla desde el padre). */
   onSearchChange?: (value: string) => void
+  /** Agrega a la venta TODAS las referencias actualmente filtradas. */
+  onAddTodos?: (productos: Producto[]) => void
 }
 
 /**
@@ -84,6 +86,7 @@ export function ProductCatalog({
   buscando = false,
   searchValue,
   onSearchChange,
+  onAddTodos,
 }: ProductCatalogProps) {
   const [view, setView] = React.useState<"grid" | "list">("grid")
   const [searchInternal, setSearchInternal] = React.useState("")
@@ -244,6 +247,26 @@ export function ProductCatalog({
         </div>
       </div>
 
+      {/* Barra de accion: cantidad filtrada + Seleccionar todo */}
+      {onAddTodos && !disabled && !buscando && filtrados.length > 0 && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-muted-foreground">
+            {filtrados.length} referencia{filtrados.length === 1 ? "" : "s"}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5"
+            onClick={() => onAddTodos(filtrados)}
+            title="Agregar a la venta todas las referencias filtradas"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Seleccionar todo
+          </Button>
+        </div>
+      )}
+
       {/* Resultados */}
       <div className="flex-1 overflow-auto min-h-0">
         {buscando ? (
@@ -323,7 +346,8 @@ function ProductImage({
       height={160}
       unoptimized
       onError={() => setErrored(true)}
-      className={cn("object-cover", className)}
+      // El object-fit lo decide cada uso (contain en el grid, cover en la lista).
+      className={cn(className)}
     />
   )
 }
@@ -338,7 +362,7 @@ interface ListProps {
 
 function ProductGrid({ productos, idsEnVenta, onAdd, disabled, getStock }: ListProps) {
   return (
-    <div className="grid grid-cols-2 min-[480px]:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 sm:gap-3">
+    <div className="grid grid-cols-3 min-[480px]:grid-cols-4 sm:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-2 sm:gap-2.5">
       {productos.map((p) => {
         const enVenta = idsEnVenta.includes(p.id!)
         const stock = getStock(p)
@@ -355,11 +379,11 @@ function ProductGrid({ productos, idsEnVenta, onAdd, disabled, getStock }: ListP
               enVenta && "border-primary"
             )}
           >
-            <div className="relative aspect-square w-full">
+            <div className="relative aspect-square w-full bg-muted/30">
               <ProductImage
                 url={p.foto_url}
                 nombre={p.nombre}
-                className="h-full w-full"
+                className="h-full w-full object-contain"
               />
               {enVenta && (
                 <span className="absolute top-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow">
@@ -429,7 +453,7 @@ function ProductTable({ productos, idsEnVenta, onAdd, disabled, getStock }: List
                   <ProductImage
                     url={p.foto_url}
                     nombre={p.nombre}
-                    className="h-8 w-8 rounded-md shrink-0"
+                    className="h-8 w-8 rounded-md shrink-0 object-cover"
                   />
                 </td>
                 <td className="px-2 sm:px-3 py-1.5 max-w-[16rem]">
