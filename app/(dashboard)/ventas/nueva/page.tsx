@@ -80,6 +80,8 @@ export default function NuevaVentaPage() {
   const { user } = useAuth()
   // Flag por empresa: si es false, la empresa vende SIN ISV (se oculta el campo).
   const mostrarIsv = user?.flags?.ventas_mostrar_isv ?? true
+  // Flag por empresa: activa el lector de codigo de barras (escanear = ubicar/agregar).
+  const lectorCodigoBarras = user?.flags?.ventas_lector_codigo_barras ?? false
 
   // Modo pantalla completa (kiosko POS): el modulo abarca el 100% de la pantalla.
   const [fullscreen, setFullscreen] = React.useState(false)
@@ -148,6 +150,9 @@ export default function NuevaVentaPage() {
   // busqueda. Asi encontramos productos aunque el catalogo pase de 1000.
   const [resultadosBusqueda, setResultadosBusqueda] = React.useState<Producto[] | null>(null)
   const [buscandoProductos, setBuscandoProductos] = React.useState(false)
+  // Texto del buscador del catalogo (controlado, para que el lector de codigo
+  // de barras pueda inyectar/limpiar el codigo escaneado).
+  const [busquedaTexto, setBusquedaTexto] = React.useState("")
 
   // Quick client creation
   const [showClienteDialog, setShowClienteDialog] = React.useState(false)
@@ -346,6 +351,88 @@ export default function NuevaVentaPage() {
       setBuscandoProductos(false)
     }
   }
+
+  // ===== Lector de codigo de barras (flag ventas_lector_codigo_barras) =====
+  // Un escaner actua como teclado: teclea el codigo muy rapido y manda Enter.
+  // Detectamos esa rafaga a nivel global, ubicamos el producto por su codigo
+  // exacto y lo agregamos a la venta. Sin match exacto, dejamos el codigo en el
+  // buscador con las coincidencias para ubicarlo a mano.
+  async function procesarEscaneo(codigoRaw: string) {
+    const codigo = codigoRaw.trim()
+    if (!codigo) return
+    const norm = codigo.toLowerCase()
+    const matchExacto = (p: Producto) =>
+      (p.codigo_barras || "").trim().toLowerCase() === norm
+
+    // 1) En lo ya cargado (catalogo precargado + resultados de la ultima busqueda).
+    let prod: Producto | undefined =
+      productos.find(matchExacto) || (resultadosBusqueda ?? []).find(matchExacto)
+
+    // 2) Si no esta cargado, consulta la BD por ese codigo.
+    let dataBusqueda: Producto[] | null = null
+    if (!prod) {
+      const { data, error } = await buscarProductos(codigo)
+      if (error) {
+        toast({ title: "Error", description: error, variant: "destructive" })
+        return
+      }
+      dataBusqueda = data
+      prod = data.find(matchExacto)
+    }
+
+    if (prod) {
+      if (!almacenId) {
+        toast({ title: "Selecciona un almacen", description: "Elige el almacen antes de escanear productos.", variant: "destructive" })
+        return
+      }
+      addProducto(prod)
+      setBusquedaTexto("") // no dejamos el codigo escrito en el buscador
+      toast({ title: "Agregado por escaneo", description: prod.nombre })
+      return
+    }
+
+    // 3) Sin codigo exacto: lo dejamos en el buscador con las coincidencias.
+    setBusquedaTexto(codigo)
+    if (dataBusqueda && dataBusqueda.length > 0) {
+      setResultadosBusqueda(dataBusqueda)
+      toast({ title: "Revisa el buscador", description: `No hubo codigo exacto para "${codigo}"; se muestran coincidencias.` })
+    } else {
+      toast({ title: "Sin coincidencias", description: `No se encontro un producto con el codigo ${codigo}.`, variant: "destructive" })
+    }
+  }
+
+  // Ref a la ultima version del handler para no re-montar el listener global.
+  const procesarEscaneoRef = React.useRef(procesarEscaneo)
+  React.useEffect(() => {
+    procesarEscaneoRef.current = procesarEscaneo
+  })
+
+  React.useEffect(() => {
+    if (!lectorCodigoBarras) return
+    let buffer = ""
+    let lastTime = 0
+    const GAP_MS = 50 // teclas de escaner: < ~50 ms entre si; el humano, mas lento
+    function onKeyDown(e: KeyboardEvent) {
+      const now = Date.now()
+      if (now - lastTime > GAP_MS) buffer = "" // gap grande -> reinicia (tecleo humano)
+      lastTime = now
+      if (e.key === "Enter") {
+        const code = buffer
+        buffer = ""
+        // Rafaga rapida de >=4 caracteres + Enter => escaneo: lo tomamos nosotros
+        // (evitamos que dispare el submit/Buscar del input enfocado).
+        if (code.length >= 4) {
+          e.preventDefault()
+          e.stopPropagation()
+          procesarEscaneoRef.current(code)
+        }
+        return
+      }
+      if (e.key.length === 1) buffer += e.key
+    }
+    window.addEventListener("keydown", onKeyDown, true)
+    return () => window.removeEventListener("keydown", onKeyDown, true)
+  }, [lectorCodigoBarras])
 
   async function fetchStockForLineas(locId: number) {
     if (lineas.length === 0) return
@@ -1314,6 +1401,8 @@ export default function NuevaVentaPage() {
                 serverSearch
                 onBuscar={buscarProductosServidor}
                 buscando={buscandoProductos}
+                searchValue={busquedaTexto}
+                onSearchChange={setBusquedaTexto}
               />
             </div>
           </CardContent>

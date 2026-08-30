@@ -163,12 +163,15 @@ export default async function PlataformaPage() {
                 <th className="px-4 py-2 font-medium" title="Imprimir el codigo del producto bajo su nombre en la tirilla termica">
                   Codigo en tirilla
                 </th>
+                <th className="px-4 py-2 font-medium" title="Activar el lector de codigo de barras en Nueva Venta (escanear = ubicar/agregar)">
+                  Lector codigo
+                </th>
               </tr>
             </thead>
             <tbody>
               {empresas.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-10 text-center text-stone-400">
+                  <td colSpan={12} className="px-4 py-10 text-center text-stone-400">
                     Sin empresas para mostrar.
                   </td>
                 </tr>
@@ -219,6 +222,15 @@ export default async function PlataformaPage() {
                         initial={e.flags.tirilla_mostrar_codigo}
                         onLabel="Sí"
                         offLabel="No"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <FlagToggle
+                        razonSocialId={e.id}
+                        flag="ventas_lector_codigo_barras"
+                        initial={e.flags.ventas_lector_codigo_barras}
+                        onLabel="Activo"
+                        offLabel="Inactivo"
                       />
                     </td>
                   </tr>

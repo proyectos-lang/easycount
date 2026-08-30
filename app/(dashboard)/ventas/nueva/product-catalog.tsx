@@ -53,6 +53,10 @@ interface ProductCatalogProps {
   onBuscar?: (query: string) => void
   /** Indica que la busqueda contra la BD esta en curso. */
   buscando?: boolean
+  /** Texto de la caja de busqueda controlado por el padre (opcional). */
+  searchValue?: string
+  /** Cambios del texto de busqueda (si se controla desde el padre). */
+  onSearchChange?: (value: string) => void
 }
 
 /**
@@ -78,9 +82,15 @@ export function ProductCatalog({
   serverSearch = false,
   onBuscar,
   buscando = false,
+  searchValue,
+  onSearchChange,
 }: ProductCatalogProps) {
   const [view, setView] = React.useState<"grid" | "list">("grid")
-  const [search, setSearch] = React.useState("")
+  const [searchInternal, setSearchInternal] = React.useState("")
+  // Caja de busqueda controlada por el padre si pasa searchValue/onSearchChange
+  // (lo usa el lector de codigo de barras); si no, estado interno.
+  const search = searchValue !== undefined ? searchValue : searchInternal
+  const setSearch = (v: string) => (onSearchChange ? onSearchChange(v) : setSearchInternal(v))
   const [categoriaFiltro, setCategoriaFiltro] = React.useState<string>(TODOS)
   const [marcaFiltro, setMarcaFiltro] = React.useState<string>(TODOS)
 

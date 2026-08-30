@@ -44,6 +44,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
     queHace: [
       "Genera el número de factura correlativo automáticamente (FC-0001, FC-0002…).",
       "Catálogo de productos con búsqueda y stock disponible por almacén.",
+      "Lector de código de barras (si tu empresa lo tiene activo): al escanear un producto, el sistema lo ubica por su código y lo agrega solo a la venta. Un escáner USB/Bluetooth funciona como teclado, no requiere configuración extra.",
       "Descuento porcentual sobre el subtotal e impuesto ISV (15 %). El ISV viene DESACTIVADO por defecto: actívalo por venta cuando aplique.",
       "El cliente 'Consumidor Final' queda seleccionado por defecto; cámbialo si la venta es a un cliente registrado.",
       "Botón 'Pantalla completa' (arriba a la derecha): expande el módulo al 100% de la pantalla para usarlo como caja/POS físico; se sale con el mismo botón o con ESC.",
@@ -78,6 +79,16 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
           "Se abre el diálogo de impresión del navegador ya ajustado al ancho de 80 mm y al largo exacto del contenido (sin papel en blanco de más). Elige tu impresora térmica y confirma.",
           "Según la configuración de tu empresa, la tirilla puede incluir el código de cada producto debajo de su nombre (se activa de forma centralizada para tu empresa).",
           "Si sale papel en blanco de sobra o se corta la última línea, revisa el tamaño de papel del driver de la impresora: debe estar en 'rollo/continuo' o un tamaño personalizado, no en A4/Carta.",
+        ],
+      },
+      {
+        titulo: "Escanear productos con lector de código de barras",
+        pasos: [
+          "Requiere que tu empresa tenga activo el lector de código de barras (se activa de forma centralizada).",
+          "Selecciona el almacén (y localización si aplica) antes de escanear.",
+          "Escanea el producto: el sistema detecta el código y lo agrega solo a la venta (muestra un aviso 'Agregado por escaneo'). Escanea de nuevo el mismo para sumar otra unidad.",
+          "Si el código no coincide exacto, el código queda en el buscador con las coincidencias para que lo ubiques y lo agregues a mano.",
+          "Un escáner USB o Bluetooth funciona como teclado: no necesita instalación; solo conéctalo.",
         ],
       },
       {
@@ -132,6 +143,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "tirilla", "termica", "impresora", "80mm", "imprimir", "comprobante", "recibo",
       "pantalla completa", "pos", "kiosko", "caja",
       "vuelto", "cambio", "efectivo recibido", "con cuanto paga",
+      "codigo de barras", "escaner", "escanear", "lector", "pistola", "barcode",
     ],
   },
   {

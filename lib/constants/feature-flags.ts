@@ -14,17 +14,21 @@ export interface FeatureFlags {
   ventas_mostrar_isv: boolean
   /** Imprime el codigo del producto debajo de su nombre en la tirilla termica. */
   tirilla_mostrar_codigo: boolean
+  /** Activa el lector de codigo de barras en Nueva Venta (escanear = ubicar/agregar). */
+  ventas_lector_codigo_barras: boolean
 }
 
 export const DEFAULT_FLAGS: FeatureFlags = {
   ventas_mostrar_isv: true,
   tirilla_mostrar_codigo: false,
+  ventas_lector_codigo_barras: false,
 }
 
 /** Etiquetas legibles para el portal (que flags se pueden togglear por empresa). */
 export const FLAG_LABELS: Record<keyof FeatureFlags, string> = {
   ventas_mostrar_isv: "Mostrar ISV en ventas",
   tirilla_mostrar_codigo: "Mostrar codigo del producto en la tirilla",
+  ventas_lector_codigo_barras: "Lector de codigo de barras en ventas",
 }
 
 /**
@@ -42,5 +46,9 @@ export function mergeFlags(config: Record<string, unknown> | null | undefined): 
       c.tirilla_mostrar_codigo === undefined
         ? DEFAULT_FLAGS.tirilla_mostrar_codigo
         : Boolean(c.tirilla_mostrar_codigo),
+    ventas_lector_codigo_barras:
+      c.ventas_lector_codigo_barras === undefined
+        ? DEFAULT_FLAGS.ventas_lector_codigo_barras
+        : Boolean(c.ventas_lector_codigo_barras),
   }
 }
