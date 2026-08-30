@@ -35,6 +35,16 @@ export interface DevolucionEncabezado {
   // joined
   numero_factura?: string
   cliente_nombre?: string
+  cliente_rtn?: string
+}
+
+export interface DevolucionDetalleLinea {
+  producto_id: number
+  producto_nombre: string
+  producto_codigo: string
+  cantidad_devuelta: number
+  precio_unitario: number
+  subtotal: number
 }
 
 /** Marca la ausencia de las tablas (script 020 no aplicado). */
@@ -96,7 +106,7 @@ export async function getDevoluciones(): Promise<{ data: DevolucionEncabezado[];
 
   const { data, error } = await supabase
     .from("devoluciones_encabezado")
-    .select("*, ventas_encabezado:venta_id (numero_factura, clientes:cliente_id (nombre))")
+    .select("*, ventas_encabezado:venta_id (numero_factura, clientes:cliente_id (nombre, rtn))")
     .order("fecha", { ascending: false })
     .limit(500)
 
@@ -112,6 +122,39 @@ export async function getDevoluciones(): Promise<{ data: DevolucionEncabezado[];
       ...(d as DevolucionEncabezado),
       numero_factura: (venta as { numero_factura?: string } | null)?.numero_factura || "",
       cliente_nombre: (cliente as { nombre?: string } | null)?.nombre || "",
+      cliente_rtn: (cliente as { rtn?: string } | null)?.rtn || "",
+    }
+  })
+  return { data: rows, error: null }
+}
+
+/** Lineas (productos) de una devolucion, para reimprimir su factura. */
+export async function getDetallesDevolucion(
+  devolucionId: number
+): Promise<{ data: DevolucionDetalleLinea[]; error: string | null }> {
+  if (!isSupabaseConfigured()) return { data: [], error: null }
+  const supabase = createClient()
+  if (!supabase) return { data: [], error: "Cliente no disponible" }
+
+  const { data, error } = await supabase
+    .from("devoluciones_detalle")
+    .select("producto_id, cantidad_devuelta, precio_unitario, subtotal, productos:producto_id (nombre, codigo_barras)")
+    .eq("devolucion_id", devolucionId)
+
+  if (error) {
+    if (isMissingTable(error)) return { data: [], error: DEVOLUCIONES_FEATURE_PENDING }
+    return { data: [], error: error.message }
+  }
+
+  const rows: DevolucionDetalleLinea[] = (data || []).map((r) => {
+    const prod = Array.isArray(r.productos) ? r.productos[0] : r.productos
+    return {
+      producto_id: Number(r.producto_id),
+      producto_nombre: (prod as { nombre?: string } | null)?.nombre || "",
+      producto_codigo: (prod as { codigo_barras?: string } | null)?.codigo_barras || "",
+      cantidad_devuelta: Number(r.cantidad_devuelta || 0),
+      precio_unitario: Number(r.precio_unitario || 0),
+      subtotal: Number(r.subtotal || 0),
     }
   })
   return { data: rows, error: null }

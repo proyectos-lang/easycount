@@ -332,6 +332,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Reembolsa el dinero al destino que elijas: efectivo de caja chica o egreso de una cuenta bancaria.",
       "Pide confirmación con un resumen (productos, cantidades, monto, destino) antes de ejecutar.",
       "Genera un correlativo DEV-0001, guarda el motivo, y mantiene un historial exportable a Excel.",
+      "Al procesar la devolución descarga automáticamente una factura de devolución (mismo formato que la factura normal) con los datos de la factura original y los productos específicos devueltos. Desde el Historial puedes volver a descargarla.",
       "El Estado de Resultados descuenta automáticamente las devoluciones (ventas netas).",
     ],
     queNoHace: [
@@ -350,15 +351,17 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
           "Elige a dónde devolver el dinero: Caja Chica (efectivo) o una cuenta bancaria.",
           "Escribe el motivo (opcional) y presiona 'Procesar devolución'.",
           "Revisa el resumen del diálogo de confirmación y confirma.",
+          "Al confirmar se descarga automáticamente la factura de devolución (PDF) con los productos devueltos.",
           "Verifica el resultado en la pestaña 'Historial'.",
         ],
       },
       {
-        titulo: "Consultar y exportar el historial de devoluciones",
+        titulo: "Consultar el historial y reimprimir la factura de devolución",
         pasos: [
           "Entra a la pestaña 'Historial'.",
           "Revisa devolución, fecha, factura, cliente, vía de reembolso y monto.",
-          "Presiona 'Exportar a Excel' para descargar el listado.",
+          "Usa el botón 'Factura' de cada fila para volver a descargar su factura de devolución.",
+          "Presiona 'Exportar a Excel' para descargar el listado completo.",
         ],
       },
     ],
@@ -387,6 +390,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
     keywords: [
       "devolver", "reembolso", "nota de credito", "cambio", "producto defectuoso",
       "regresar", "reversar", "dev",
+      "factura de devolucion", "imprimir devolucion", "pdf devolucion", "comprobante devolucion",
     ],
   },
 ]

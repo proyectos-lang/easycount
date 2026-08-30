@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react"
-import { Search, RotateCcw, Plus, Minus, Download, Undo2, Loader2 } from "lucide-react"
+import { Search, RotateCcw, Plus, Minus, Download, Undo2, Loader2, FileText } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -26,12 +26,15 @@ import { Spinner } from "@/components/ui/spinner"
 import { useToast } from "@/hooks/use-toast"
 import { formatCurrency } from "@/lib/utils/format"
 import { exportToXlsx } from "@/lib/utils/export"
-import { getVentas, getDetallesVenta, type VentaEncabezado, type VentaDetalle } from "@/lib/services/ventas"
+import { getVentas, getDetallesVenta, getRazonSocialForPdf, type VentaEncabezado, type VentaDetalle } from "@/lib/services/ventas"
 import { getCuentas, type CuentaConfig } from "@/lib/services/cuentas"
+import { getClientes } from "@/lib/services/catalogos"
 import {
-  crearDevolucion, getDevoluciones, getCantidadesDevueltasPorVenta,
+  crearDevolucion, getDevoluciones, getCantidadesDevueltasPorVenta, getDetallesDevolucion,
   type DevolucionEncabezado,
 } from "@/lib/services/devoluciones"
+import { generarFacturaPdf, type FacturaPdfLinea } from "@/lib/utils/factura-pdf"
+import { hoyISO } from "@/lib/utils/fecha"
 
 interface LineaDev extends VentaDetalle {
   ya_devuelto: number
@@ -58,6 +61,10 @@ export default function DevolucionesPage() {
   const [devoluciones, setDevoluciones] = useState<DevolucionEncabezado[]>([])
   const [loadingHist, setLoadingHist] = useState(true)
 
+  // RTN de clientes por id (para la factura de devolucion) e id en generacion.
+  const [clientesRtn, setClientesRtn] = useState<Record<number, string>>({})
+  const [generandoFactura, setGenerandoFactura] = useState<number | null>(null)
+
   const cargarHistorial = useCallback(async () => {
     setLoadingHist(true)
     const r = await getDevoluciones()
@@ -69,6 +76,11 @@ export default function DevolucionesPage() {
   useEffect(() => {
     getVentas().then((r) => setVentas(r.data || []))
     getCuentas().then((r) => setCuentas((r.data || []).filter((c) => c.activo !== false)))
+    getClientes().then((r) => {
+      const mapa: Record<number, string> = {}
+      for (const c of r.data || []) if (c.id != null) mapa[c.id] = c.rtn || ""
+      setClientesRtn(mapa)
+    })
     cargarHistorial()
   }, [cargarHistorial])
 
@@ -162,6 +174,25 @@ export default function DevolucionesPage() {
     } else {
       toast({ title: "Devolución registrada", description: `${res.data?.numero_devolucion} · ${formatCurrency(montoTotal)}` })
     }
+
+    // Factura de devolución (mismo formato que la factura normal), con los
+    // productos específicos devueltos. Se arma con los datos aún en pantalla.
+    if (res.data) {
+      const cuentaNombre = destinoTipo === "cuenta" ? cuentas.find((c) => c.id === Number(cuentaId))?.nombre : null
+      await generarFacturaDevolucion({
+        numeroDevolucion: res.data.numero_devolucion,
+        numeroFactura: ventaSel.numero_factura || "",
+        clienteNombre: ventaSel.cliente_nombre || "N/A",
+        clienteRtn: clientesRtn[ventaSel.cliente_id] || null,
+        lineas: lineas
+          .filter((l) => l.a_devolver > 0)
+          .map((l) => ({ nombre: l.producto_nombre || "", cantidad: l.a_devolver, precioUnitario: Number(l.precio_unitario || 0) })),
+        monto: montoTotal,
+        reembolsoMetodo: destinoTipo === "caja" ? "Efectivo (caja chica)" : `Cuenta bancaria${cuentaNombre ? " - " + cuentaNombre : ""}`,
+        motivo: motivo || null,
+      })
+    }
+
     // Reset
     setVentaSel(null); setLineas([]); setMotivo(""); setCuentaId(""); setDestinoTipo("caja")
     cargarHistorial()
@@ -183,6 +214,65 @@ export default function DevolucionesPage() {
     }))
     exportToXlsx(rows, { sheetName: "Devoluciones", filename: "Devoluciones", colWidths: [12, 12, 14, 22, 14, 12, 30] })
     toast({ title: "Exportado", description: "El archivo Excel se descargo correctamente" })
+  }
+
+  // Genera y descarga la factura de devolucion (mismo layout que la factura normal).
+  async function generarFacturaDevolucion(opts: {
+    numeroDevolucion: string
+    numeroFactura: string
+    clienteNombre: string
+    clienteRtn: string | null
+    lineas: FacturaPdfLinea[]
+    monto: number
+    reembolsoMetodo: string
+    motivo: string | null
+    fecha?: string
+  }) {
+    const empresa = await getRazonSocialForPdf()
+    const res = await generarFacturaPdf({
+      tipo: "devolucion",
+      empresa,
+      numeroDocumento: opts.numeroDevolucion,
+      facturaReferencia: opts.numeroFactura,
+      clienteNombre: opts.clienteNombre,
+      clienteRtn: opts.clienteRtn,
+      fecha: opts.fecha || hoyISO(),
+      lineas: opts.lineas,
+      subtotal: opts.monto,
+      mostrarIsv: false,
+      total: opts.monto,
+      reembolsoMetodo: opts.reembolsoMetodo,
+      motivo: opts.motivo,
+      filename: `Devolucion_${opts.numeroDevolucion}`,
+    })
+    if (!res.ok) {
+      toast({ title: "Error", description: res.error || "No se pudo generar la factura de devolucion", variant: "destructive" })
+    }
+  }
+
+  // Reimprime la factura de una devolucion del historial (trae sus lineas).
+  async function reimprimirFactura(d: DevolucionEncabezado) {
+    setGenerandoFactura(d.id)
+    try {
+      const det = await getDetallesDevolucion(d.id)
+      if (det.error) {
+        toast({ title: "Error", description: det.error, variant: "destructive" })
+        return
+      }
+      await generarFacturaDevolucion({
+        numeroDevolucion: d.numero_devolucion || "",
+        numeroFactura: d.numero_factura || "",
+        clienteNombre: d.cliente_nombre || "N/A",
+        clienteRtn: d.cliente_rtn || null,
+        lineas: det.data.map((l) => ({ nombre: l.producto_nombre, cantidad: l.cantidad_devuelta, precioUnitario: l.precio_unitario })),
+        monto: Number(d.monto_total || 0),
+        reembolsoMetodo: d.destino_reembolso === "caja" ? "Efectivo (caja chica)" : "Cuenta bancaria",
+        motivo: d.motivo || null,
+        fecha: d.fecha,
+      })
+    } finally {
+      setGenerandoFactura(null)
+    }
   }
 
   return (
@@ -398,6 +488,7 @@ export default function DevolucionesPage() {
                         <TableHead>Cliente</TableHead>
                         <TableHead>Reembolso</TableHead>
                         <TableHead className="text-right">Monto</TableHead>
+                        <TableHead className="text-right">Factura</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -409,6 +500,23 @@ export default function DevolucionesPage() {
                           <TableCell>{d.cliente_nombre}</TableCell>
                           <TableCell><Badge variant="secondary">{d.destino_reembolso === "caja" ? "Efectivo" : "Banco"}</Badge></TableCell>
                           <TableCell className="text-right font-medium text-red-700">{formatCurrency(Number(d.monto_total || 0))}</TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="gap-1"
+                              disabled={generandoFactura === d.id}
+                              onClick={() => reimprimirFactura(d)}
+                              title="Descargar factura de devolución"
+                            >
+                              {generandoFactura === d.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <FileText className="h-4 w-4" />
+                              )}
+                              <span className="hidden sm:inline">Factura</span>
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
