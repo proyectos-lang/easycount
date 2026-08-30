@@ -43,6 +43,16 @@ interface ProductCatalogProps {
   stockPorLocalizacion?: Record<number, number>
   /** Indica que el stock de la localizacion aun se esta cargando. */
   loadingStock?: boolean
+  /**
+   * Modo "buscar contra la BD": el filtro de texto NO es en vivo; el usuario
+   * escribe y dispara la busqueda con el boton Buscar (o Enter) via onBuscar.
+   * El padre resuelve la consulta y pasa los resultados por `productos`.
+   */
+  serverSearch?: boolean
+  /** Llamado al presionar Buscar (o Enter) con el texto actual. */
+  onBuscar?: (query: string) => void
+  /** Indica que la busqueda contra la BD esta en curso. */
+  buscando?: boolean
 }
 
 /**
@@ -65,6 +75,9 @@ export function ProductCatalog({
   localizacionSeleccionada = false,
   stockPorLocalizacion,
   loadingStock = false,
+  serverSearch = false,
+  onBuscar,
+  buscando = false,
 }: ProductCatalogProps) {
   const [view, setView] = React.useState<"grid" | "list">("grid")
   const [search, setSearch] = React.useState("")
@@ -109,7 +122,9 @@ export function ProductCatalog({
     return productos.filter((p) => {
       const nombre = (p.nombre ?? "").toString().toLowerCase()
       const codigo = (p.codigo_barras ?? "").toString().toLowerCase()
-      const matchTexto = !q || nombre.includes(q) || codigo.includes(q)
+      // En modo servidor el texto ya lo aplico la BD; aqui no re-filtramos por
+      // texto (el padre pasa los resultados en `productos`).
+      const matchTexto = serverSearch || !q || nombre.includes(q) || codigo.includes(q)
       const matchCategoria =
         categoriaFiltro === TODOS ||
         String(p.categoria_id ?? "") === categoriaFiltro
@@ -119,7 +134,7 @@ export function ProductCatalog({
         !localizacionSeleccionada || (stockPorLocalizacion?.[p.id!] ?? 0) > 0
       return matchTexto && matchCategoria && matchMarca && matchDisponibilidad
     })
-  }, [productos, search, categoriaFiltro, marcaFiltro, localizacionSeleccionada, stockPorLocalizacion])
+  }, [productos, search, categoriaFiltro, marcaFiltro, localizacionSeleccionada, stockPorLocalizacion, serverSearch])
 
   return (
     <div className="flex flex-col gap-3 h-full min-h-0">
@@ -131,10 +146,36 @@ export function ProductCatalog({
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={
+                serverSearch
+                  ? (e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        onBuscar?.(search)
+                      }
+                    }
+                  : undefined
+              }
               placeholder="Buscar por nombre o codigo de barras..."
               className="pl-9"
             />
           </div>
+          {serverSearch && (
+            <Button
+              type="button"
+              onClick={() => onBuscar?.(search)}
+              disabled={buscando}
+              className="shrink-0 gap-1.5"
+              title="Buscar productos"
+            >
+              {buscando ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Search className="h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">Buscar</span>
+            </Button>
+          )}
           <div className="flex items-center rounded-md border bg-muted/40 p-0.5 shrink-0">
             <Button
               type="button"
@@ -195,7 +236,12 @@ export function ProductCatalog({
 
       {/* Resultados */}
       <div className="flex-1 overflow-auto min-h-0">
-        {loadingStock ? (
+        {buscando ? (
+          <div className="h-full min-h-40 flex flex-col items-center justify-center text-muted-foreground gap-2 py-10">
+            <Loader2 className="h-8 w-8 animate-spin opacity-40" />
+            <p className="text-sm">Buscando productos...</p>
+          </div>
+        ) : loadingStock ? (
           <div className="h-full min-h-40 flex flex-col items-center justify-center text-muted-foreground gap-2 py-10">
             <Loader2 className="h-8 w-8 animate-spin opacity-40" />
             <p className="text-sm">Cargando disponibilidad...</p>
@@ -204,9 +250,11 @@ export function ProductCatalog({
           <div className="h-full min-h-40 flex flex-col items-center justify-center text-muted-foreground gap-2 py-10">
             <ImageIcon className="h-10 w-10 opacity-20" />
             <p className="text-sm">
-              {localizacionSeleccionada
-                ? "No hay productos disponibles en esta localizacion."
-                : "No se encontraron productos."}
+              {serverSearch && search.trim()
+                ? "No se encontraron productos para esa busqueda."
+                : localizacionSeleccionada
+                  ? "No hay productos disponibles en esta localizacion."
+                  : "No se encontraron productos."}
             </p>
           </div>
         ) : view === "grid" ? (

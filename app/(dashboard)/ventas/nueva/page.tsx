@@ -35,7 +35,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useToast } from "@/hooks/use-toast"
-import { getClientes, getProductos, getAlmacenes, getLocalizaciones, getMarcas, getCategorias, saveCliente, type Cliente, type Producto, type Almacen, type Localizacion, type Marca, type Categoria } from "@/lib/services/catalogos"
+import { getClientes, getProductos, buscarProductos, getAlmacenes, getLocalizaciones, getMarcas, getCategorias, saveCliente, type Cliente, type Producto, type Almacen, type Localizacion, type Marca, type Categoria } from "@/lib/services/catalogos"
 import { ProductCatalog } from "./product-catalog"
 import { getStockMultipleProducts } from "@/lib/services/inventario"
 import { 
@@ -143,7 +143,12 @@ export default function NuevaVentaPage() {
   // con su cantidad exacta en esa localizacion. Vacio = sin localizacion.
   const [stockCatalogo, setStockCatalogo] = React.useState<Record<number, number>>({})
   const [loadingCatalogo, setLoadingCatalogo] = React.useState(false)
-  
+  // Busqueda de productos "desde cero" contra la BD (boton Buscar del catalogo).
+  // null = modo navegacion (catalogo precargado); array = resultados de la ultima
+  // busqueda. Asi encontramos productos aunque el catalogo pase de 1000.
+  const [resultadosBusqueda, setResultadosBusqueda] = React.useState<Producto[] | null>(null)
+  const [buscandoProductos, setBuscandoProductos] = React.useState(false)
+
   // Quick client creation
   const [showClienteDialog, setShowClienteDialog] = React.useState(false)
   const [savingCliente, setSavingCliente] = React.useState(false)
@@ -295,17 +300,50 @@ export default function NuevaVentaPage() {
    * existencias (> 0) y su cantidad real en esa localizacion.
    */
   async function fetchStockCatalogo(locId: number) {
-    if (productos.length === 0) return
+    // Incluye tanto el catalogo precargado como los resultados de la ultima
+    // busqueda contra la BD (para que conserven su stock al cambiar de
+    // localizacion).
+    const ids = new Set<number>()
+    for (const p of productos) if (p.id) ids.add(p.id)
+    for (const p of resultadosBusqueda ?? []) if (p.id) ids.add(p.id)
+    if (ids.size === 0) return
     setLoadingCatalogo(true)
     try {
-      const productoIds = productos.map(p => p.id!).filter(Boolean)
-      const { data: stockMap } = await getStockMultipleProducts(productoIds, locId)
+      const { data: stockMap } = await getStockMultipleProducts([...ids], locId)
       setStockCatalogo(stockMap || {})
     } catch (err) {
       console.error('Error cargando stock del catalogo:', err)
       setStockCatalogo({})
     } finally {
       setLoadingCatalogo(false)
+    }
+  }
+
+  // Busca productos "desde cero" contra la BD y renderiza esos resultados en el
+  // catalogo. Con query vacia vuelve al modo navegacion (catalogo precargado).
+  async function buscarProductosServidor(query: string) {
+    const q = query.trim()
+    if (!q) {
+      setResultadosBusqueda(null)
+      return
+    }
+    setBuscandoProductos(true)
+    try {
+      const { data, error } = await buscarProductos(q)
+      if (error) {
+        toast({ title: "Error", description: error, variant: "destructive" })
+        return
+      }
+      setResultadosBusqueda(data)
+      // Carga el stock de los resultados en la localizacion activa para que se
+      // vea su disponibilidad (y no queden ocultos por el filtro de stock).
+      if (localizacionId && data.length > 0) {
+        const ids = data.map((p) => p.id!).filter(Boolean)
+        const { data: stockMap } = await getStockMultipleProducts(ids, Number(localizacionId))
+        if (stockMap) setStockCatalogo((prev) => ({ ...prev, ...stockMap }))
+      }
+    } finally {
+      setBuscandoProductos(false)
     }
   }
 
@@ -1264,7 +1302,7 @@ export default function NuevaVentaPage() {
             {/* Catalogo de productos (ocupa el resto del contenedor) */}
             <div className="flex-1 min-h-0">
               <ProductCatalog
-                productos={productos}
+                productos={resultadosBusqueda ?? productos}
                 marcas={marcas}
                 categorias={categorias}
                 idsEnVenta={lineas.map((l) => l.producto_id)}
@@ -1273,6 +1311,9 @@ export default function NuevaVentaPage() {
                 localizacionSeleccionada={!!localizacionId}
                 stockPorLocalizacion={stockCatalogo}
                 loadingStock={loadingCatalogo}
+                serverSearch
+                onBuscar={buscarProductosServidor}
+                buscando={buscandoProductos}
               />
             </div>
           </CardContent>

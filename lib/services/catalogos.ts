@@ -145,6 +145,86 @@ export async function getProductos(): Promise<{ data: Producto[]; error: string 
   }
 }
 
+/**
+ * Busca productos por nombre o codigo de barras (ilike, "desde cero" contra la
+ * BD). Pagina sin tope de 1000 para no perder coincidencias en catalogos
+ * grandes. Devuelve el mismo shape que getProductos (marca/categoria/
+ * subcategoria aplanadas) y filtra por tenant via RLS. Cae al select sin
+ * subcategorias si la migracion 015 no se aplico.
+ */
+export async function buscarProductos(query: string): Promise<{ data: Producto[]; error: string | null }> {
+  const q = (query || '').trim()
+
+  if (!isSupabaseConfigured()) {
+    const saved = localStorage.getItem('productos')
+    const todos: Producto[] = saved ? JSON.parse(saved) : []
+    const ql = q.toLowerCase()
+    const data = !ql
+      ? todos
+      : todos.filter(
+          (p) =>
+            (p.nombre || '').toLowerCase().includes(ql) ||
+            (p.codigo_barras || '').toLowerCase().includes(ql)
+        )
+    return { data, error: null }
+  }
+
+  if (!q) return { data: [], error: null }
+
+  const supabase = createClient()
+  if (!supabase) return { data: [], error: 'Cliente no disponible' }
+
+  // Sanitiza para el operador .or de PostgREST: comas y parentesis rompen la
+  // sintaxis del filtro. Los reemplazamos por espacios (siguen sirviendo para
+  // el ilike parcial).
+  const safe = q.replace(/[,()*]/g, ' ').trim()
+  const like = `%${safe}%`
+
+  // Pagina un tramo tras otro con el set de columnas dado.
+  async function fetchPaged(cols: string): Promise<{ data: any[] | null; error: { message: string } | null }> {
+    const PAGE = 1000
+    const acc: any[] = []
+    for (let from = 0, guard = 0; guard < 50; guard++, from += PAGE) {
+      const result = await supabase!
+        .from('productos')
+        .select(cols)
+        .or(`nombre.ilike.${like},codigo_barras.ilike.${like}`)
+        .order('nombre', { ascending: true })
+        .range(from, from + PAGE - 1)
+      if (result.error) return { data: null, error: result.error }
+      const rows = (result.data || []) as any[]
+      acc.push(...rows)
+      if (rows.length < PAGE) break
+    }
+    return { data: acc, error: null }
+  }
+
+  try {
+    let res = await fetchPaged('*, marcas(nombre), categorias(nombre), subcategorias(nombre)')
+    if (
+      res.error &&
+      /subcategoria|column.*does not exist|relation.*does not exist/i.test(res.error.message)
+    ) {
+      res = await fetchPaged('*, marcas(nombre), categorias(nombre)')
+    }
+    if (res.error) return { data: [], error: res.error.message }
+
+    const productos = (res.data || []).map((p: any) => ({
+      ...p,
+      marca_nombre: p.marcas?.nombre || null,
+      categoria_nombre: p.categorias?.nombre || null,
+      subcategoria_nombre: p.subcategorias?.nombre || null,
+      marcas: undefined,
+      categorias: undefined,
+      subcategorias: undefined,
+    }))
+    return { data: productos, error: null }
+  } catch (err) {
+    console.error('[Supabase] Error buscando productos:', err)
+    return { data: [], error: 'Error de conexion' }
+  }
+}
+
 export async function saveProducto(
   producto: Producto,
   isNew: boolean

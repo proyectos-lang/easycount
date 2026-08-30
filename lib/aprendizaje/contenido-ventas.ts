@@ -65,7 +65,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
         pasos: [
           "Abre Ventas → Nueva Venta.",
           "Selecciona el cliente (o créalo rápido si no existe) y el almacén del que sale la mercancía.",
-          "Busca cada producto en el catálogo y agrégalo; ajusta cantidades con los botones + / −.",
+          "En el catálogo, escribe el nombre (o parte del nombre) o el código del producto y presiona 'Buscar': la búsqueda consulta toda tu base (no solo lo visible) y muestra las coincidencias. Toca el producto para agregarlo y ajusta cantidades con + / −. Deja la búsqueda vacía y presiona Buscar para volver a ver todo el catálogo.",
           "Si aplica, ingresa el descuento (%) y activa el impuesto.",
           "En el desglose de pago agrega una línea 'Efectivo' (o 'Banco' y elige la cuenta) por el total.",
           "Verifica el total y presiona Guardar. El formulario queda en blanco y se abre la ventana de impresión: elige 'Imprimir tirilla (80 mm)' o 'Descargar factura (PDF)', o cierra para seguir con la próxima venta.",
