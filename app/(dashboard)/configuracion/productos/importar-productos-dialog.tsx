@@ -39,6 +39,7 @@ export function ImportarProductosDialog({ onImported }: { onImported: () => void
   const [nombreArchivo, setNombreArchivo] = React.useState("")
   const [preview, setPreview] = React.useState<PreviewProductos | null>(null)
   const [parsing, setParsing] = React.useState(false)
+  const [descargandoPlantilla, setDescargandoPlantilla] = React.useState(false)
   const [importando, setImportando] = React.useState(false)
   const [resultado, setResultado] = React.useState<ResultadoImportProductos | null>(null)
   // Para los productos que ya existen: generar el ingreso de inventario a sus
@@ -68,6 +69,17 @@ export function ImportarProductosDialog({ onImported }: { onImported: () => void
   function resetTodo() {
     resetArchivo()
     setAlmacenId(""); setLocalizacionId("")
+  }
+
+  async function descargarPlantilla() {
+    setDescargandoPlantilla(true)
+    try {
+      await descargarPlantillaProductos()
+    } catch {
+      toast({ title: "Error", description: "No se pudo generar la plantilla.", variant: "destructive" })
+    } finally {
+      setDescargandoPlantilla(false)
+    }
   }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -220,8 +232,9 @@ export function ImportarProductosDialog({ onImported }: { onImported: () => void
             {/* Paso 2: archivo */}
             <div className="rounded-lg border border-dashed p-4 space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <Button variant="outline" size="sm" className="gap-2" onClick={descargarPlantillaProductos}>
-                  <FileDown className="h-4 w-4" /> Descargar plantilla
+                <Button variant="outline" size="sm" className="gap-2" onClick={descargarPlantilla} disabled={descargandoPlantilla}>
+                  {descargandoPlantilla ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+                  Descargar plantilla
                 </Button>
                 <label className="inline-flex">
                   <input type="file" accept=".xlsx,.xls" className="hidden" onChange={onFile} />

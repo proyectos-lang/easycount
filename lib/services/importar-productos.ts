@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx"
 import {
-  getProductos, getCategorias, getMarcas, saveProducto, type Producto,
+  getProductos, getCategorias, getMarcas, getSubcategorias, getAlmacenes, getLocalizaciones,
+  saveProducto, type Producto,
 } from "@/lib/services/catalogos"
 import { procesarIngresoManual } from "@/lib/services/inventario"
 
@@ -336,8 +337,13 @@ export async function importarProductos(
 
 // ==================== PLANTILLA ====================
 
-/** Descarga una plantilla .xlsx con las columnas esperadas y filas de ejemplo. */
-export function descargarPlantillaProductos(): void {
+/**
+ * Descarga una plantilla .xlsx con dos hojas:
+ *  - "Productos": columnas esperadas + filas de ejemplo.
+ *  - "Referencias": categorias, marcas, subcategorias, almacenes y bodegas
+ *    registradas de la empresa (para que el usuario use los nombres exactos).
+ */
+export async function descargarPlantillaProductos(): Promise<void> {
   const ejemplo = [
     {
       "Codigo de Barras": "CB-001",
@@ -360,11 +366,52 @@ export function descargarPlantillaProductos(): void {
       "Cantidad Inicial": 10,
     },
   ]
-  const ws = XLSX.utils.json_to_sheet(ejemplo)
-  ws["!cols"] = [
+  const wsPlantilla = XLSX.utils.json_to_sheet(ejemplo)
+  wsPlantilla["!cols"] = [
     { wch: 16 }, { wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 8 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
   ]
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, "Productos")
+  XLSX.utils.book_append_sheet(wb, wsPlantilla, "Productos")
+
+  // Hoja "Referencias": catalogos actuales de la empresa (por tenant via RLS).
+  try {
+    const [catRes, marcaRes, subRes, almRes, locRes] = await Promise.all([
+      getCategorias(), getMarcas(), getSubcategorias(), getAlmacenes(), getLocalizaciones(),
+    ])
+    const categorias = catRes.data || []
+    const marcas = marcaRes.data || []
+    const subcategorias = subRes.data || []
+    const almacenes = almRes.data || []
+    const localizaciones = locRes.data || []
+    const almNombre = new Map<number, string>()
+    for (const a of almacenes) if (a.id != null) almNombre.set(a.id, a.nombre)
+
+    const aoa: string[][] = []
+    aoa.push(["Usa estos nombres EXACTOS en las columnas Categoria y Marca de la plantilla."])
+    aoa.push(["(Si escribes uno que no esta en esta lista, el producto se crea igual pero sin ese dato.)"])
+
+    const seccion = (titulo: string, items: string[]) => {
+      aoa.push([])
+      aoa.push([titulo])
+      if (items.length === 0) aoa.push(["(ninguno registrado)"])
+      else for (const it of items) aoa.push([it])
+    }
+
+    seccion("CATEGORIAS", categorias.map((c) => c.nombre))
+    seccion("MARCAS", marcas.map((m) => m.nombre))
+    if (subcategorias.length > 0) seccion("SUBCATEGORIAS (informativo)", subcategorias.map((s) => s.nombre))
+    seccion("ALMACENES (se eligen al subir)", almacenes.map((a) => a.nombre))
+    seccion(
+      "BODEGAS / LOCALIZACIONES (se eligen al subir)",
+      localizaciones.map((l) => `${almNombre.get(l.almacen_id) ?? "?"} / ${l.nombre}`)
+    )
+
+    const wsRef = XLSX.utils.aoa_to_sheet(aoa)
+    wsRef["!cols"] = [{ wch: 44 }]
+    XLSX.utils.book_append_sheet(wb, wsRef, "Referencias")
+  } catch {
+    // Si falla la carga de referencias, igual se descarga la plantilla.
+  }
+
   XLSX.writeFile(wb, "Plantilla_Carga_Productos.xlsx")
 }
