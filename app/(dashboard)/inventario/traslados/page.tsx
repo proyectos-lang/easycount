@@ -220,6 +220,60 @@ export default function TrasladosPage() {
     setComboboxOpen(false)
   }
 
+  // Agrega de una vez TODOS los productos con existencias en la localizacion de
+  // origen. La cantidad por defecto es el stock disponible (mover todo); se
+  // puede ajustar por linea antes de procesar.
+  async function agregarTodosConStock() {
+    if (!origenLocalizacionId) return
+    setLoadingStock(true)
+    try {
+      const disponibles = productos.filter(
+        (p) => p.id != null && !lineas.some((l) => l.producto_id === p.id)
+      )
+      if (disponibles.length === 0) {
+        toast({ title: "Sin productos", description: "No hay más productos para agregar." })
+        return
+      }
+      const ids = disponibles.map((p) => p.id!)
+      const { data, error } = await getStockMultipleProducts(ids, parseInt(origenLocalizacionId))
+      if (error) {
+        toast({ title: "Error", description: error, variant: "destructive" })
+        return
+      }
+      setStockCache((prev) => ({ ...prev, ...data }))
+
+      const conStock = disponibles.filter((p) => (data[p.id!] ?? 0) > 0)
+      if (conStock.length === 0) {
+        toast({ title: "Sin existencias", description: "Ningún producto tiene stock en esta localización." })
+        return
+      }
+      const nuevas: LineaTraslado[] = conStock.map((p) => {
+        const stock = data[p.id!] ?? 0
+        return {
+          producto_id: p.id!,
+          producto_nombre: p.nombre,
+          producto_codigo: p.codigo_barras || "",
+          cantidad: stock, // mover todo por defecto
+          stock_origen: stock,
+          costo_unitario: p.costo_promedio || 0,
+          precio_venta: p.precio_venta_sugerido || 0,
+          hasError: false, // cantidad = stock disponible
+        }
+      })
+      setLineas((prev) => [...prev, ...nuevas])
+      toast({
+        title: "Productos agregados",
+        description: `${nuevas.length} producto(s) con stock (cantidad = stock disponible). Ajusta las cantidades si necesitas mover solo una parte.`,
+      })
+    } finally {
+      setLoadingStock(false)
+    }
+  }
+
+  function vaciarLista() {
+    setLineas([])
+  }
+
   function updateCantidad(productoId: number, cantidad: number) {
     setLineas(prev => prev.map(l => {
       if (l.producto_id === productoId) {
@@ -603,14 +657,14 @@ export default function TrasladosPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
                   role="combobox"
                   aria-expanded={comboboxOpen}
-                  className="w-full justify-between bg-white/50 border-stone-200 hover:bg-orange-50/30 h-11 text-left font-normal"
+                  className="flex-1 min-w-[200px] justify-between bg-white/50 border-stone-200 hover:bg-orange-50/30 h-11 text-left font-normal"
                   disabled={!origenLocalizacionId}
                 >
                   <span className="flex items-center gap-2 text-stone-500">
@@ -649,7 +703,18 @@ export default function TrasladosPage() {
                 </Command>
               </PopoverContent>
             </Popover>
-            
+
+            <Button
+              variant="outline"
+              onClick={agregarTodosConStock}
+              disabled={!origenLocalizacionId || loadingStock}
+              className="gap-2 h-11 shrink-0 bg-white/50 border-stone-200 hover:bg-orange-50/30"
+              title="Agregar todos los productos con existencias en el origen"
+            >
+              <Boxes className="h-4 w-4" />
+              Agregar todos con stock
+            </Button>
+
             {loadingStock && <Spinner className="h-5 w-5 text-amber-600 shrink-0" />}
           </div>
           
@@ -684,12 +749,23 @@ export default function TrasladosPage() {
                   )}
                 </CardDescription>
               </div>
-              {hasErrors && (
-                <Badge variant="destructive" className="bg-red-100 text-red-700 border-red-200">
-                  <AlertTriangle className="h-3 w-3 mr-1" />
-                  Stock insuficiente
-                </Badge>
-              )}
+              <div className="flex items-center gap-2">
+                {hasErrors && (
+                  <Badge variant="destructive" className="bg-red-100 text-red-700 border-red-200">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    Stock insuficiente
+                  </Badge>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={vaciarLista}
+                  className="gap-1.5 text-stone-500 hover:text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Vaciar lista
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
