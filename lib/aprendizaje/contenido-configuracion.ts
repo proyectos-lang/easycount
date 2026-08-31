@@ -128,8 +128,9 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "En Configuración → Productos, presiona 'Carga masiva'.",
           "Descarga la plantilla y complétala: código de barras, nombre, categoría, marca, talla, precio de venta, costo unitario y cantidad inicial (una fila por producto).",
           "Elige el almacén y la bodega donde entrará el inventario inicial (solo se usan para las filas con cantidad mayor a 0).",
-          "Sube el archivo: verás un resumen (nuevos, unidades, valor del inventario) y avisos (duplicados que se omiten, categorías/marcas sin coincidencia).",
-          "Presiona 'Cargar': se crean los productos y se genera su ingreso inicial al inventario. Los que ya existían (por código o nombre) se omiten.",
+          "Sube el archivo: verás un resumen (nuevos, unidades, valor del inventario) y avisos (categorías/marcas sin coincidencia).",
+          "Si algún producto del archivo YA existe (por código o nombre), el sistema pregunta: «Este producto ya existe, ¿deseas generar el ingreso de inventario?». Activa el interruptor para sumar sus cantidades a las existencias del producto existente, o déjalo apagado para omitirlos.",
+          "Presiona 'Cargar': se crean los productos nuevos con su ingreso inicial y, si lo elegiste, se generan ingresos a los que ya existían.",
         ],
       },
       {

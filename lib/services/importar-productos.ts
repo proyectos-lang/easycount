@@ -23,24 +23,32 @@ export interface FilaProductoImport {
 export interface OpcionesImportProductos {
   almacen_id: number
   localizacion_id: number
+  /**
+   * Si un producto ya existe (mismo codigo/nombre): true genera el ingreso de
+   * inventario a sus existencias con la cantidad/costo de la fila; false lo omite.
+   */
+  generarIngresoADuplicados?: boolean
 }
 
 /** Resumen previo (validacion) que se muestra antes de confirmar. */
 export interface PreviewProductos {
   total: number
   nuevos: number
-  duplicados: string[] // codigos/nombres ya existentes (se omitiran)
+  duplicados: string[] // codigos/nombres ya existentes
+  duplicadosConCantidad: number // duplicados con Cantidad Inicial > 0 (candidatos a ingreso)
+  unidadesDuplicados: number // Σ cantidad de los duplicados
+  valorDuplicados: number // Σ cantidad × costo de los duplicados
   sinNombre: number // filas sin nombre (invalidas)
   categoriasNoEncontradas: string[]
   marcasNoEncontradas: string[]
-  valorInventarioInicial: number // Σ cantidad × costo
-  unidadesIniciales: number
+  valorInventarioInicial: number // Σ cantidad × costo (solo productos nuevos)
+  unidadesIniciales: number // Σ cantidad (solo productos nuevos)
   error: string | null
 }
 
 export interface ResultadoProducto {
   identificador: string
-  estado: "creado" | "omitido" | "error" | "sin_inventario"
+  estado: "creado" | "omitido" | "error" | "sin_inventario" | "ingreso_existente"
   detalle?: string
 }
 
@@ -50,6 +58,7 @@ export interface ResultadoImportProductos {
   errores: number
   conInventario: number
   sinInventario: number
+  ingresosExistentes: number // ingresos generados a productos que ya existian
   productos: ResultadoProducto[]
 }
 
@@ -113,18 +122,18 @@ export async function parsearArchivoProductos(file: File): Promise<FilaProductoI
 // ==================== CONTEXTO ====================
 
 async function cargarContexto(): Promise<{
-  codigosExistentes: Set<string>
-  nombresExistentes: Set<string>
+  porCodigo: Map<string, Producto>
+  porNombre: Map<string, Producto>
   catPorNombre: Map<string, number>
   marcaPorNombre: Map<string, number>
 }> {
   const [prodRes, catRes, marcaRes] = await Promise.all([getProductos(), getCategorias(), getMarcas()])
 
-  const codigosExistentes = new Set<string>()
-  const nombresExistentes = new Set<string>()
+  const porCodigo = new Map<string, Producto>()
+  const porNombre = new Map<string, Producto>()
   for (const p of prodRes.data || []) {
-    if (p.codigo_barras) codigosExistentes.add(p.codigo_barras.trim().toLowerCase())
-    if (p.nombre) nombresExistentes.add(p.nombre.trim().toLowerCase())
+    if (p.codigo_barras) porCodigo.set(p.codigo_barras.trim().toLowerCase(), p)
+    if (p.nombre) porNombre.set(p.nombre.trim().toLowerCase(), p)
   }
 
   const catPorNombre = new Map<string, number>()
@@ -133,14 +142,15 @@ async function cargarContexto(): Promise<{
   const marcaPorNombre = new Map<string, number>()
   for (const m of marcaRes.data || []) if (m.id != null) marcaPorNombre.set(m.nombre.trim().toLowerCase(), m.id)
 
-  return { codigosExistentes, nombresExistentes, catPorNombre, marcaPorNombre }
+  return { porCodigo, porNombre, catPorNombre, marcaPorNombre }
 }
 
 // ==================== PREVIEW ====================
 
 export async function previsualizarImportProductos(filas: FilaProductoImport[]): Promise<PreviewProductos> {
   const vacio: PreviewProductos = {
-    total: 0, nuevos: 0, duplicados: [], sinNombre: 0,
+    total: 0, nuevos: 0, duplicados: [], duplicadosConCantidad: 0,
+    unidadesDuplicados: 0, valorDuplicados: 0, sinNombre: 0,
     categoriasNoEncontradas: [], marcasNoEncontradas: [],
     valorInventarioInicial: 0, unidadesIniciales: 0, error: null,
   }
@@ -153,15 +163,24 @@ export async function previsualizarImportProductos(filas: FilaProductoImport[]):
   const vistosCodigo = new Set<string>()
   const vistosNombre = new Set<string>()
   let sinNombre = 0, valor = 0, unidades = 0, nuevos = 0
+  let dupConCant = 0, unidadesDup = 0, valorDup = 0
 
   for (const f of filas) {
     if (!f.nombre) { sinNombre++; continue }
     const codigoKey = f.codigo.trim().toLowerCase()
     const nombreKey = f.nombre.trim().toLowerCase()
     const dup =
-      (codigoKey && (ctx.codigosExistentes.has(codigoKey) || vistosCodigo.has(codigoKey))) ||
-      ctx.nombresExistentes.has(nombreKey) || vistosNombre.has(nombreKey)
-    if (dup) { duplicados.push(f.codigo || f.nombre); continue }
+      (codigoKey && (ctx.porCodigo.has(codigoKey) || vistosCodigo.has(codigoKey))) ||
+      ctx.porNombre.has(nombreKey) || vistosNombre.has(nombreKey)
+    if (dup) {
+      duplicados.push(f.codigo || f.nombre)
+      if (f.cantidad_inicial > 0) {
+        dupConCant++
+        unidadesDup += f.cantidad_inicial
+        valorDup += f.cantidad_inicial * f.costo_unitario
+      }
+      continue
+    }
 
     if (codigoKey) vistosCodigo.add(codigoKey)
     vistosNombre.add(nombreKey)
@@ -178,6 +197,9 @@ export async function previsualizarImportProductos(filas: FilaProductoImport[]):
     total: filas.length,
     nuevos,
     duplicados,
+    duplicadosConCantidad: dupConCant,
+    unidadesDuplicados: unidadesDup,
+    valorDuplicados: +valorDup.toFixed(2),
     sinNombre,
     categoriasNoEncontradas: [...catNo],
     marcasNoEncontradas: [...marcaNo],
@@ -195,17 +217,39 @@ export async function importarProductos(
 ): Promise<{ data: ResultadoImportProductos | null; error: string | null }> {
   if (filas.length === 0) return { data: null, error: "El archivo no tiene filas válidas" }
 
-  // Si hay cantidades iniciales, exige almacen + bodega para generar el cargue.
-  const hayCantidades = filas.some((f) => f.cantidad_inicial > 0)
-  if (hayCantidades && (!opciones.almacen_id || !opciones.localizacion_id)) {
+  const ctx = await cargarContexto()
+  const generarDup = !!opciones.generarIngresoADuplicados
+
+  // ¿Se necesita almacen/bodega? Si hay filas NUEVAS con cantidad, o si se van a
+  // generar ingresos a DUPLICADOS con cantidad (segun la opcion elegida).
+  const necesitaInventario = filas.some((f) => {
+    if (!f.nombre || f.cantidad_inicial <= 0) return false
+    const codigoKey = f.codigo.trim().toLowerCase()
+    const nombreKey = f.nombre.trim().toLowerCase()
+    const existe = (codigoKey && ctx.porCodigo.has(codigoKey)) || ctx.porNombre.has(nombreKey)
+    return existe ? generarDup : true
+  })
+  if (necesitaInventario && (!opciones.almacen_id || !opciones.localizacion_id)) {
     return { data: null, error: "Selecciona el almacén y la bodega para el inventario inicial." }
   }
 
-  const ctx = await cargarContexto()
   const resultado: ResultadoImportProductos = {
-    creados: 0, omitidos: 0, errores: 0, conInventario: 0, sinInventario: 0, productos: [],
+    creados: 0, omitidos: 0, errores: 0, conInventario: 0, sinInventario: 0, ingresosExistentes: 0, productos: [],
   }
-  const vistosCodigo = new Set<string>()
+
+  const generarIngreso = (productoId: number, f: FilaProductoImport) =>
+    procesarIngresoManual({
+      producto_id: productoId,
+      almacen_id: opciones.almacen_id,
+      localizacion_id: opciones.localizacion_id,
+      cantidad: f.cantidad_inicial,
+      costo_unitario: f.costo_unitario,
+      observaciones: "Inventario inicial (carga masiva)",
+      stock_anterior: 0,
+      costo_anterior: 0,
+      nuevo_stock: f.cantidad_inicial,
+      nuevo_costo: f.costo_unitario,
+    })
 
   for (const f of filas) {
     const id = f.codigo || f.nombre || `fila ${f.fila}`
@@ -218,15 +262,29 @@ export async function importarProductos(
 
     const codigoKey = f.codigo.trim().toLowerCase()
     const nombreKey = f.nombre.trim().toLowerCase()
-    if (
-      (codigoKey && (ctx.codigosExistentes.has(codigoKey) || vistosCodigo.has(codigoKey))) ||
-      ctx.nombresExistentes.has(nombreKey)
-    ) {
-      resultado.omitidos++
-      resultado.productos.push({ identificador: id, estado: "omitido", detalle: "Ya existe un producto con ese código o nombre" })
+    const existente = (codigoKey ? ctx.porCodigo.get(codigoKey) : undefined) ?? ctx.porNombre.get(nombreKey)
+
+    // ----- Producto ya existe -----
+    if (existente) {
+      if (generarDup && f.cantidad_inicial > 0 && existente.id != null) {
+        // "Este producto ya existe": se genera el ingreso a sus existencias.
+        const ing = await generarIngreso(existente.id, f)
+        if (ing.error) {
+          resultado.errores++
+          resultado.productos.push({ identificador: id, estado: "error", detalle: `Ya existía; no se pudo generar el ingreso: ${ing.error}` })
+        } else {
+          resultado.ingresosExistentes++
+          resultado.conInventario++
+          resultado.productos.push({ identificador: id, estado: "ingreso_existente", detalle: `Ya existía; ingreso de ${f.cantidad_inicial} u. a sus existencias` })
+        }
+      } else {
+        resultado.omitidos++
+        resultado.productos.push({ identificador: id, estado: "omitido", detalle: "Ya existe un producto con ese código o nombre" })
+      }
       continue
     }
 
+    // ----- Producto nuevo: crear -----
     const categoria_id = f.categoria ? ctx.catPorNombre.get(f.categoria.trim().toLowerCase()) ?? null : null
     const marca_id = f.marca ? ctx.marcaPorNombre.get(f.marca.trim().toLowerCase()) ?? null : null
 
@@ -250,23 +308,14 @@ export async function importarProductos(
     }
 
     resultado.creados++
-    if (codigoKey) vistosCodigo.add(codigoKey)
-    ctx.nombresExistentes.add(nombreKey) // evita duplicar por nombre dentro del archivo
+    // Registra el nuevo producto en el contexto para dedup dentro del archivo
+    // (si aparece otra vez mas abajo, se tratara como duplicado).
+    if (codigoKey) ctx.porCodigo.set(codigoKey, creado)
+    ctx.porNombre.set(nombreKey, creado)
 
     // Inventario inicial: genera el "Ingreso Manual" con la cantidad y costo.
     if (f.cantidad_inicial > 0) {
-      const ing = await procesarIngresoManual({
-        producto_id: creado.id,
-        almacen_id: opciones.almacen_id,
-        localizacion_id: opciones.localizacion_id,
-        cantidad: f.cantidad_inicial,
-        costo_unitario: f.costo_unitario,
-        observaciones: "Inventario inicial (carga masiva)",
-        stock_anterior: 0,
-        costo_anterior: 0,
-        nuevo_stock: f.cantidad_inicial,
-        nuevo_costo: f.costo_unitario,
-      })
+      const ing = await generarIngreso(creado.id, f)
       if (ing.error) {
         resultado.sinInventario++
         resultado.productos.push({ identificador: id, estado: "sin_inventario", detalle: `Creado, pero sin inventario inicial: ${ing.error}` })

@@ -10,6 +10,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
@@ -40,6 +41,9 @@ export function ImportarProductosDialog({ onImported }: { onImported: () => void
   const [parsing, setParsing] = React.useState(false)
   const [importando, setImportando] = React.useState(false)
   const [resultado, setResultado] = React.useState<ResultadoImportProductos | null>(null)
+  // Para los productos que ya existen: generar el ingreso de inventario a sus
+  // existencias (true) o solo omitirlos (false, por defecto).
+  const [generarIngresoDup, setGenerarIngresoDup] = React.useState(false)
 
   React.useEffect(() => {
     if (!open) return
@@ -59,7 +63,7 @@ export function ImportarProductosDialog({ onImported }: { onImported: () => void
   }, [almacenId])
 
   function resetArchivo() {
-    setFilas([]); setNombreArchivo(""); setPreview(null); setResultado(null)
+    setFilas([]); setNombreArchivo(""); setPreview(null); setResultado(null); setGenerarIngresoDup(false)
   }
   function resetTodo() {
     resetArchivo()
@@ -90,10 +94,13 @@ export function ImportarProductosDialog({ onImported }: { onImported: () => void
     }
   }
 
-  const requiereInventario = (preview?.unidadesIniciales ?? 0) > 0
+  const requiereInventario =
+    (preview?.unidadesIniciales ?? 0) > 0 ||
+    (generarIngresoDup && (preview?.unidadesDuplicados ?? 0) > 0)
+  const hayAlgoQueHacer =
+    !!preview && (preview.nuevos > 0 || (generarIngresoDup && preview.duplicadosConCantidad > 0))
   const listoParaImportar =
-    !!preview && preview.nuevos > 0 &&
-    (!requiereInventario || (!!almacenId && !!localizacionId))
+    hayAlgoQueHacer && (!requiereInventario || (!!almacenId && !!localizacionId))
 
   async function ejecutar() {
     if (!listoParaImportar) return
@@ -102,6 +109,7 @@ export function ImportarProductosDialog({ onImported }: { onImported: () => void
       const res = await importarProductos(filas, {
         almacen_id: almacenId ? Number(almacenId) : 0,
         localizacion_id: localizacionId ? Number(localizacionId) : 0,
+        generarIngresoADuplicados: generarIngresoDup,
       })
       if (res.error || !res.data) {
         toast({ title: "No se pudo cargar", description: res.error || "Error desconocido", variant: "destructive" })
@@ -149,13 +157,14 @@ export function ImportarProductosDialog({ onImported }: { onImported: () => void
               </div>
             </div>
             <p className="text-sm text-center text-stone-600">
-              {resultado.conInventario} con inventario inicial
+              {resultado.conInventario} con inventario
+              {resultado.ingresosExistentes > 0 ? ` · ${resultado.ingresosExistentes} ingreso(s) a existentes` : ""}
               {resultado.sinInventario > 0 ? ` · ${resultado.sinInventario} sin inventario` : ""}
             </p>
-            {resultado.productos.some((p) => p.estado !== "creado") && (
+            {resultado.productos.some((p) => p.estado !== "creado" && p.estado !== "ingreso_existente") && (
               <ScrollArea className="h-40 rounded-md border">
                 <div className="p-2 space-y-1">
-                  {resultado.productos.filter((p) => p.estado !== "creado").map((p, i) => (
+                  {resultado.productos.filter((p) => p.estado !== "creado" && p.estado !== "ingreso_existente").map((p, i) => (
                     <div key={i} className="flex items-center gap-2 text-xs">
                       <Badge
                         variant="secondary"
@@ -241,8 +250,25 @@ export function ImportarProductosDialog({ onImported }: { onImported: () => void
                   {preview.duplicados.length > 0 && (
                     <p className="flex items-start gap-1.5 text-xs text-amber-700">
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                      {preview.duplicados.length} ya existen y se omitirán: {preview.duplicados.slice(0, 8).join(", ")}{preview.duplicados.length > 8 ? "…" : ""}
+                      {preview.duplicados.length} ya existen: {preview.duplicados.slice(0, 8).join(", ")}{preview.duplicados.length > 8 ? "…" : ""}
                     </p>
+                  )}
+                  {preview.duplicadosConCantidad > 0 && (
+                    <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
+                      <div>
+                        <Label className="text-sm">
+                          {preview.duplicadosConCantidad === 1
+                            ? "Este producto ya existe. ¿Deseas generar el ingreso de inventario?"
+                            : `${preview.duplicadosConCantidad} productos ya existen. ¿Deseas generar su ingreso de inventario?`}
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          {generarIngresoDup
+                            ? `Sumará ${preview.unidadesDuplicados} u. a las existencias actuales (no crea duplicados).`
+                            : "Si lo activas, suma sus cantidades a las existencias. Si no, se omiten."}
+                        </p>
+                      </div>
+                      <Switch checked={generarIngresoDup} onCheckedChange={setGenerarIngresoDup} />
+                    </div>
                   )}
                   {preview.sinNombre > 0 && (
                     <p className="flex items-start gap-1.5 text-xs text-red-700">
@@ -276,7 +302,7 @@ export function ImportarProductosDialog({ onImported }: { onImported: () => void
               <Button variant="outline" onClick={() => { setOpen(false); resetTodo() }} disabled={importando}>Cancelar</Button>
               <Button onClick={ejecutar} disabled={!listoParaImportar || importando} className="gap-2">
                 {importando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                {importando ? "Cargando…" : `Cargar ${preview && preview.nuevos > 0 ? `${preview.nuevos} producto(s)` : ""}`}
+                {importando ? "Cargando…" : "Cargar"}
               </Button>
             </DialogFooter>
           </div>
