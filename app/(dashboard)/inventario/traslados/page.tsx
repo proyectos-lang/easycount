@@ -53,7 +53,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
-import { getProductos, getAlmacenes, getLocalizaciones, type Producto, type Almacen, type Localizacion } from "@/lib/services/catalogos"
+import { getProductos, getAlmacenes, getLocalizaciones, getCategorias, getMarcas, type Producto, type Almacen, type Localizacion, type Categoria, type Marca } from "@/lib/services/catalogos"
 import { hoyISO } from "@/lib/utils/fecha"
 import { getStockMultipleProducts, procesarTrasladosMultiples, type TrasladoLineaData } from "@/lib/services/inventario"
 import { getRazonSocial } from "@/lib/services/razon-social"
@@ -74,6 +74,12 @@ export default function TrasladosPage() {
   const { toast } = useToast()
   const [productos, setProductos] = React.useState<Producto[]>([])
   const [almacenes, setAlmacenes] = React.useState<Almacen[]>([])
+  const [categorias, setCategorias] = React.useState<Categoria[]>([])
+  const [marcas, setMarcas] = React.useState<Marca[]>([])
+  // Filtros del catalogo para agregar productos (aplican al buscador y a
+  // "Agregar todos con stock"). "all" = sin filtro.
+  const [filtroCategoria, setFiltroCategoria] = React.useState("all")
+  const [filtroMarca, setFiltroMarca] = React.useState("all")
   const [localizacionesOrigen, setLocalizacionesOrigen] = React.useState<Localizacion[]>([])
   const [localizacionesDestino, setLocalizacionesDestino] = React.useState<Localizacion[]>([])
   const [saving, setSaving] = React.useState(false)
@@ -102,16 +108,20 @@ export default function TrasladosPage() {
   }, [origenLocalizacionId])
 
   async function loadData() {
-    const [prodRes, almRes] = await Promise.all([
+    const [prodRes, almRes, catRes, marcaRes] = await Promise.all([
       getProductos(),
-      getAlmacenes()
+      getAlmacenes(),
+      getCategorias(),
+      getMarcas()
     ])
-    
+
     if (prodRes.error) toast({ title: "Error", description: prodRes.error, variant: "destructive" })
     if (almRes.error) toast({ title: "Error", description: almRes.error, variant: "destructive" })
-    
+
     setProductos(prodRes.data)
     setAlmacenes(almRes.data)
+    setCategorias(catRes.data || [])
+    setMarcas(marcaRes.data || [])
   }
 
   async function loadStockForProducts(productoIds: number[]) {
@@ -228,10 +238,14 @@ export default function TrasladosPage() {
     setLoadingStock(true)
     try {
       const disponibles = productos.filter(
-        (p) => p.id != null && !lineas.some((l) => l.producto_id === p.id)
+        (p) =>
+          p.id != null &&
+          (filtroCategoria === "all" || String(p.categoria_id ?? "") === filtroCategoria) &&
+          (filtroMarca === "all" || String(p.marca_id ?? "") === filtroMarca) &&
+          !lineas.some((l) => l.producto_id === p.id)
       )
       if (disponibles.length === 0) {
-        toast({ title: "Sin productos", description: "No hay más productos para agregar." })
+        toast({ title: "Sin productos", description: "No hay más productos para agregar con esos filtros." })
         return
       }
       const ids = disponibles.map((p) => p.id!)
@@ -514,8 +528,14 @@ export default function TrasladosPage() {
     setStockCache({})
   }
 
-  // Filter out products already in the list
-  const productosDisponibles = productos.filter(p => !lineas.some(l => l.producto_id === p.id))
+  // Productos para el buscador: fuera los que ya estan en la lista y aplicando
+  // los filtros de categoria/marca.
+  const productosDisponibles = productos.filter(
+    (p) =>
+      !lineas.some((l) => l.producto_id === p.id) &&
+      (filtroCategoria === "all" || String(p.categoria_id ?? "") === filtroCategoria) &&
+      (filtroMarca === "all" || String(p.marca_id ?? "") === filtroMarca)
+  )
 
   const totalUnidades = lineas.reduce((acc, l) => acc + l.cantidad, 0)
   const totalValorCosto = lineas.reduce((acc, l) => acc + (l.cantidad * l.costo_unitario), 0)
@@ -656,7 +676,39 @@ export default function TrasladosPage() {
             Seleccione productos del listado o escriba para filtrar
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Filtros de categoria / marca (aplican al buscador y a "Agregar todos") */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-stone-600">Categoria</Label>
+              <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
+                <SelectTrigger className="bg-white/50 border-stone-200 h-10">
+                  <SelectValue placeholder="Todas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las categorias</SelectItem>
+                  {categorias.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-stone-600">Marca</Label>
+              <Select value={filtroMarca} onValueChange={setFiltroMarca}>
+                <SelectTrigger className="bg-white/50 border-stone-200 h-10">
+                  <SelectValue placeholder="Todas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las marcas</SelectItem>
+                  {marcas.map((m) => (
+                    <SelectItem key={m.id} value={String(m.id)}>{m.nombre}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
           <div className="flex flex-wrap items-center gap-3">
             <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
               <PopoverTrigger asChild>

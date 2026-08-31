@@ -114,7 +114,8 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
       "Mover mercancía entre almacenes o localizaciones, dejando rastro de salida y entrada en el kardex.",
     queHace: [
       "Traslada uno o varios productos de un almacén/localización origen a otro destino en una sola operación.",
-      "Botón 'Agregar todos con stock': tras elegir el origen, agrega de una vez todas las referencias con existencias en esa localización, con la cantidad igual al stock disponible (editable). Ideal para vaciar una bodega hacia otra.",
+      "Filtros por categoría y marca para acotar el catálogo (aplican al buscador y a 'Agregar todos con stock').",
+      "Botón 'Agregar todos con stock': tras elegir el origen, agrega de una vez todas las referencias con existencias en esa localización (respetando los filtros de categoría/marca), con la cantidad igual al stock disponible (editable). Ideal para vaciar una bodega o mover solo una categoría/marca hacia otra.",
       "Genera dos movimientos por producto: 'Traslado Salida' en el origen y 'Traslado Entrada' en el destino.",
       "El stock total del producto no cambia, solo su ubicación.",
     ],
@@ -129,7 +130,8 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
           "Abre Inventario → Traslados.",
           "Elige el almacén y localización de ORIGEN.",
           "Elige el almacén y localización de DESTINO.",
-          "Agrega los productos uno por uno con el buscador, o usa 'Agregar todos con stock' para traer de una vez todas las referencias con existencias en el origen.",
+          "Opcional: filtra por categoría o marca para acotar el catálogo.",
+          "Agrega los productos uno por uno con el buscador, o usa 'Agregar todos con stock' para traer de una vez todas las referencias con existencias en el origen (según el filtro elegido).",
           "Ajusta las cantidades a mover (por defecto, cada línea trae el stock disponible). Usa 'Vaciar lista' para empezar de nuevo.",
           "Confirma: el kardex registra la salida en origen y la entrada en destino.",
         ],
@@ -142,7 +144,7 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
           "Registra un nuevo traslado en sentido contrario (del destino equivocado al correcto). Ambos quedan en el kardex para trazabilidad.",
       },
     ],
-    keywords: ["mover", "bodega", "transferir mercancia", "ubicacion", "localizacion", "seleccionar todos", "agregar todos", "vaciar bodega", "traslado masivo"],
+    keywords: ["mover", "bodega", "transferir mercancia", "ubicacion", "localizacion", "seleccionar todos", "agregar todos", "vaciar bodega", "traslado masivo", "filtrar categoria", "filtrar marca"],
   },
   {
     modulo: "Ajustes de Inventario",
