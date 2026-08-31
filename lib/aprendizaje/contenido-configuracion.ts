@@ -126,7 +126,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
         titulo: "Carga masiva de productos (Excel)",
         pasos: [
           "En Configuración → Productos, presiona 'Carga masiva'.",
-          "Descarga la plantilla y complétala: código de barras, nombre, categoría, marca, talla, precio de venta, costo unitario y cantidad inicial (una fila por producto). La plantilla incluye una segunda hoja «Referencias» con las categorías, marcas, subcategorías, almacenes y bodegas ya registradas de tu empresa, para que uses los nombres exactos.",
+          "Descarga la plantilla y complétala: código de barras, nombre, categoría, marca, talla, precio de venta, costo unitario y cantidad inicial (una fila por producto). Las columnas Categoría y Marca traen una lista desplegable con los valores registrados de tu empresa (podés elegir o escribir uno nuevo). Además hay una segunda hoja «Referencias» con las categorías, marcas, subcategorías, almacenes y bodegas actuales, para usar los nombres exactos.",
           "Elige el almacén y la bodega donde entrará el inventario inicial (solo se usan para las filas con cantidad mayor a 0).",
           "Sube el archivo: verás un resumen (nuevos, unidades, valor del inventario) y avisos (categorías/marcas sin coincidencia).",
           "Un producto se considera repetido cuando coincide el CÓDIGO de barras (la clave única). Si la fila no trae código, se usa el nombre como respaldo. Un mismo nombre con distinto código se toma como producto nuevo.",

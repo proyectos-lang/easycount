@@ -338,80 +338,96 @@ export async function importarProductos(
 // ==================== PLANTILLA ====================
 
 /**
- * Descarga una plantilla .xlsx con dos hojas:
- *  - "Productos": columnas esperadas + filas de ejemplo.
- *  - "Referencias": categorias, marcas, subcategorias, almacenes y bodegas
- *    registradas de la empresa (para que el usuario use los nombres exactos).
+ * Descarga una plantilla .xlsx (via exceljs) con dos hojas:
+ *  - "Productos": columnas esperadas + filas de ejemplo, con DESPLEGABLES
+ *    (data validation tipo lista) en Categoria y Marca que apuntan a la hoja
+ *    Referencias. No son obligatorios: se puede escribir un valor nuevo (el
+ *    producto se crea igual, sin ese dato si no coincide).
+ *  - "Referencias": una columna por catalogo (categorias, marcas, subcategorias,
+ *    almacenes y bodegas) registrados de la empresa (por tenant via RLS).
+ * exceljs se carga bajo demanda para no engordar el bundle principal.
  */
 export async function descargarPlantillaProductos(): Promise<void> {
-  const ejemplo = [
-    {
-      "Codigo de Barras": "CB-001",
-      Nombre: "Camisa Polo Azul",
-      Categoria: "Ropa",
-      Marca: "Marca X",
-      Talla: "M",
-      "Precio Venta": 350,
-      "Costo Unitario": 180,
-      "Cantidad Inicial": 20,
-    },
-    {
-      "Codigo de Barras": "CB-002",
-      Nombre: "Pantalon Jean",
-      Categoria: "Ropa",
-      Marca: "Marca Y",
-      Talla: "32",
-      "Precio Venta": 650,
-      "Costo Unitario": 300,
-      "Cantidad Inicial": 10,
-    },
-  ]
-  const wsPlantilla = XLSX.utils.json_to_sheet(ejemplo)
-  wsPlantilla["!cols"] = [
-    { wch: 16 }, { wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 8 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
-  ]
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, wsPlantilla, "Productos")
+  const [catRes, marcaRes, subRes, almRes, locRes] = await Promise.all([
+    getCategorias(), getMarcas(), getSubcategorias(), getAlmacenes(), getLocalizaciones(),
+  ])
+  const categorias = (catRes.data || []).map((c) => c.nombre)
+  const marcas = (marcaRes.data || []).map((m) => m.nombre)
+  const subcategorias = (subRes.data || []).map((s) => s.nombre)
+  const almacenes = almRes.data || []
+  const localizaciones = locRes.data || []
+  const almNombre = new Map<number, string>()
+  for (const a of almacenes) if (a.id != null) almNombre.set(a.id, a.nombre)
+  const bodegas = localizaciones.map((l) => `${almNombre.get(l.almacen_id) ?? "?"} / ${l.nombre}`)
 
-  // Hoja "Referencias": catalogos actuales de la empresa (por tenant via RLS).
-  try {
-    const [catRes, marcaRes, subRes, almRes, locRes] = await Promise.all([
-      getCategorias(), getMarcas(), getSubcategorias(), getAlmacenes(), getLocalizaciones(),
+  const ExcelJS = (await import("exceljs")).default
+  const wb = new ExcelJS.Workbook()
+
+  // ----- Hoja "Referencias" (una columna por catalogo) -----
+  const ref = wb.addWorksheet("Referencias")
+  ref.columns = [
+    { header: "Categorias", width: 26 },
+    { header: "Marcas", width: 26 },
+    { header: "Subcategorias", width: 26 },
+    { header: "Almacenes", width: 24 },
+    { header: "Bodegas / Localizaciones", width: 34 },
+  ]
+  ref.getRow(1).font = { bold: true }
+  const maxRows = Math.max(
+    categorias.length, marcas.length, subcategorias.length, almacenes.length, bodegas.length
+  )
+  for (let i = 0; i < maxRows; i++) {
+    ref.addRow([
+      categorias[i] ?? "",
+      marcas[i] ?? "",
+      subcategorias[i] ?? "",
+      almacenes[i]?.nombre ?? "",
+      bodegas[i] ?? "",
     ])
-    const categorias = catRes.data || []
-    const marcas = marcaRes.data || []
-    const subcategorias = subRes.data || []
-    const almacenes = almRes.data || []
-    const localizaciones = locRes.data || []
-    const almNombre = new Map<number, string>()
-    for (const a of almacenes) if (a.id != null) almNombre.set(a.id, a.nombre)
-
-    const aoa: string[][] = []
-    aoa.push(["Usa estos nombres EXACTOS en las columnas Categoria y Marca de la plantilla."])
-    aoa.push(["(Si escribes uno que no esta en esta lista, el producto se crea igual pero sin ese dato.)"])
-
-    const seccion = (titulo: string, items: string[]) => {
-      aoa.push([])
-      aoa.push([titulo])
-      if (items.length === 0) aoa.push(["(ninguno registrado)"])
-      else for (const it of items) aoa.push([it])
-    }
-
-    seccion("CATEGORIAS", categorias.map((c) => c.nombre))
-    seccion("MARCAS", marcas.map((m) => m.nombre))
-    if (subcategorias.length > 0) seccion("SUBCATEGORIAS (informativo)", subcategorias.map((s) => s.nombre))
-    seccion("ALMACENES (se eligen al subir)", almacenes.map((a) => a.nombre))
-    seccion(
-      "BODEGAS / LOCALIZACIONES (se eligen al subir)",
-      localizaciones.map((l) => `${almNombre.get(l.almacen_id) ?? "?"} / ${l.nombre}`)
-    )
-
-    const wsRef = XLSX.utils.aoa_to_sheet(aoa)
-    wsRef["!cols"] = [{ wch: 44 }]
-    XLSX.utils.book_append_sheet(wb, wsRef, "Referencias")
-  } catch {
-    // Si falla la carga de referencias, igual se descarga la plantilla.
   }
 
-  XLSX.writeFile(wb, "Plantilla_Carga_Productos.xlsx")
+  // ----- Hoja "Productos" -----
+  const ws = wb.addWorksheet("Productos")
+  ws.columns = [
+    { header: "Codigo de Barras", width: 18 },
+    { header: "Nombre", width: 28 },
+    { header: "Categoria", width: 18 },
+    { header: "Marca", width: 18 },
+    { header: "Talla", width: 8 },
+    { header: "Precio Venta", width: 14 },
+    { header: "Costo Unitario", width: 14 },
+    { header: "Cantidad Inicial", width: 14 },
+  ]
+  ws.getRow(1).font = { bold: true }
+  ws.addRow(["CB-001", "Camisa Polo Azul", categorias[0] ?? "Ropa", marcas[0] ?? "Marca X", "M", 350, 180, 20])
+  ws.addRow(["CB-002", "Pantalon Jean", categorias[0] ?? "Ropa", marcas[1] ?? marcas[0] ?? "Marca Y", "32", 650, 300, 10])
+
+  // Desplegables en Categoria (col C) y Marca (col D), apuntando a Referencias.
+  // showErrorMessage:false => es una ayuda, no bloquea escribir un valor nuevo.
+  const FILAS = 500
+  if (categorias.length > 0) {
+    const rango = `Referencias!$A$2:$A$${categorias.length + 1}`
+    for (let r = 2; r <= FILAS + 1; r++) {
+      ws.getCell(`C${r}`).dataValidation = { type: "list", allowBlank: true, formulae: [rango], showErrorMessage: false }
+    }
+  }
+  if (marcas.length > 0) {
+    const rango = `Referencias!$B$2:$B$${marcas.length + 1}`
+    for (let r = 2; r <= FILAS + 1; r++) {
+      ws.getCell(`D${r}`).dataValidation = { type: "list", allowBlank: true, formulae: [rango], showErrorMessage: false }
+    }
+  }
+
+  const buffer = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buffer as ArrayBuffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = "Plantilla_Carga_Productos.xlsx"
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 100)
 }
