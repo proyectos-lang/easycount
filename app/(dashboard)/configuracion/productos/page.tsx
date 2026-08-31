@@ -76,6 +76,7 @@ import {
 import { procesarIngresoManual } from "@/lib/services/inventario"
 import { formatCurrency } from "@/lib/utils/format"
 import { useTenant } from "@/lib/hooks/use-tenant"
+import { ImportarProductosDialog } from "./importar-productos-dialog"
 import { ManageCategoriasDialog } from "@/components/productos/manage-categorias-dialog"
 
 // Columnas por las que se puede ordenar la tabla de productos.
@@ -668,6 +669,7 @@ export default function ProductosConfigPage() {
             <ImageDown className="h-4 w-4 mr-1" />
             Comprimir fotos
           </Button>
+          <ImportarProductosDialog onImported={loadProductos} />
           <Button onClick={openNewDialog} size="sm" className="flex-1 sm:flex-none">
             <Plus className="h-4 w-4 mr-1" />
             Nuevo Producto

@@ -103,6 +103,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "La foto se sube al almacenamiento de la nube y aparece en el catálogo de Nueva Venta. Las fotos grandes (de celular) se comprimen automáticamente al subir para que carguen rápido.",
       "Botón 'Comprimir fotos': optimiza de una sola vez el peso de las fotos ya subidas de la empresa (baja la resolución sin borrar ni cambiar los productos). Útil si el catálogo carga lento por fotos de muy alta resolución.",
       "Al crear un producto puedes indicar una cantidad inicial (con su costo, almacén y localización): el sistema genera automáticamente un ingreso manual al inventario para que arranque con existencias.",
+      "Carga masiva desde Excel: descarga una plantilla, complétala con tus productos (código, nombre, categoría, marca, precio, costo y cantidad inicial) y súbela eligiendo el almacén y la bodega; el sistema crea todos los productos y genera su inventario inicial de una sola vez.",
       "Elimina productos: si solo tiene movimientos de inventario, se borran en cascada junto con el producto (te avisa cuántos); si tiene ventas o compras registradas, no se borra para proteger el historial.",
     ],
     queNoHace: [
@@ -122,10 +123,21 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
         ],
       },
       {
+        titulo: "Carga masiva de productos (Excel)",
+        pasos: [
+          "En Configuración → Productos, presiona 'Carga masiva'.",
+          "Descarga la plantilla y complétala: código de barras, nombre, categoría, marca, talla, precio de venta, costo unitario y cantidad inicial (una fila por producto).",
+          "Elige el almacén y la bodega donde entrará el inventario inicial (solo se usan para las filas con cantidad mayor a 0).",
+          "Sube el archivo: verás un resumen (nuevos, unidades, valor del inventario) y avisos (duplicados que se omiten, categorías/marcas sin coincidencia).",
+          "Presiona 'Cargar': se crean los productos y se genera su ingreso inicial al inventario. Los que ya existían (por código o nombre) se omiten.",
+        ],
+      },
+      {
         titulo: "Organizar marcas y categorías",
         pasos: [
           "Usa el botón de gestión de marcas/categorías dentro del módulo.",
           "Crea las categorías y subcategorías que reflejen tu negocio (facilitan filtrar y analizar ventas).",
+          "Sugerencia: crea las categorías y marcas ANTES de la carga masiva para que se asocien por nombre; si no existen, el producto se crea igual pero sin ese dato.",
         ],
       },
       {
@@ -150,7 +162,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "Porque tiene ventas o compras registradas. Para no perder la trazabilidad de esos documentos, un producto con historial de ventas o compras no se elimina. Si solo tiene movimientos de inventario, sí se puede borrar y esos movimientos se eliminan en cascada con él.",
       },
     ],
-    keywords: ["producto", "codigo de barras", "sku", "precio", "marca", "categoria", "foto", "catalogo", "eliminar", "borrar", "cascada", "comprimir fotos", "imagen pesada", "resolucion", "carga lenta"],
+    keywords: ["producto", "codigo de barras", "sku", "precio", "marca", "categoria", "foto", "catalogo", "eliminar", "borrar", "cascada", "comprimir fotos", "imagen pesada", "resolucion", "carga lenta", "carga masiva", "importar productos", "plantilla", "excel", "masivo", "inventario inicial"],
   },
   {
     modulo: "Almacenes",
