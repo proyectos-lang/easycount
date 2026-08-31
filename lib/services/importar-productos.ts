@@ -169,9 +169,11 @@ export async function previsualizarImportProductos(filas: FilaProductoImport[]):
     if (!f.nombre) { sinNombre++; continue }
     const codigoKey = f.codigo.trim().toLowerCase()
     const nombreKey = f.nombre.trim().toLowerCase()
-    const dup =
-      (codigoKey && (ctx.porCodigo.has(codigoKey) || vistosCodigo.has(codigoKey))) ||
-      ctx.porNombre.has(nombreKey) || vistosNombre.has(nombreKey)
+    // "Ya existe" = mismo CÓDIGO (clave única). Solo si la fila NO trae código
+    // se usa el nombre como respaldo (para no crear productos sin código dobles).
+    const dup = codigoKey
+      ? (ctx.porCodigo.has(codigoKey) || vistosCodigo.has(codigoKey))
+      : (ctx.porNombre.has(nombreKey) || vistosNombre.has(nombreKey))
     if (dup) {
       duplicados.push(f.codigo || f.nombre)
       if (f.cantidad_inicial > 0) {
@@ -226,7 +228,7 @@ export async function importarProductos(
     if (!f.nombre || f.cantidad_inicial <= 0) return false
     const codigoKey = f.codigo.trim().toLowerCase()
     const nombreKey = f.nombre.trim().toLowerCase()
-    const existe = (codigoKey && ctx.porCodigo.has(codigoKey)) || ctx.porNombre.has(nombreKey)
+    const existe = codigoKey ? ctx.porCodigo.has(codigoKey) : ctx.porNombre.has(nombreKey)
     return existe ? generarDup : true
   })
   if (necesitaInventario && (!opciones.almacen_id || !opciones.localizacion_id)) {
@@ -262,7 +264,8 @@ export async function importarProductos(
 
     const codigoKey = f.codigo.trim().toLowerCase()
     const nombreKey = f.nombre.trim().toLowerCase()
-    const existente = (codigoKey ? ctx.porCodigo.get(codigoKey) : undefined) ?? ctx.porNombre.get(nombreKey)
+    // Coincidencia por CÓDIGO (clave única); solo sin código se usa el nombre.
+    const existente = codigoKey ? ctx.porCodigo.get(codigoKey) : ctx.porNombre.get(nombreKey)
 
     // ----- Producto ya existe -----
     if (existente) {
