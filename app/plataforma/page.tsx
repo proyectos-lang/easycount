@@ -4,6 +4,7 @@ import {
   getSupabaseProjectStatus,
 } from "@/lib/services/plataforma"
 import { FlagToggle } from "./flag-toggle"
+import { LogoutButton } from "./logout-button"
 
 export const dynamic = "force-dynamic"
 
@@ -70,11 +71,14 @@ export default async function PlataformaPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Gestión de la plataforma</h1>
-        <p className="mt-1 text-sm text-stone-500">
-          Todas las empresas del sistema, sus métricas de uso y el estado de la base de datos.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Gestión de la plataforma</h1>
+          <p className="mt-1 text-sm text-stone-500">
+            Todas las empresas del sistema, sus métricas de uso y el estado de la base de datos.
+          </p>
+        </div>
+        <LogoutButton />
       </div>
 
       {err && (
