@@ -81,11 +81,27 @@ function str(v: unknown): string {
   return String(v).trim()
 }
 
-/** Toma el valor de la primera columna cuyo encabezado matchee alguno de los alias. */
+/** Normaliza un encabezado: sin acentos, minusculas, y "_"/espacios -> 1 espacio. */
+function normHeader(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // quita acentos
+    .replace(/[\s_]+/g, " ") // guiones bajos y espacios -> un espacio
+    .trim()
+}
+
+/**
+ * Toma el valor de la primera columna cuyo encabezado matchee alguno de los
+ * alias. Tolerante a acentos, mayusculas y a "_" vs espacios: asi
+ * "cantidad_inicial", "Cantidad Inicial" y "cantidad inicial" son lo mismo.
+ */
 function col(row: Record<string, unknown>, alias: string[]): unknown {
   const keys = Object.keys(row)
   for (const a of alias) {
-    const k = keys.find((k) => k.trim().toLowerCase() === a.toLowerCase())
+    const na = normHeader(a)
+    const k = keys.find((k) => normHeader(k) === na)
     if (k != null) return row[k]
   }
   return undefined
@@ -95,13 +111,16 @@ function col(row: Record<string, unknown>, alias: string[]): unknown {
 export async function parsearArchivoProductos(file: File): Promise<FilaProductoImport[]> {
   const buffer = await file.arrayBuffer()
   const wb = XLSX.read(buffer, { type: "array" })
-  const ws = wb.Sheets[wb.SheetNames[0]]
+  // Usa la hoja "Productos" si existe (la plantilla trae tambien "Referencias");
+  // si no, la primera hoja.
+  const sheetName = wb.SheetNames.find((n) => normHeader(n) === "productos") ?? wb.SheetNames[0]
+  const ws = wb.Sheets[sheetName]
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" })
 
   const filas: FilaProductoImport[] = []
   rows.forEach((row, i) => {
     const nombre = str(col(row, ["Nombre", "Producto", "Descripcion", "Descripción"]))
-    const codigo = str(col(row, ["Codigo de Barras", "Código de Barras", "Codigo", "Código", "SKU"]))
+    const codigo = str(col(row, ["Codigo de Barras", "Código de Barras", "Codigo Barras", "Codigo", "Código", "SKU"]))
     // Filas totalmente vacias (sin nombre ni codigo) se ignoran.
     if (!nombre && !codigo) return
 
@@ -362,6 +381,8 @@ export async function descargarPlantillaProductos(): Promise<void> {
 
   const ExcelJS = (await import("exceljs")).default
   const wb = new ExcelJS.Workbook()
+  // "Productos" primero (el archivo abre en esa hoja); "Referencias" de segunda.
+  const ws = wb.addWorksheet("Productos")
 
   // ----- Hoja "Referencias" (una columna por catalogo) -----
   const ref = wb.addWorksheet("Referencias")
@@ -386,8 +407,7 @@ export async function descargarPlantillaProductos(): Promise<void> {
     ])
   }
 
-  // ----- Hoja "Productos" -----
-  const ws = wb.addWorksheet("Productos")
+  // ----- Hoja "Productos" (creada arriba para que sea la primera) -----
   ws.columns = [
     { header: "Codigo de Barras", width: 18 },
     { header: "Nombre", width: 28 },
