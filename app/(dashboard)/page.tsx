@@ -1,15 +1,17 @@
 "use client"
 
 import Link from "next/link"
-import { 
-  LayoutDashboard, 
-  ShoppingCart, 
-  Truck, 
-  Package, 
-  Wallet, 
+import {
+  LayoutDashboard,
+  ShoppingCart,
+  Truck,
+  Package,
+  Wallet,
   Settings,
   ArrowRight
 } from "lucide-react"
+import { useAuth } from "@/lib/contexts/auth-context"
+import { findModuloByPath } from "@/lib/constants/modulos"
 
 const modules = [
   {
@@ -57,6 +59,16 @@ const modules = [
 ]
 
 export default function WelcomePage() {
+  const { hasModulo } = useAuth()
+
+  // Muestra solo las tarjetas cuyo modulo destino puede ver el usuario. Asi no
+  // aparece un acceso que luego el RouteGuard bloquea (ej. "Configuracion" ->
+  // Razon Social para un usuario sin ese permiso).
+  const visibles = modules.filter((m) => {
+    const mod = findModuloByPath(m.href)
+    return !mod || hasModulo(mod.nombre)
+  })
+
   return (
     <div className="min-h-[calc(100vh-3.5rem)] flex flex-col">
       {/* Background with radial gradient */}
@@ -76,7 +88,7 @@ export default function WelcomePage() {
 
         {/* Module Cards Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-5 w-full max-w-5xl">
-          {modules.map((module) => {
+          {visibles.map((module) => {
             const Icon = module.icon
             return (
               <Link
