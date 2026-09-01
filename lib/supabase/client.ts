@@ -1,5 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { processLock, type SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -23,7 +23,16 @@ export function createClient(): SupabaseClient | null {
   }
 
   if (!browserClient) {
-    browserClient = createBrowserClient(supabaseUrl, supabaseAnonKey)
+    browserClient = createBrowserClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        // Safari / iOS: el Web Locks API (navigator.locks) que Supabase usa por
+        // defecto para coordinar el refresh del token entre pestanas es
+        // inestable y tira "lock was stolen by another request" al iniciar
+        // sesion. processLock usa un lock EN MEMORIA (por tab); como el cliente
+        // es singleton por tab, es suficiente y evita ese error.
+        lock: processLock,
+      },
+    })
   }
 
   return browserClient
