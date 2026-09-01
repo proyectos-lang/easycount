@@ -30,6 +30,8 @@ import {
   type ClienteDeudor
 } from "@/lib/services/dashboard"
 import { useTenant } from "@/lib/hooks/use-tenant"
+import { useAuth } from "@/lib/contexts/auth-context"
+import { findModuloByPath } from "@/lib/constants/modulos"
 import { useToast } from "@/hooks/use-toast"
 import {
   BarChart,
@@ -59,6 +61,19 @@ function formatShortDate(dateStr: string): string {
 
 export default function DashboardPage() {
   const { razonSocialId, ready } = useTenant()
+  const { hasModulo } = useAuth()
+  // Solo enlazamos a un modulo si el usuario puede verlo (evita accesos que el
+  // RouteGuard bloquearia). Si no, la info se muestra pero no es clicable.
+  const puedeIr = React.useCallback(
+    (href: string) => {
+      const mod = findModuloByPath(href)
+      return !mod || hasModulo(mod.nombre)
+    },
+    [hasModulo]
+  )
+  const puedeProductos = puedeIr("/configuracion/productos")
+  const puedeRecepcion = puedeIr("/compras/recepcion")
+  const puedeCxC = puedeIr("/ventas/cuentas-por-cobrar")
   const { toast } = useToast()
   const [metrics, setMetrics] = React.useState<DashboardMetrics | null>(null)
   const [ventasVsCobros, setVentasVsCobros] = React.useState<VentasVsCobros[]>([])
@@ -310,23 +325,29 @@ export default function DashboardPage() {
               </div>
             ) : stockBajo.length > 0 ? (
               <div className="space-y-2">
-                {stockBajo.slice(0, 5).map(p => (
-                  <Link 
-                    key={p.id} 
-                    href="/configuracion/productos"
-                    className="flex items-center justify-between p-3 rounded-xl hover:bg-stone-100/60 transition-all duration-300"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Package className="h-4 w-4 text-stone-400" />
-                      <div>
-                        <p className="text-sm font-medium text-stone-700 truncate max-w-[150px]">{p.nombre}</p>
-                        <p className="text-xs text-stone-400">{p.codigo_barras}</p>
+                {stockBajo.slice(0, 5).map(p => {
+                  const inner = (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Package className="h-4 w-4 text-stone-400" />
+                        <div>
+                          <p className="text-sm font-medium text-stone-700 truncate max-w-[150px]">{p.nombre}</p>
+                          <p className="text-xs text-stone-400">{p.codigo_barras}</p>
+                        </div>
                       </div>
-                    </div>
-                    <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100">{p.stock_total} uds</Badge>
-                  </Link>
-                ))}
-                {stockBajo.length > 5 && (
+                      <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100">{p.stock_total} uds</Badge>
+                    </>
+                  )
+                  const cls = "flex items-center justify-between p-3 rounded-xl transition-all duration-300"
+                  return puedeProductos ? (
+                    <Link key={p.id} href="/configuracion/productos" className={`${cls} hover:bg-stone-100/60`}>
+                      {inner}
+                    </Link>
+                  ) : (
+                    <div key={p.id} className={cls}>{inner}</div>
+                  )
+                })}
+                {stockBajo.length > 5 && puedeProductos && (
                   <Link href="/configuracion/productos" className="block">
                     <Button variant="ghost" size="sm" className="w-full mt-2">
                       Ver todos <ArrowRight className="h-4 w-4 ml-1" />
@@ -363,24 +384,30 @@ export default function DashboardPage() {
               </div>
             ) : comprasPendientes.length > 0 ? (
               <div className="space-y-2">
-                {comprasPendientes.slice(0, 5).map(c => (
-                  <Link 
-                    key={c.id} 
-                    href="/compras/recepcion"
-                    className="flex items-center justify-between p-3 rounded-xl hover:bg-stone-100/60 transition-all duration-300"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-stone-700">{c.proveedor_nombre}</p>
-                      <p className="text-xs text-stone-400">
-                        Llegada: {c.fecha_tentativa}
-                      </p>
-                    </div>
-                    <Badge className="bg-stone-100 text-stone-700 border-stone-200 hover:bg-stone-100">
-                      {formatCurrency(c.total_compra_local)}
-                    </Badge>
-                  </Link>
-                ))}
-                {comprasPendientes.length > 5 && (
+                {comprasPendientes.slice(0, 5).map(c => {
+                  const inner = (
+                    <>
+                      <div>
+                        <p className="text-sm font-medium text-stone-700">{c.proveedor_nombre}</p>
+                        <p className="text-xs text-stone-400">
+                          Llegada: {c.fecha_tentativa}
+                        </p>
+                      </div>
+                      <Badge className="bg-stone-100 text-stone-700 border-stone-200 hover:bg-stone-100">
+                        {formatCurrency(c.total_compra_local)}
+                      </Badge>
+                    </>
+                  )
+                  const cls = "flex items-center justify-between p-3 rounded-xl transition-all duration-300"
+                  return puedeRecepcion ? (
+                    <Link key={c.id} href="/compras/recepcion" className={`${cls} hover:bg-stone-100/60`}>
+                      {inner}
+                    </Link>
+                  ) : (
+                    <div key={c.id} className={cls}>{inner}</div>
+                  )
+                })}
+                {comprasPendientes.length > 5 && puedeRecepcion && (
                   <Link href="/compras/recepcion" className="block">
                     <Button variant="ghost" size="sm" className="w-full mt-2">
                       Ver todas <ArrowRight className="h-4 w-4 ml-1" />
@@ -417,28 +444,36 @@ export default function DashboardPage() {
               </div>
             ) : clientesDeudores.length > 0 ? (
               <div className="space-y-2">
-                {clientesDeudores.map(c => (
-                  <Link 
-                    key={c.cliente_id} 
-                    href="/ventas/cuentas-por-cobrar"
-                    className="flex items-center justify-between p-3 rounded-xl hover:bg-stone-100/60 transition-all duration-300"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-stone-700 truncate max-w-[120px]">{c.cliente_nombre}</p>
-                      <p className="text-xs text-stone-400">
-                        {c.facturas_pendientes} factura{c.facturas_pendientes !== 1 ? 's' : ''}
-                      </p>
-                    </div>
-                    <Badge className="bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-100">
-                      {formatCurrency(c.total_deuda)}
-                    </Badge>
+                {clientesDeudores.map(c => {
+                  const inner = (
+                    <>
+                      <div>
+                        <p className="text-sm font-medium text-stone-700 truncate max-w-[120px]">{c.cliente_nombre}</p>
+                        <p className="text-xs text-stone-400">
+                          {c.facturas_pendientes} factura{c.facturas_pendientes !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <Badge className="bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-100">
+                        {formatCurrency(c.total_deuda)}
+                      </Badge>
+                    </>
+                  )
+                  const cls = "flex items-center justify-between p-3 rounded-xl transition-all duration-300"
+                  return puedeCxC ? (
+                    <Link key={c.cliente_id} href="/ventas/cuentas-por-cobrar" className={`${cls} hover:bg-stone-100/60`}>
+                      {inner}
+                    </Link>
+                  ) : (
+                    <div key={c.cliente_id} className={cls}>{inner}</div>
+                  )
+                })}
+                {puedeCxC && (
+                  <Link href="/ventas/cuentas-por-cobrar" className="block">
+                    <Button variant="ghost" size="sm" className="w-full mt-2">
+                      Ver cartera completa <ArrowRight className="h-4 w-4 ml-1" />
+                    </Button>
                   </Link>
-                ))}
-                <Link href="/ventas/cuentas-por-cobrar" className="block">
-                  <Button variant="ghost" size="sm" className="w-full mt-2">
-                    Ver cartera completa <ArrowRight className="h-4 w-4 ml-1" />
-                  </Button>
-                </Link>
+                )}
               </div>
             ) : (
               <div className="text-center text-muted-foreground py-4">
