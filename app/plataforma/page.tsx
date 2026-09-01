@@ -5,6 +5,7 @@ import {
 } from "@/lib/services/plataforma"
 import { FlagToggle } from "./flag-toggle"
 import { LogoutButton } from "./logout-button"
+import { CrearEmpresaDialog } from "./crear-empresa"
 
 export const dynamic = "force-dynamic"
 
@@ -78,7 +79,10 @@ export default async function PlataformaPage() {
             Todas las empresas del sistema, sus métricas de uso y el estado de la base de datos.
           </p>
         </div>
-        <LogoutButton />
+        <div className="flex items-center gap-2 shrink-0">
+          <CrearEmpresaDialog />
+          <LogoutButton />
+        </div>
       </div>
 
       {err && (

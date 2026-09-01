@@ -217,3 +217,99 @@ export async function setEmpresaFlag(
   if (error) return { error: error.message }
   return { error: null }
 }
+
+// ==================== CREAR EMPRESA + ADMIN ====================
+
+export interface CrearEmpresaInput {
+  nombre_empresa: string
+  documento: string // RTN
+  nombre_comercial?: string
+  correo?: string
+  telefono?: string
+  direccion?: string
+  admin_nombre: string
+  admin_email: string
+  admin_password: string
+}
+
+/**
+ * Crea una nueva empresa (razon_social) + su usuario ADMIN en una sola
+ * operacion, desde el portal de super-admin. El auth user queda YA VALIDADO
+ * (email_confirm) para poder iniciar sesion de inmediato, y con rol 'Admin'
+ * (ve todos los modulos sin permisos explicitos). Requiere super-admin de
+ * plataforma. Usa el service role. Rollback best-effort si algo falla.
+ */
+export async function crearEmpresaConAdmin(
+  input: CrearEmpresaInput
+): Promise<{ error: string | null; razonSocialId?: number; usuarioId?: string }> {
+  const su = await getSuperadmin()
+  if (!su) return { error: "No autorizado." }
+
+  const admin = createAdminClient()
+  if (!admin) return { error: "Service role no configurado (SUPABASE_SERVICE_ROLE_KEY)." }
+
+  const nombre_empresa = (input.nombre_empresa || "").trim()
+  const documento = (input.documento || "").trim()
+  const admin_nombre = (input.admin_nombre || "").trim()
+  const admin_email = (input.admin_email || "").trim().toLowerCase()
+  const admin_password = input.admin_password || ""
+
+  if (!nombre_empresa) return { error: "El nombre de la empresa es obligatorio." }
+  if (!documento) return { error: "El RTN/documento de la empresa es obligatorio." }
+  if (!admin_nombre) return { error: "El nombre del administrador es obligatorio." }
+  if (!admin_email || !admin_email.includes("@")) return { error: "El correo del administrador no es valido." }
+  if (admin_password.length < 6) return { error: "La contrasena debe tener al menos 6 caracteres." }
+
+  // 1) Crear la razon social (empresa).
+  const { data: rs, error: rsErr } = await admin
+    .from("razon_social")
+    .insert({
+      nombre_empresa,
+      documento,
+      nombre_comercial: input.nombre_comercial?.trim() || null,
+      correo: input.correo?.trim() || null,
+      telefono: input.telefono?.trim() || null,
+      direccion: input.direccion?.trim() || null,
+    })
+    .select("id")
+    .single()
+  if (rsErr || !rs) {
+    return { error: rsErr?.message || "No se pudo crear la empresa." }
+  }
+  const razonSocialId = rs.id as number
+
+  // 2) Crear el usuario admin en auth (ya validado / email_confirm).
+  const { data: created, error: createErr } = await admin.auth.admin.createUser({
+    email: admin_email,
+    password: admin_password,
+    email_confirm: true,
+    user_metadata: { nombre: admin_nombre },
+  })
+  if (createErr || !created?.user) {
+    // Rollback: borra la empresa recien creada.
+    await admin.from("razon_social").delete().eq("id", razonSocialId)
+    const msg = (createErr?.message || "").toLowerCase()
+    if (msg.includes("already") || msg.includes("exist") || msg.includes("registered") || msg.includes("duplicate")) {
+      return { error: "Ya existe un usuario con ese correo." }
+    }
+    return { error: createErr?.message || "No se pudo crear el usuario administrador." }
+  }
+  const usuarioId = created.user.id
+
+  // 3) Perfil de aplicacion (rol Admin -> acceso a todos los modulos).
+  const { error: insErr } = await admin.from("usuarios").insert({
+    id: usuarioId,
+    nombre: admin_nombre,
+    rol: "Admin",
+    razon_social_id: razonSocialId,
+    activo: true,
+  })
+  if (insErr) {
+    // Rollback: borra el auth user y la empresa.
+    await admin.auth.admin.deleteUser(usuarioId).catch(() => {})
+    await admin.from("razon_social").delete().eq("id", razonSocialId)
+    return { error: insErr.message || "No se pudo crear el perfil del administrador." }
+  }
+
+  return { error: null, razonSocialId, usuarioId }
+}

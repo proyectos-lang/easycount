@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { getSuperadmin, setEmpresaFlag } from "@/lib/services/plataforma"
+import { getSuperadmin, setEmpresaFlag, crearEmpresaConAdmin, type CrearEmpresaInput } from "@/lib/services/plataforma"
 import type { FeatureFlags } from "@/lib/constants/feature-flags"
 
 /**
@@ -25,4 +25,16 @@ export async function toggleEmpresaFlag(
   const res = await setEmpresaFlag(razonSocialId, flag, value)
   if (!res.error) revalidatePath("/plataforma")
   return res
+}
+
+/**
+ * Server action: crea una nueva empresa + su usuario admin (ya validado).
+ * La autorizacion (super-admin) la valida `crearEmpresaConAdmin` server-side.
+ */
+export async function crearEmpresaAction(
+  input: CrearEmpresaInput
+): Promise<{ error: string | null }> {
+  const res = await crearEmpresaConAdmin(input)
+  if (!res.error) revalidatePath("/plataforma")
+  return { error: res.error }
 }
