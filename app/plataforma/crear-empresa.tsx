@@ -105,6 +105,7 @@ export function CrearEmpresaDialog() {
                 <p><span className="text-stone-500">Empresa:</span> <strong>{creada.empresa}</strong></p>
                 <p><span className="text-stone-500">Usuario admin:</span> <strong>{creada.email}</strong></p>
                 <p className="text-xs text-stone-500">Comparte estas credenciales con el cliente. Ya puede iniciar sesión.</p>
+                <p className="text-xs text-stone-500">Se creó también un almacén «Principal» con bodega «General» (punto de venta) y el cliente «Consumidor Final».</p>
               </div>
             </div>
             <DialogFooter>

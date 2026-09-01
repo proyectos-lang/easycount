@@ -311,5 +311,41 @@ export async function crearEmpresaConAdmin(
     return { error: insErr.message || "No se pudo crear el perfil del administrador." }
   }
 
+  // 4) Sembrado por defecto (BEST-EFFORT): almacen + bodega (marcada como punto
+  //    de venta) + cliente "Consumidor Final", para que la empresa quede lista
+  //    para vender sin configurar nada. Si algo falla, no es critico: la empresa
+  //    y el admin ya existen y el admin puede crear estos catalogos a mano.
+  try {
+    const { data: alm } = await admin
+      .from("almacenes")
+      .insert({ nombre: "Principal", ubicacion: "Principal", razon_social_id: razonSocialId, usuario: admin_nombre })
+      .select("id")
+      .single()
+
+    if (alm?.id) {
+      const { data: loc } = await admin
+        .from("localizaciones")
+        .insert({ nombre: "General", almacen_id: alm.id, razon_social_id: razonSocialId, usuario: admin_nombre })
+        .select("id")
+        .single()
+
+      // Marca la bodega como punto de venta (se preselecciona en Nueva Venta).
+      // Requiere el script 041; si la tabla no existe se ignora el error.
+      if (loc?.id) {
+        const { error: cfgErr } = await admin
+          .from("localizaciones_config")
+          .insert({ localizacion_id: loc.id, razon_social_id: razonSocialId, es_punto_venta: true, usuario: admin_nombre })
+        if (cfgErr) console.log("[crearEmpresaConAdmin] localizaciones_config (opcional):", cfgErr.message)
+      }
+    }
+
+    const { error: cliErr } = await admin
+      .from("clientes")
+      .insert({ nombre: "Consumidor Final", razon_social_id: razonSocialId })
+    if (cliErr) console.log("[crearEmpresaConAdmin] cliente Consumidor Final (opcional):", cliErr.message)
+  } catch (seedErr) {
+    console.log("[crearEmpresaConAdmin] sembrado por defecto fallo (no critico):", seedErr)
+  }
+
   return { error: null, razonSocialId, usuarioId }
 }
