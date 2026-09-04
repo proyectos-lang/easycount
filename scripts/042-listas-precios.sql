@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS public.listas_precios (
   razon_social_id bigint NOT NULL,
   nombre          text   NOT NULL,
   tipo            text   NOT NULL DEFAULT 'porcentaje',  -- 'porcentaje' | 'individual'
-  -- Ajuste % sobre el precio base para tipo 'porcentaje'. Negativo = descuento
-  -- (ej. -10 = 10% menos), positivo = recargo. Solo aplica si tipo='porcentaje'.
+  -- % de DESCUENTO sobre el precio base (tipo 'porcentaje'). Siempre baja el
+  -- precio: ej. 5 = 5% menos. La app usa el valor absoluto. Solo si tipo='porcentaje'.
   porcentaje      numeric NOT NULL DEFAULT 0,
   activo          boolean NOT NULL DEFAULT true,
   usuario         text,

@@ -431,7 +431,7 @@ export default function ClientesConfigPage() {
                     {listasPrecios.map((l) => (
                       <SelectItem key={l.id} value={String(l.id)}>
                         {l.nombre}{" "}
-                        {l.tipo === "porcentaje" ? `(${l.porcentaje > 0 ? "+" : ""}${l.porcentaje}%)` : "(individual)"}
+                        {l.tipo === "porcentaje" ? `(-${Math.abs(l.porcentaje)}% desc.)` : "(individual)"}
                       </SelectItem>
                     ))}
                   </SelectContent>

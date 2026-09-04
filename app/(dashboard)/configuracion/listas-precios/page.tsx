@@ -144,7 +144,7 @@ export default function ListasPreciosPage() {
       <Card className="rounded-2xl border-stone-200 shadow-sm">
         <CardHeader className="p-4 md:p-6">
           <CardTitle className="text-lg">Listas ({listas.length})</CardTitle>
-          <CardDescription>El porcentaje negativo es descuento; positivo, recargo.</CardDescription>
+          <CardDescription>El porcentaje se aplica como DESCUENTO sobre el precio del maestro.</CardDescription>
         </CardHeader>
         <CardContent className="p-4 md:p-6 pt-0">
           {loading ? (
@@ -174,7 +174,7 @@ export default function ListasPreciosPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        {l.tipo === "porcentaje" ? `${l.porcentaje > 0 ? "+" : ""}${l.porcentaje}%` : "—"}
+                        {l.tipo === "porcentaje" ? `-${Math.abs(l.porcentaje)}% desc.` : "—"}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
@@ -224,9 +224,9 @@ export default function ListasPreciosPage() {
             </div>
             {tipo === "porcentaje" && (
               <div className="grid gap-1.5">
-                <Label>Porcentaje de ajuste (%)</Label>
-                <Input type="number" step="any" value={porcentaje} onChange={(e) => setPorcentaje(e.target.value)} placeholder="-10 = 10% descuento; 5 = 5% recargo" />
-                <p className="text-xs text-muted-foreground">Negativo = descuento, positivo = recargo, sobre el precio del maestro.</p>
+                <Label>Porcentaje de descuento (%)</Label>
+                <Input type="number" step="any" min="0" value={porcentaje} onChange={(e) => setPorcentaje(e.target.value)} placeholder="Ej. 5 = 5% de descuento" />
+                <p className="text-xs text-muted-foreground">Siempre baja el precio del maestro. Ej.: 5 → 5% menos.</p>
               </div>
             )}
           </div>

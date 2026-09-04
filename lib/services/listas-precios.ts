@@ -231,5 +231,7 @@ export function calcularPrecioLista(
     const p = detalle[productoId]
     return p != null ? p : base // sin precio especifico -> precio del maestro
   }
-  return +(base * (1 + (Number(lista.porcentaje) || 0) / 100)).toFixed(2)
+  // El porcentaje es un DESCUENTO: siempre baja el precio (ej. 5 = 5% menos).
+  const desc = Math.abs(Number(lista.porcentaje) || 0)
+  return +(base * (1 - desc / 100)).toFixed(2)
 }

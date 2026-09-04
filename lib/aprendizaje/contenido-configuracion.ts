@@ -41,8 +41,8 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
     descripcion:
       "Precios especiales por cliente: listas por porcentaje (aplican a todo el catálogo) o individuales (precio producto por producto).",
     queHace: [
-      "Crea listas de dos tipos: 'Porcentaje general' (un % que ajusta el precio del maestro en todos los productos) o 'Individual' (defines un precio específico por producto).",
-      "En las de porcentaje, un valor negativo es descuento (ej. -10 = 10% menos) y uno positivo es recargo.",
+      "Crea listas de dos tipos: 'Porcentaje general' (un % de DESCUENTO que se aplica sobre el precio del maestro en todos los productos) o 'Individual' (defines un precio específico por producto).",
+      "En las de porcentaje, el valor siempre baja el precio (ej. 5 = 5% de descuento).",
       "En las individuales, cada producto sin precio definido usa el precio del maestro.",
       "Las listas se asignan a los clientes desde el módulo Clientes. Un cliente sin lista usa el precio normal del maestro de productos.",
       "En Nueva Venta, al elegir un cliente con lista, el catálogo muestra el precio base tachado y al lado el precio final de la lista; ese precio final es el que entra a la venta.",
@@ -57,8 +57,8 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
         titulo: "Crear una lista por porcentaje",
         pasos: [
           "Abre Configuración → Listas de Precios y presiona 'Nueva lista'.",
-          "Nombre (ej. Mayoristas), tipo 'Porcentaje general' y el porcentaje (negativo para descuento).",
-          "Guarda: se aplicará ese porcentaje sobre el precio de todos los productos para los clientes con esa lista.",
+          "Nombre (ej. Mayoristas), tipo 'Porcentaje general' y el porcentaje de descuento (ej. 5 = 5% menos).",
+          "Guarda: ese descuento se aplicará sobre el precio de todos los productos para los clientes con esa lista.",
         ],
       },
       {
