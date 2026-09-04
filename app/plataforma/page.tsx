@@ -6,13 +6,11 @@ import {
 import { FlagToggle } from "./flag-toggle"
 import { LogoutButton } from "./logout-button"
 import { CrearEmpresaDialog } from "./crear-empresa"
+import { GestionUsuariosDialog } from "./gestion-usuarios"
 
 export const dynamic = "force-dynamic"
 
 // ---- helpers de formato (server-side) ----
-function fmtL(n: number): string {
-  return "L " + (n || 0).toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 function fmtNum(n: number): string {
   return (n || 0).toLocaleString("es-HN")
 }
@@ -21,10 +19,6 @@ function fmtBytes(b: number): string {
   const u = ["B", "KB", "MB", "GB", "TB"]
   const i = Math.min(Math.floor(Math.log(b) / Math.log(1024)), u.length - 1)
   return `${(b / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${u[i]}`
-}
-function fmtFecha(s: string | null): string {
-  if (!s) return "—"
-  return new Date(s).toLocaleDateString("es-HN", { day: "2-digit", month: "short", year: "numeric" })
 }
 function haceCuanto(s: string | null): string {
   if (!s) return "nunca"
@@ -66,8 +60,6 @@ export default async function PlataformaPage() {
   const err = empRes.error || dbRes.error
 
   const totUsuarios = empresas.reduce((a, e) => a + e.usuarios, 0)
-  const totIngresoMes = empresas.reduce((a, e) => a + e.ingreso_mes, 0)
-  const totInventario = empresas.reduce((a, e) => a + e.valor_inventario, 0)
   const activas = empresas.filter((e) => activaReciente(e.ultima_conexion)).length
 
   return (
@@ -95,12 +87,10 @@ export default async function PlataformaPage() {
         </div>
       )}
 
-      {/* KPIs globales */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      {/* KPIs globales (administracion: sin datos de ventas ni inventario) */}
+      <div className="grid grid-cols-3 gap-3">
         <Kpi label="Empresas" value={fmtNum(empresas.length)} sub={`${activas} activas (30 d)`} />
         <Kpi label="Usuarios" value={fmtNum(totUsuarios)} />
-        <Kpi label="Ingreso del mes" value={fmtL(totIngresoMes)} sub="suma de todas" />
-        <Kpi label="Inventario" value={fmtL(totInventario)} sub="valor al costo" />
         <Kpi label="Tamaño BD" value={db ? fmtBytes(db.db_bytes) : "—"} />
       </div>
 
@@ -159,12 +149,8 @@ export default async function PlataformaPage() {
                 <th className="px-4 py-2 font-medium">Empresa</th>
                 <th className="px-4 py-2 font-medium">RTN</th>
                 <th className="px-4 py-2 text-right font-medium">Usuarios</th>
-                <th className="px-4 py-2 text-right font-medium">Productos</th>
-                <th className="px-4 py-2 text-right font-medium">Ventas</th>
-                <th className="px-4 py-2 text-right font-medium">Ingreso mes</th>
-                <th className="px-4 py-2 text-right font-medium">Inventario</th>
-                <th className="px-4 py-2 font-medium">Última venta</th>
                 <th className="px-4 py-2 font-medium">Última conexión</th>
+                <th className="px-4 py-2 font-medium">Gestión</th>
                 <th className="px-4 py-2 font-medium" title="Mostrar el ISV (15%) en Nueva Venta para esta empresa">
                   ISV en ventas
                 </th>
@@ -179,7 +165,7 @@ export default async function PlataformaPage() {
             <tbody>
               {empresas.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-4 py-10 text-center text-stone-400">
+                  <td colSpan={8} className="px-4 py-10 text-center text-stone-400">
                     Sin empresas para mostrar.
                   </td>
                 </tr>
@@ -206,13 +192,11 @@ export default async function PlataformaPage() {
                       {e.usuarios}
                       <span className="text-stone-400"> ({e.usuarios_activos})</span>
                     </td>
-                    <td className="px-4 py-2 text-right tabular-nums">{fmtNum(e.productos)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{fmtNum(e.ventas)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{fmtL(e.ingreso_mes)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{fmtL(e.valor_inventario)}</td>
-                    <td className="px-4 py-2 text-stone-500">{fmtFecha(e.ultima_venta)}</td>
                     <td className="px-4 py-2 text-stone-500" title={e.ultima_conexion || ""}>
                       {haceCuanto(e.ultima_conexion)}
+                    </td>
+                    <td className="px-4 py-2">
+                      <GestionUsuariosDialog razonSocialId={e.id} empresaNombre={e.nombre} />
                     </td>
                     <td className="px-4 py-2">
                       <FlagToggle

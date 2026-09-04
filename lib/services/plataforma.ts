@@ -349,3 +349,160 @@ export async function crearEmpresaConAdmin(
 
   return { error: null, razonSocialId, usuarioId }
 }
+
+// ==================== GESTION DE USUARIOS (cross-empresa) ====================
+// Todas requieren super-admin de plataforma y usan el service role, por eso
+// pueden administrar usuarios de CUALQUIER empresa (a diferencia de las de
+// configuracion/usuarios, que estan acotadas al propio tenant del admin).
+
+export interface UsuarioEmpresa {
+  id: string
+  nombre: string
+  rol: string | null
+  activo: boolean
+}
+export interface ModuloItem {
+  id: number
+  nombre: string
+}
+
+/** Devuelve el cliente service-role SOLO si el caller es super-admin; si no, null. */
+async function getAdminIfSuper() {
+  const su = await getSuperadmin()
+  if (!su) return null
+  return createAdminClient()
+}
+
+const NO_AUTORIZADO = "No autorizado o service role no configurado."
+
+/** Usuarios de una empresa + catalogo de modulos (para editar permisos). */
+export async function getUsuariosEmpresa(
+  razonSocialId: number
+): Promise<{ usuarios: UsuarioEmpresa[]; modulos: ModuloItem[]; error: string | null }> {
+  const admin = await getAdminIfSuper()
+  if (!admin) return { usuarios: [], modulos: [], error: NO_AUTORIZADO }
+  const [uRes, mRes] = await Promise.all([
+    admin.from("usuarios").select("id, nombre, rol, activo").eq("razon_social_id", razonSocialId).order("nombre", { ascending: true }),
+    admin.from("modulos").select("id, nombre").order("nombre", { ascending: true }),
+  ])
+  if (uRes.error) return { usuarios: [], modulos: [], error: uRes.error.message }
+  return {
+    usuarios: (uRes.data || []) as UsuarioEmpresa[],
+    modulos: (mRes.data || []) as ModuloItem[],
+    error: null,
+  }
+}
+
+/** Permisos (modulo_id -> puede_ver) de un usuario. */
+export async function getPermisosUsuario(
+  usuarioId: string
+): Promise<{ permisos: Record<number, boolean>; error: string | null }> {
+  const admin = await getAdminIfSuper()
+  if (!admin) return { permisos: {}, error: NO_AUTORIZADO }
+  const { data, error } = await admin.from("permisos_usuarios").select("modulo_id, puede_ver").eq("usuario_id", usuarioId)
+  if (error) return { permisos: {}, error: error.message }
+  const map: Record<number, boolean> = {}
+  for (const r of data || []) map[r.modulo_id as number] = !!r.puede_ver
+  return { permisos: map, error: null }
+}
+
+/** Crea un usuario (auth ya validado) para una empresa. */
+export async function crearUsuarioEmpresa(input: {
+  razonSocialId: number
+  email: string
+  password: string
+  nombre: string
+  rol: "admin" | "usuario"
+}): Promise<{ error: string | null; usuarioId?: string }> {
+  const admin = await getAdminIfSuper()
+  if (!admin) return { error: NO_AUTORIZADO }
+
+  const email = (input.email || "").trim().toLowerCase()
+  const nombre = (input.nombre || "").trim()
+  const rol = input.rol === "admin" ? "Admin" : "Usuario"
+  if (!email || !email.includes("@")) return { error: "El correo no es valido." }
+  if (!nombre) return { error: "El nombre es obligatorio." }
+  if ((input.password || "").length < 6) return { error: "La contrasena debe tener al menos 6 caracteres." }
+
+  const { data: created, error: createErr } = await admin.auth.admin.createUser({
+    email,
+    password: input.password,
+    email_confirm: true,
+    user_metadata: { nombre },
+  })
+  if (createErr || !created?.user) {
+    const msg = (createErr?.message || "").toLowerCase()
+    if (msg.includes("already") || msg.includes("exist") || msg.includes("registered") || msg.includes("duplicate")) {
+      return { error: "Ya existe un usuario con ese correo." }
+    }
+    return { error: createErr?.message || "No se pudo crear el usuario en auth." }
+  }
+  const newId = created.user.id
+
+  const { error: insErr } = await admin.from("usuarios").insert({
+    id: newId,
+    nombre,
+    rol,
+    razon_social_id: input.razonSocialId,
+    activo: true,
+  })
+  if (insErr) {
+    await admin.auth.admin.deleteUser(newId).catch(() => {})
+    return { error: insErr.message || "No se pudo crear el perfil del usuario." }
+  }
+  return { error: null, usuarioId: newId }
+}
+
+/** Enciende/apaga el permiso de un modulo para un usuario. */
+export async function setPermisoUsuario(input: {
+  usuarioId: string
+  moduloId: number
+  puedeVer: boolean
+}): Promise<{ error: string | null }> {
+  const admin = await getAdminIfSuper()
+  if (!admin) return { error: NO_AUTORIZADO }
+  const { error } = await admin
+    .from("permisos_usuarios")
+    .upsert(
+      { usuario_id: input.usuarioId, modulo_id: input.moduloId, puede_ver: input.puedeVer },
+      { onConflict: "usuario_id,modulo_id" }
+    )
+  return { error: error ? error.message : null }
+}
+
+/** Cambia el rol (admin ve todos los modulos; usuario solo los permitidos). */
+export async function setRolUsuario(input: {
+  usuarioId: string
+  rol: "admin" | "usuario"
+}): Promise<{ error: string | null }> {
+  const admin = await getAdminIfSuper()
+  if (!admin) return { error: NO_AUTORIZADO }
+  const { error } = await admin
+    .from("usuarios")
+    .update({ rol: input.rol === "admin" ? "Admin" : "Usuario" })
+    .eq("id", input.usuarioId)
+  return { error: error ? error.message : null }
+}
+
+/** Activa/desactiva un usuario. */
+export async function setActivoUsuario(input: {
+  usuarioId: string
+  activo: boolean
+}): Promise<{ error: string | null }> {
+  const admin = await getAdminIfSuper()
+  if (!admin) return { error: NO_AUTORIZADO }
+  const { error } = await admin.from("usuarios").update({ activo: input.activo }).eq("id", input.usuarioId)
+  return { error: error ? error.message : null }
+}
+
+/** Restablece la contrasena de un usuario. */
+export async function resetPasswordUsuario(input: {
+  usuarioId: string
+  newPassword: string
+}): Promise<{ error: string | null }> {
+  const admin = await getAdminIfSuper()
+  if (!admin) return { error: NO_AUTORIZADO }
+  if ((input.newPassword || "").length < 6) return { error: "La contrasena debe tener al menos 6 caracteres." }
+  const { error } = await admin.auth.admin.updateUserById(input.usuarioId, { password: input.newPassword })
+  return { error: error ? error.message : null }
+}
