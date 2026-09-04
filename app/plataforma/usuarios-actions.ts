@@ -9,7 +9,7 @@ import {
   setRolUsuario,
   setActivoUsuario,
   resetPasswordUsuario,
-  getModulosDeshabilitadosEmpresa,
+  getModulosEmpresaConfig,
   setModuloEmpresa,
 } from "@/lib/services/plataforma"
 
@@ -68,8 +68,8 @@ export async function resetPasswordUsuarioAction(input: {
 
 // ----- Modulos habilitados por empresa -----
 
-export async function listarModulosDeshabilitados(razonSocialId: number) {
-  return getModulosDeshabilitadosEmpresa(razonSocialId)
+export async function listarConfigModulosEmpresa(razonSocialId: number) {
+  return getModulosEmpresaConfig(razonSocialId)
 }
 
 export async function setModuloEmpresaAction(input: {

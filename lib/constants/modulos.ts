@@ -170,6 +170,44 @@ export const MODULOS: ReadonlyArray<ModuloGranular> = [
   },
 ] as const
 
+/**
+ * Snapshot CONGELADO de los modulos "base" (los que existian al 1-sep-2026).
+ * Habilitados por defecto para toda empresa. Los modulos que se AGREGUEN despues
+ * NO deben ponerse aqui: asi quedan DESHABILITADOS por defecto y el super-admin
+ * los habilita empresa por empresa desde /plataforma. (No derivar de MODULOS: es
+ * un snapshot a proposito para que los nuevos no se auto-incluyan.)
+ */
+export const MODULOS_BASE: ReadonlyArray<string> = [
+  "Dashboard",
+  "Dashboard Ventas", "Nueva Venta", "Historial Ventas", "Devoluciones", "Catalogo",
+  "Orden de Compra", "Recepcion por OC", "Recepcion por Factura", "Recalcular Recepcion",
+  "Historial de Transacciones", "Movimientos Manuales", "Traslados", "Ajustes de Inventario", "Ajuste de Costo", "Valoracion",
+  "Dashboard Finanzas", "Movimientos de Cuentas", "Estado de Resultados", "Gastos", "Caja Chica", "Cierre Diario", "Analisis Financiero", "Consolidacion Bancaria",
+  "Razon Social", "Usuarios y Permisos", "Productos", "Almacenes", "Clientes", "Proveedores", "Cuentas Bancarias", "Preview PDFs",
+]
+const MODULOS_BASE_SET = new Set<string>(MODULOS_BASE)
+
+/** true = modulo base (ON por defecto). false = modulo NUEVO (OFF por defecto). */
+export function moduloEsBase(nombre: string): boolean {
+  return MODULOS_BASE_SET.has(nombre)
+}
+
+/**
+ * ¿La empresa tiene HABILITADO este modulo (por nombre canonico)?
+ *  - Base: habilitado salvo que este en `deshabilitados` (opt-out).
+ *  - Nuevo: deshabilitado salvo que este en `habilitados` (opt-in).
+ */
+export function moduloHabilitadoParaEmpresa(
+  nombre: string,
+  deshabilitados: string[] | undefined | null,
+  habilitados: string[] | undefined | null
+): boolean {
+  if (MODULOS_BASE_SET.has(nombre)) {
+    return !(deshabilitados || []).includes(nombre)
+  }
+  return (habilitados || []).includes(nombre)
+}
+
 /** Orden fijo de categorias para el sidebar */
 export const CATEGORIAS_ORDEN: ReadonlyArray<Categoria> = [
   "Dashboard",

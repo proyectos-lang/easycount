@@ -3,7 +3,7 @@
 import { createAdminClient, isAdminClientConfigured } from "@/lib/supabase/admin"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
-import { findModuloByDBName } from "@/lib/constants/modulos"
+import { findModuloByDBName, moduloHabilitadoParaEmpresa } from "@/lib/constants/modulos"
 
 /**
  * Verifica que el caller sea un admin activo y devuelve su razon_social_id.
@@ -345,14 +345,16 @@ export async function listUsuariosAction(): Promise<{
     console.log("[listUsuariosAction] modulos error:", mRes.error)
   }
 
-  // Modulos deshabilitados por el super-admin para esta empresa: NO se pueden
-  // asignar (ni aparecen) en la seccion de permisos.
-  const desArr = (cfgRes.data?.config as Record<string, unknown> | null)?.modulos_deshabilitados
-  const deshabilitados = new Set(
-    Array.isArray(desArr) ? (desArr as unknown[]).filter((x): x is string => typeof x === "string") : []
-  )
-  const modulos = ((mRes.data || []) as ModuloListItem[]).filter(
-    (m) => !deshabilitados.has(findModuloByDBName(m.nombre)?.nombre ?? m.nombre)
+  // Modulos NO habilitados por el super-admin para esta empresa: NO se pueden
+  // asignar (ni aparecen) en la seccion de permisos. Base = ON salvo
+  // deshabilitados; nuevos = OFF salvo que el super-admin los habilite.
+  const cfg = cfgRes.data?.config as Record<string, unknown> | null
+  const soloStrings = (v: unknown): string[] =>
+    Array.isArray(v) ? (v as unknown[]).filter((x): x is string => typeof x === "string") : []
+  const des = soloStrings(cfg?.modulos_deshabilitados)
+  const hab = soloStrings(cfg?.modulos_habilitados)
+  const modulos = ((mRes.data || []) as ModuloListItem[]).filter((m) =>
+    moduloHabilitadoParaEmpresa(findModuloByDBName(m.nombre)?.nombre ?? m.nombre, des, hab)
   )
 
   return {

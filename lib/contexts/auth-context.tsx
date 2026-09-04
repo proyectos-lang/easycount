@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { createClient } from "@/lib/supabase/client"
-import { findModuloByDBName } from "@/lib/constants/modulos"
+import { findModuloByDBName, moduloHabilitadoParaEmpresa } from "@/lib/constants/modulos"
 import { esPlataformaAdmin } from "@/app/plataforma/actions"
 import { DEFAULT_FLAGS, mergeFlags, type FeatureFlags } from "@/lib/constants/feature-flags"
 
@@ -16,9 +16,10 @@ export interface AuthUser {
   logo_url: string | null
   razon_social_nombre: string | null
   modulos_permitidos: string[]
-  /** Modulos DESHABILITADOS por el super-admin para toda la empresa (nombres
-   *  canonicos). Un modulo aqui no lo ve nadie de la empresa, ni el admin. */
+  /** Modulos BASE deshabilitados por el super-admin para toda la empresa. */
   modulos_deshabilitados: string[]
+  /** Modulos NUEVOS habilitados por el super-admin (opt-in; nombres canonicos). */
+  modulos_habilitados: string[]
   /** Feature flags / mini-personalizaciones de la empresa (con defaults). */
   flags: FeatureFlags
 }
@@ -113,6 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         //    usan los defaults (todos los modulos habilitados).
         let flags: FeatureFlags = DEFAULT_FLAGS
         let modulosDeshabilitados: string[] = []
+        let modulosHabilitados: string[] = []
         if (perfil.razon_social_id != null) {
           const { data: cfg, error: cfgErr } = await supabase
             .from("razon_social_config")
@@ -122,10 +124,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!cfgErr) {
             const cfgObj = (cfg?.config as Record<string, unknown> | null) ?? {}
             flags = mergeFlags(cfgObj)
-            const des = cfgObj.modulos_deshabilitados
-            modulosDeshabilitados = Array.isArray(des)
-              ? (des as unknown[]).filter((x): x is string => typeof x === "string")
-              : []
+            const soloStrings = (v: unknown) =>
+              Array.isArray(v) ? (v as unknown[]).filter((x): x is string => typeof x === "string") : []
+            modulosDeshabilitados = soloStrings(cfgObj.modulos_deshabilitados)
+            modulosHabilitados = soloStrings(cfgObj.modulos_habilitados)
           }
         }
 
@@ -140,6 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           razon_social_nombre: nombreEmpresa,
           modulos_permitidos: modulosPermitidos,
           modulos_deshabilitados: modulosDeshabilitados,
+          modulos_habilitados: modulosHabilitados,
           flags,
         }
       } catch (err) {
@@ -352,9 +355,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hasModulo = React.useCallback(
     (nombre: string) => {
       if (!user) return false
-      // Candado a nivel EMPRESA: si el super-admin deshabilito el modulo para la
-      // empresa, NADIE lo ve (ni siquiera el admin).
-      if ((user.modulos_deshabilitados || []).includes(nombre)) return false
+      // Candado a nivel EMPRESA: modulos base ON salvo deshabilitados; modulos
+      // nuevos OFF salvo que el super-admin los habilite. Si no esta habilitado
+      // para la empresa, NADIE lo ve (ni siquiera el admin).
+      if (!moduloHabilitadoParaEmpresa(nombre, user.modulos_deshabilitados, user.modulos_habilitados)) return false
       // Los administradores ven todos los modulos (habilitados para la empresa).
       if ((user.rol || "").trim().toLowerCase() === "admin") return true
       // Cualquier otro usuario ve SOLO los modulos con permiso explicito
