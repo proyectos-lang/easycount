@@ -242,7 +242,7 @@ export default function ListasPreciosPage() {
 
       {/* Editor de precios individuales */}
       <Dialog open={preciosOpen} onOpenChange={setPreciosOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Precios · {listaSel?.nombre}</DialogTitle>
             <DialogDescription>
