@@ -48,6 +48,7 @@ import {
 } from "@/lib/services/ventas"
 import { useTenant } from "@/lib/hooks/use-tenant"
 import { useAuth } from "@/lib/contexts/auth-context"
+import { getListaAplicadaCliente, calcularPrecioLista, type ListaAplicada } from "@/lib/services/listas-precios"
 import { getCuentas, type CuentaConfig } from "@/lib/services/cuentas"
 import { useCajaSesion } from "@/lib/hooks/use-caja-sesion"
 import { printTirilla } from "@/lib/print-tirilla"
@@ -71,7 +72,9 @@ export default function NuevaVentaPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { ready, razonSocialId } = useTenant()
-  const { user } = useAuth()
+  const { user, hasModulo } = useAuth()
+  // Feature Listas de Precios (habilitada por empresa por el super-admin).
+  const puedeListas = hasModulo("Listas de Precios")
   // Flag por empresa: si es false, la empresa vende SIN ISV (se oculta el campo).
   const mostrarIsv = user?.flags?.ventas_mostrar_isv ?? true
   // Flag por empresa: activa el lector de codigo de barras (escanear = ubicar/agregar).
@@ -84,6 +87,8 @@ export default function NuevaVentaPage() {
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [clientes, setClientes] = React.useState<Cliente[]>([])
+  // Lista de precios del cliente seleccionado (null = precio del maestro).
+  const [listaAplicada, setListaAplicada] = React.useState<ListaAplicada | null>(null)
   const [productos, setProductos] = React.useState<Producto[]>([])
   const [marcas, setMarcas] = React.useState<Marca[]>([])
   const [categorias, setCategorias] = React.useState<Categoria[]>([])
@@ -448,6 +453,23 @@ export default function NuevaVentaPage() {
     return (precio - costo) * cantidad
   }
 
+  // Carga la lista de precios del cliente al seleccionarlo (si la empresa tiene
+  // el modulo). Con lista, el catalogo muestra el precio base tachado + el final.
+  React.useEffect(() => {
+    if (!puedeListas || !clienteId) { setListaAplicada(null); return }
+    const cid = Number(clienteId)
+    if (!cid) { setListaAplicada(null); return }
+    getListaAplicadaCliente(cid).then((r) => setListaAplicada(r.data))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clienteId, puedeListas])
+
+  // Precio de venta efectivo de un producto: precio de la lista del cliente si
+  // aplica, o el precio del maestro.
+  const precioDeVenta = React.useCallback(
+    (p: Producto) => calcularPrecioLista(p.precio_venta_sugerido || 0, listaAplicada, p.id ?? -1),
+    [listaAplicada]
+  )
+
   async function addProducto(producto: Producto) {
     const existing = lineas.findIndex(l => l.producto_id === producto.id)
     if (existing >= 0) {
@@ -462,15 +484,16 @@ export default function NuevaVentaPage() {
         setStockPorLocalizacion(prev => ({ ...prev, [producto.id!]: stockDisponible }))
       }
       
+      const precio = precioDeVenta(producto)
       setLineas(prev => [...prev, {
         producto_id: producto.id!,
         producto_nombre: producto.nombre,
         producto_codigo: producto.codigo_barras,
         cantidad: 1,
-        precio_unitario: producto.precio_venta_sugerido,
+        precio_unitario: precio,
         costo_promedio: producto.costo_promedio || 0,
-        subtotal: producto.precio_venta_sugerido,
-        utilidad_linea: calculateUtilidadLinea(1, producto.precio_venta_sugerido, producto.costo_promedio || 0),
+        subtotal: precio,
+        utilidad_linea: calculateUtilidadLinea(1, precio, producto.costo_promedio || 0),
         stock_disponible: stockDisponible
       }])
     }
@@ -494,17 +517,20 @@ export default function NuevaVentaPage() {
     }
     setLineas((prev) => [
       ...prev,
-      ...nuevos.map((p) => ({
-        producto_id: p.id!,
-        producto_nombre: p.nombre,
-        producto_codigo: p.codigo_barras,
-        cantidad: 1,
-        precio_unitario: p.precio_venta_sugerido,
-        costo_promedio: p.costo_promedio || 0,
-        subtotal: p.precio_venta_sugerido,
-        utilidad_linea: calculateUtilidadLinea(1, p.precio_venta_sugerido, p.costo_promedio || 0),
-        stock_disponible: stockMap[p.id!] || 0,
-      })),
+      ...nuevos.map((p) => {
+        const precio = precioDeVenta(p)
+        return {
+          producto_id: p.id!,
+          producto_nombre: p.nombre,
+          producto_codigo: p.codigo_barras,
+          cantidad: 1,
+          precio_unitario: precio,
+          costo_promedio: p.costo_promedio || 0,
+          subtotal: precio,
+          utilidad_linea: calculateUtilidadLinea(1, precio, p.costo_promedio || 0),
+          stock_disponible: stockMap[p.id!] || 0,
+        }
+      }),
     ])
     toast({ title: "Agregados", description: `${nuevos.length} producto(s) agregado(s) a la venta` })
   }
@@ -1415,6 +1441,7 @@ export default function NuevaVentaPage() {
                 searchValue={busquedaTexto}
                 onSearchChange={setBusquedaTexto}
                 onAddTodos={agregarProductos}
+                precioFinal={precioDeVenta}
               />
             </div>
           </CardContent>

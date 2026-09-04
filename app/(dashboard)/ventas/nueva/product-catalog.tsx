@@ -59,6 +59,12 @@ interface ProductCatalogProps {
   onSearchChange?: (value: string) => void
   /** Agrega a la venta TODAS las referencias actualmente filtradas. */
   onAddTodos?: (productos: Producto[]) => void
+  /**
+   * Precio final a mostrar/usar por producto (ej. lista de precios del cliente).
+   * Si devuelve un valor distinto al precio base, el catalogo muestra el base
+   * tachado y al lado el final. Por defecto usa el precio del maestro.
+   */
+  precioFinal?: (p: Producto) => number
 }
 
 /**
@@ -87,6 +93,7 @@ export function ProductCatalog({
   searchValue,
   onSearchChange,
   onAddTodos,
+  precioFinal,
 }: ProductCatalogProps) {
   const [view, setView] = React.useState<"grid" | "list">("grid")
   const [searchInternal, setSearchInternal] = React.useState("")
@@ -297,6 +304,7 @@ export function ProductCatalog({
             onAdd={onAdd}
             disabled={disabled}
             getStock={getStock}
+            precioFinal={precioFinal}
           />
         ) : (
           <ProductTable
@@ -305,6 +313,7 @@ export function ProductCatalog({
             onAdd={onAdd}
             disabled={disabled}
             getStock={getStock}
+            precioFinal={precioFinal}
           />
         )}
       </div>
@@ -358,14 +367,18 @@ interface ListProps {
   onAdd: (p: Producto) => void
   disabled?: boolean
   getStock: (p: Producto) => number
+  precioFinal?: (p: Producto) => number
 }
 
-function ProductGrid({ productos, idsEnVenta, onAdd, disabled, getStock }: ListProps) {
+function ProductGrid({ productos, idsEnVenta, onAdd, disabled, getStock, precioFinal }: ListProps) {
   return (
     <div className="grid grid-cols-3 min-[480px]:grid-cols-4 sm:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-2 sm:gap-2.5">
       {productos.map((p) => {
         const enVenta = idsEnVenta.includes(p.id!)
         const stock = getStock(p)
+        const base = p.precio_venta_sugerido ?? 0
+        const final = precioFinal ? precioFinal(p) : base
+        const hayLista = precioFinal != null && Math.abs(final - base) > 0.009
         return (
           <button
             key={p.id}
@@ -401,9 +414,16 @@ function ProductGrid({ productos, idsEnVenta, onAdd, disabled, getStock }: ListP
                 </p>
               )}
               <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 mt-0.5">
-                <span className="text-[10px] sm:text-[11px] font-bold text-primary whitespace-nowrap">
-                  L {(p.precio_venta_sugerido ?? 0).toFixed(2)}
-                </span>
+                {hayLista ? (
+                  <span className="flex flex-col items-start leading-none">
+                    <span className="text-[8px] sm:text-[9px] text-muted-foreground line-through">L {base.toFixed(2)}</span>
+                    <span className="text-[10px] sm:text-[11px] font-bold text-emerald-600 whitespace-nowrap">L {final.toFixed(2)}</span>
+                  </span>
+                ) : (
+                  <span className="text-[10px] sm:text-[11px] font-bold text-primary whitespace-nowrap">
+                    L {base.toFixed(2)}
+                  </span>
+                )}
                 <span
                   className={cn(
                     "text-[9px] sm:text-[10px] font-medium whitespace-nowrap",
@@ -421,7 +441,7 @@ function ProductGrid({ productos, idsEnVenta, onAdd, disabled, getStock }: ListP
   )
 }
 
-function ProductTable({ productos, idsEnVenta, onAdd, disabled, getStock }: ListProps) {
+function ProductTable({ productos, idsEnVenta, onAdd, disabled, getStock, precioFinal }: ListProps) {
   return (
     <div className="rounded-lg border overflow-x-auto">
       <table className="w-full min-w-[34rem] text-[11px]">
@@ -447,6 +467,9 @@ function ProductTable({ productos, idsEnVenta, onAdd, disabled, getStock }: List
           {productos.map((p) => {
             const enVenta = idsEnVenta.includes(p.id!)
             const stock = getStock(p)
+            const base = p.precio_venta_sugerido ?? 0
+            const final = precioFinal ? precioFinal(p) : base
+            const hayLista = precioFinal != null && Math.abs(final - base) > 0.009
             return (
               <tr key={p.id} className="hover:bg-muted/40">
                 <td className="px-2 sm:px-3 py-1.5">
@@ -481,8 +504,15 @@ function ProductTable({ productos, idsEnVenta, onAdd, disabled, getStock }: List
                 >
                   {stock}
                 </td>
-                <td className="px-2 sm:px-3 py-1.5 text-right font-bold text-primary whitespace-nowrap">
-                  L {(p.precio_venta_sugerido ?? 0).toFixed(2)}
+                <td className="px-2 sm:px-3 py-1.5 text-right whitespace-nowrap">
+                  {hayLista ? (
+                    <span className="flex flex-col items-end leading-tight">
+                      <span className="text-[10px] text-muted-foreground line-through">L {base.toFixed(2)}</span>
+                      <span className="font-bold text-emerald-600">L {final.toFixed(2)}</span>
+                    </span>
+                  ) : (
+                    <span className="font-bold text-primary">L {base.toFixed(2)}</span>
+                  )}
                 </td>
                 <td className="px-2 sm:px-3 py-1.5 text-right">
                   <Button

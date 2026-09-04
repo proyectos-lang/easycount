@@ -39,6 +39,7 @@ import {
   Calculator,
   LineChart,
   Banknote,
+  Tags,
   type LucideIcon,
 } from "lucide-react"
 
@@ -69,8 +70,9 @@ export interface ModuloGranular {
 }
 
 /**
- * 32 modulos granulares. Cualquier cambio aqui debe replicarse en la tabla
- * `modulos` (y viceversa).
+ * 33 modulos granulares. Cualquier cambio aqui debe replicarse en la tabla
+ * `modulos` (y viceversa). NOTA: "Listas de Precios" NO va en MODULOS_BASE
+ * (nace deshabilitado por empresa; el super-admin lo habilita).
  */
 export const MODULOS: ReadonlyArray<ModuloGranular> = [
   // ── Dashboard ──────────────────────────────────────────────────────────
@@ -151,6 +153,7 @@ export const MODULOS: ReadonlyArray<ModuloGranular> = [
 
   // ── Configuracion ──────────────────────────────────────────────────────
   { nombre: "Razon Social", href: "/configuracion/razon-social", categoria: "Configuracion", icon: Building2 },
+  { nombre: "Listas de Precios", href: "/configuracion/listas-precios", categoria: "Configuracion", icon: Tags },
   { nombre: "Usuarios y Permisos", href: "/configuracion/usuarios", categoria: "Configuracion", icon: Users },
   { nombre: "Productos", href: "/configuracion/productos", categoria: "Configuracion", icon: Package },
   { nombre: "Almacenes", href: "/configuracion/almacenes", categoria: "Configuracion", icon: Warehouse },

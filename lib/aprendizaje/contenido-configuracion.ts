@@ -36,6 +36,57 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
     keywords: ["empresa", "rtn", "logo", "datos fiscales", "membrete"],
   },
   {
+    modulo: "Listas de Precios",
+    titulo: "Listas de Precios",
+    descripcion:
+      "Precios especiales por cliente: listas por porcentaje (aplican a todo el catálogo) o individuales (precio producto por producto).",
+    queHace: [
+      "Crea listas de dos tipos: 'Porcentaje general' (un % que ajusta el precio del maestro en todos los productos) o 'Individual' (defines un precio específico por producto).",
+      "En las de porcentaje, un valor negativo es descuento (ej. -10 = 10% menos) y uno positivo es recargo.",
+      "En las individuales, cada producto sin precio definido usa el precio del maestro.",
+      "Las listas se asignan a los clientes desde el módulo Clientes. Un cliente sin lista usa el precio normal del maestro de productos.",
+      "En Nueva Venta, al elegir un cliente con lista, el catálogo muestra el precio base tachado y al lado el precio final de la lista; ese precio final es el que entra a la venta.",
+      "Este módulo lo habilita el super-admin por empresa; si no lo ves, tu empresa no lo tiene activo.",
+    ],
+    queNoHace: [
+      "No cambia el precio del maestro de productos: la lista es un precio alterno por cliente.",
+      "No aplica una lista a una venta si el cliente no la tiene asignada (usa el precio normal).",
+    ],
+    operaciones: [
+      {
+        titulo: "Crear una lista por porcentaje",
+        pasos: [
+          "Abre Configuración → Listas de Precios y presiona 'Nueva lista'.",
+          "Nombre (ej. Mayoristas), tipo 'Porcentaje general' y el porcentaje (negativo para descuento).",
+          "Guarda: se aplicará ese porcentaje sobre el precio de todos los productos para los clientes con esa lista.",
+        ],
+      },
+      {
+        titulo: "Crear una lista individual (precio por producto)",
+        pasos: [
+          "Nueva lista → tipo 'Individual' → Guardar.",
+          "En la fila de la lista presiona el ícono de precios y escribe el precio de cada producto (los vacíos usan el precio del maestro).",
+        ],
+      },
+      {
+        titulo: "Asignar la lista a un cliente",
+        pasos: [
+          "Abre Configuración → Clientes y edita el cliente.",
+          "Elige la lista de precios en el campo correspondiente (o 'Precio normal' para quitarla).",
+          "En Nueva Venta, al seleccionar ese cliente, verás el precio base tachado y el precio de la lista.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        pregunta: "¿No me aparece el módulo Listas de Precios?",
+        respuesta:
+          "Es una función que el super-admin habilita por empresa. Si no aparece en Configuración, tu empresa aún no lo tiene activo.",
+      },
+    ],
+    keywords: ["lista de precios", "precio por cliente", "mayorista", "descuento", "recargo", "porcentaje", "precio especial", "tarifa"],
+  },
+  {
     modulo: "Usuarios y Permisos",
     titulo: "Usuarios y Permisos",
     descripcion:

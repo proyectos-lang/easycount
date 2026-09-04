@@ -38,12 +38,25 @@ import {
   deleteCliente,
 } from "@/lib/services/catalogos"
 import { useTenant } from "@/lib/hooks/use-tenant"
+import { useAuth } from "@/lib/contexts/auth-context"
 import { getAlertaCumple } from "@/lib/utils/cumpleanos"
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select"
+import {
+  getListasPrecios, getListaDeCliente, setListaDeCliente, type ListaPrecio,
+} from "@/lib/services/listas-precios"
 
 export default function ClientesConfigPage() {
   const { toast } = useToast()
   const { ready, razonSocialId } = useTenant()
-  
+  const { hasModulo } = useAuth()
+  const mostrarListas = hasModulo("Listas de Precios")
+
+  const [listasPrecios, setListasPrecios] = useState<ListaPrecio[]>([])
+  // Lista asignada al cliente en edicion ("" = precio normal del maestro).
+  const [listaClienteId, setListaClienteId] = useState<string>("")
+
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -70,6 +83,11 @@ export default function ClientesConfigPage() {
     loadClientes()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, razonSocialId])
+
+  // Listas de precios (solo si la empresa tiene el modulo habilitado).
+  useEffect(() => {
+    if (ready && mostrarListas) getListasPrecios().then((r) => setListasPrecios(r.data))
+  }, [ready, mostrarListas])
 
   async function loadClientes() {
     setLoading(true)
@@ -99,6 +117,7 @@ export default function ClientesConfigPage() {
       telefono: "",
       fecha_nacimiento: "",
     })
+    setListaClienteId("")
     setDialogOpen(true)
   }
 
@@ -106,6 +125,10 @@ export default function ClientesConfigPage() {
     setValidationErrors({})
     setEditingCliente(cliente)
     setFormData({ ...cliente })
+    setListaClienteId("")
+    if (mostrarListas && cliente.id != null) {
+      getListaDeCliente(cliente.id).then((r) => setListaClienteId(r.data != null ? String(r.data) : ""))
+    }
     setDialogOpen(true)
   }
 
@@ -140,16 +163,28 @@ export default function ClientesConfigPage() {
       fecha_nacimiento: formData.fecha_nacimiento || undefined,
     }
 
-    const { error } = await saveCliente(clienteData, !editingCliente)
-    setSaving(false)
+    const { data: guardado, error } = await saveCliente(clienteData, !editingCliente)
 
     if (error) {
+      setSaving(false)
       toast({ title: "Error", description: error, variant: "destructive" })
-    } else {
-      toast({ title: "Exito", description: `Cliente ${editingCliente ? "actualizado" : "creado"} correctamente` })
-      setDialogOpen(false)
-      loadClientes()
+      return
     }
+
+    // Asignacion de lista de precios (si la empresa tiene el modulo).
+    if (mostrarListas) {
+      const clienteId = editingCliente?.id ?? guardado?.id
+      if (clienteId != null) {
+        const listaId = listaClienteId ? Number(listaClienteId) : null
+        const res = await setListaDeCliente(clienteId, listaId)
+        if (res.error) toast({ title: "Aviso", description: `Cliente guardado, pero la lista no se asignó: ${res.error}`, variant: "destructive" })
+      }
+    }
+
+    setSaving(false)
+    toast({ title: "Exito", description: `Cliente ${editingCliente ? "actualizado" : "creado"} correctamente` })
+    setDialogOpen(false)
+    loadClientes()
   }
 
   async function handleDelete(cliente: Cliente) {
@@ -382,6 +417,30 @@ export default function ClientesConfigPage() {
                 />
               </div>
             </div>
+
+            {mostrarListas && (
+              <div className="grid gap-2">
+                <Label>Lista de precios</Label>
+                <Select
+                  value={listaClienteId || "__none__"}
+                  onValueChange={(v) => setListaClienteId(v === "__none__" ? "" : v)}
+                >
+                  <SelectTrigger><SelectValue placeholder="Precio normal (maestro)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Precio normal (maestro)</SelectItem>
+                    {listasPrecios.map((l) => (
+                      <SelectItem key={l.id} value={String(l.id)}>
+                        {l.nombre}{" "}
+                        {l.tipo === "porcentaje" ? `(${l.porcentaje > 0 ? "+" : ""}${l.porcentaje}%)` : "(individual)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Sin lista, el cliente usa el precio del maestro de productos.
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
