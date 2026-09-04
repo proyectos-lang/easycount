@@ -9,6 +9,8 @@ import {
   setRolUsuario,
   setActivoUsuario,
   resetPasswordUsuario,
+  getModulosDeshabilitadosEmpresa,
+  setModuloEmpresa,
 } from "@/lib/services/plataforma"
 
 // Todas delegan en el servicio, que valida super-admin server-side.
@@ -62,4 +64,18 @@ export async function resetPasswordUsuarioAction(input: {
   newPassword: string
 }) {
   return resetPasswordUsuario(input)
+}
+
+// ----- Modulos habilitados por empresa -----
+
+export async function listarModulosDeshabilitados(razonSocialId: number) {
+  return getModulosDeshabilitadosEmpresa(razonSocialId)
+}
+
+export async function setModuloEmpresaAction(input: {
+  razonSocialId: number
+  moduloNombre: string
+  habilitado: boolean
+}) {
+  return setModuloEmpresa(input)
 }

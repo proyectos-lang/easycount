@@ -3,6 +3,7 @@
 import { createAdminClient, isAdminClientConfigured } from "@/lib/supabase/admin"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { findModuloByDBName } from "@/lib/constants/modulos"
 
 /**
  * Verifica que el caller sea un admin activo y devuelve su razon_social_id.
@@ -314,7 +315,7 @@ export async function listUsuariosAction(): Promise<{
     }
   }
 
-  const [uRes, mRes] = await Promise.all([
+  const [uRes, mRes, cfgRes] = await Promise.all([
     admin
       .from("usuarios")
       .select("id, nombre, rol, activo")
@@ -324,6 +325,11 @@ export async function listUsuariosAction(): Promise<{
       .from("modulos")
       .select("id, nombre, icono")
       .order("nombre", { ascending: true }),
+    admin
+      .from("razon_social_config")
+      .select("config")
+      .eq("razon_social_id", auth.razonSocialId)
+      .maybeSingle(),
   ])
 
   if (uRes.error) {
@@ -339,9 +345,19 @@ export async function listUsuariosAction(): Promise<{
     console.log("[listUsuariosAction] modulos error:", mRes.error)
   }
 
+  // Modulos deshabilitados por el super-admin para esta empresa: NO se pueden
+  // asignar (ni aparecen) en la seccion de permisos.
+  const desArr = (cfgRes.data?.config as Record<string, unknown> | null)?.modulos_deshabilitados
+  const deshabilitados = new Set(
+    Array.isArray(desArr) ? (desArr as unknown[]).filter((x): x is string => typeof x === "string") : []
+  )
+  const modulos = ((mRes.data || []) as ModuloListItem[]).filter(
+    (m) => !deshabilitados.has(findModuloByDBName(m.nombre)?.nombre ?? m.nombre)
+  )
+
   return {
     usuarios: (uRes.data || []) as UsuarioListItem[],
-    modulos: (mRes.data || []) as ModuloListItem[],
+    modulos,
     error: null,
   }
 }

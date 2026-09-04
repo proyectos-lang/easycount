@@ -7,6 +7,7 @@ import { FlagToggle } from "./flag-toggle"
 import { LogoutButton } from "./logout-button"
 import { CrearEmpresaDialog } from "./crear-empresa"
 import { GestionUsuariosDialog } from "./gestion-usuarios"
+import { GestionModulosDialog } from "./gestion-modulos"
 
 export const dynamic = "force-dynamic"
 
@@ -196,7 +197,10 @@ export default async function PlataformaPage() {
                       {haceCuanto(e.ultima_conexion)}
                     </td>
                     <td className="px-4 py-2">
-                      <GestionUsuariosDialog razonSocialId={e.id} empresaNombre={e.nombre} />
+                      <div className="flex items-center gap-2">
+                        <GestionUsuariosDialog razonSocialId={e.id} empresaNombre={e.nombre} />
+                        <GestionModulosDialog razonSocialId={e.id} empresaNombre={e.nombre} />
+                      </div>
                     </td>
                     <td className="px-4 py-2">
                       <FlagToggle

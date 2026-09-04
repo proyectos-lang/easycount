@@ -3,6 +3,19 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 import { mergeFlags, type FeatureFlags } from "@/lib/constants/feature-flags"
+import { findModuloByDBName } from "@/lib/constants/modulos"
+
+/** Nombre canonico (del constants) de un modulo guardado en la BD. */
+function canonModulo(dbNombre: string): string {
+  return findModuloByDBName(dbNombre)?.nombre ?? dbNombre
+}
+
+/** Lee los modulos DESHABILITADOS (nombres canonicos) de una empresa desde su config. */
+function leerDeshabilitados(config: unknown): string[] {
+  const c = (config as Record<string, unknown>) ?? {}
+  const arr = c.modulos_deshabilitados
+  return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string") : []
+}
 
 // ==================== TIPOS ====================
 
@@ -381,14 +394,18 @@ export async function getUsuariosEmpresa(
 ): Promise<{ usuarios: UsuarioEmpresa[]; modulos: ModuloItem[]; error: string | null }> {
   const admin = await getAdminIfSuper()
   if (!admin) return { usuarios: [], modulos: [], error: NO_AUTORIZADO }
-  const [uRes, mRes] = await Promise.all([
+  const [uRes, mRes, cfgRes] = await Promise.all([
     admin.from("usuarios").select("id, nombre, rol, activo").eq("razon_social_id", razonSocialId).order("nombre", { ascending: true }),
     admin.from("modulos").select("id, nombre").order("nombre", { ascending: true }),
+    admin.from("razon_social_config").select("config").eq("razon_social_id", razonSocialId).maybeSingle(),
   ])
   if (uRes.error) return { usuarios: [], modulos: [], error: uRes.error.message }
+  // Solo se pueden asignar permisos de modulos HABILITADOS para la empresa.
+  const deshabilitados = new Set(leerDeshabilitados(cfgRes.data?.config))
+  const modulos = ((mRes.data || []) as ModuloItem[]).filter((m) => !deshabilitados.has(canonModulo(m.nombre)))
   return {
     usuarios: (uRes.data || []) as UsuarioEmpresa[],
-    modulos: (mRes.data || []) as ModuloItem[],
+    modulos,
     error: null,
   }
 }
@@ -504,5 +521,62 @@ export async function resetPasswordUsuario(input: {
   if (!admin) return { error: NO_AUTORIZADO }
   if ((input.newPassword || "").length < 6) return { error: "La contrasena debe tener al menos 6 caracteres." }
   const { error } = await admin.auth.admin.updateUserById(input.usuarioId, { password: input.newPassword })
+  return { error: error ? error.message : null }
+}
+
+// ==================== MODULOS HABILITADOS POR EMPRESA ====================
+// El super-admin decide que modulos ve cada empresa. Se guardan los DESHABILITADOS
+// (nombres canonicos) en razon_social_config.config.modulos_deshabilitados.
+// Ausente = ninguno deshabilitado = todos habilitados (retrocompatible).
+// Un modulo deshabilitado NO lo ve nadie de esa empresa (ni el admin) y no
+// aparece en la seccion de permisos de Configuracion -> Usuarios.
+
+/** Nombres canonicos de los modulos DESHABILITADOS de una empresa. */
+export async function getModulosDeshabilitadosEmpresa(
+  razonSocialId: number
+): Promise<{ nombres: string[]; error: string | null }> {
+  const admin = await getAdminIfSuper()
+  if (!admin) return { nombres: [], error: NO_AUTORIZADO }
+  const { data, error } = await admin
+    .from("razon_social_config")
+    .select("config")
+    .eq("razon_social_id", razonSocialId)
+    .maybeSingle()
+  if (error) return { nombres: [], error: error.message }
+  return { nombres: leerDeshabilitados(data?.config), error: null }
+}
+
+/** Habilita (true) o deshabilita (false) un modulo para una empresa. */
+export async function setModuloEmpresa(input: {
+  razonSocialId: number
+  moduloNombre: string
+  habilitado: boolean
+}): Promise<{ error: string | null }> {
+  const su = await getSuperadmin()
+  if (!su) return { error: "No autorizado." }
+  const admin = createAdminClient()
+  if (!admin) return { error: "Service role no configurado." }
+
+  const { data: cur } = await admin
+    .from("razon_social_config")
+    .select("config")
+    .eq("razon_social_id", input.razonSocialId)
+    .maybeSingle()
+
+  const cfg = (cur?.config as Record<string, unknown>) ?? {}
+  const set = new Set<string>(leerDeshabilitados(cfg))
+  if (input.habilitado) set.delete(input.moduloNombre)
+  else set.add(input.moduloNombre)
+
+  const config = { ...cfg, modulos_deshabilitados: [...set] }
+  const { error } = await admin.from("razon_social_config").upsert(
+    {
+      razon_social_id: input.razonSocialId,
+      config,
+      usuario: su.email,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "razon_social_id" }
+  )
   return { error: error ? error.message : null }
 }

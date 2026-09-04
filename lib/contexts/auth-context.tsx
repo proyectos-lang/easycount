@@ -16,6 +16,9 @@ export interface AuthUser {
   logo_url: string | null
   razon_social_nombre: string | null
   modulos_permitidos: string[]
+  /** Modulos DESHABILITADOS por el super-admin para toda la empresa (nombres
+   *  canonicos). Un modulo aqui no lo ve nadie de la empresa, ni el admin. */
+  modulos_deshabilitados: string[]
   /** Feature flags / mini-personalizaciones de la empresa (con defaults). */
   flags: FeatureFlags
 }
@@ -105,16 +108,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           modulosPermitidos = canonizar((mods || []).map((m: any) => m?.nombre))
         }
 
-        // 3) Feature flags de la empresa (mini-personalizaciones). Si la tabla
-        //    aun no existe (script 038 sin aplicar), se usan los defaults.
+        // 3) Config de la empresa: feature flags + modulos deshabilitados por el
+        //    super-admin. Si la tabla aun no existe (script 038 sin aplicar), se
+        //    usan los defaults (todos los modulos habilitados).
         let flags: FeatureFlags = DEFAULT_FLAGS
+        let modulosDeshabilitados: string[] = []
         if (perfil.razon_social_id != null) {
           const { data: cfg, error: cfgErr } = await supabase
             .from("razon_social_config")
             .select("config")
             .eq("razon_social_id", perfil.razon_social_id)
             .maybeSingle()
-          if (!cfgErr) flags = mergeFlags(cfg?.config as Record<string, unknown> | null)
+          if (!cfgErr) {
+            const cfgObj = (cfg?.config as Record<string, unknown> | null) ?? {}
+            flags = mergeFlags(cfgObj)
+            const des = cfgObj.modulos_deshabilitados
+            modulosDeshabilitados = Array.isArray(des)
+              ? (des as unknown[]).filter((x): x is string => typeof x === "string")
+              : []
+          }
         }
 
         return {
@@ -127,6 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           logo_url: razonSocial?.logo_url ?? null,
           razon_social_nombre: nombreEmpresa,
           modulos_permitidos: modulosPermitidos,
+          modulos_deshabilitados: modulosDeshabilitados,
           flags,
         }
       } catch (err) {
@@ -339,7 +352,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hasModulo = React.useCallback(
     (nombre: string) => {
       if (!user) return false
-      // Los administradores ven todos los modulos.
+      // Candado a nivel EMPRESA: si el super-admin deshabilito el modulo para la
+      // empresa, NADIE lo ve (ni siquiera el admin).
+      if ((user.modulos_deshabilitados || []).includes(nombre)) return false
+      // Los administradores ven todos los modulos (habilitados para la empresa).
       if ((user.rol || "").trim().toLowerCase() === "admin") return true
       // Cualquier otro usuario ve SOLO los modulos con permiso explicito
       // (`permisos_usuarios.puede_ver = true`). Sin permisos => no ve nada
