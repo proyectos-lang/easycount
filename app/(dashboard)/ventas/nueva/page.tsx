@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Minus, Trash2, FileText, ShoppingCart, User, Receipt, Warehouse, MapPin, AlertTriangle, UserPlus, Wallet, X, Landmark, Printer, CheckCircle2, Maximize2, Minimize2 } from "lucide-react"
+import { Plus, Minus, Trash2, FileText, ShoppingCart, User, Receipt, Warehouse, MapPin, AlertTriangle, UserPlus, Wallet, X, Landmark, Printer, CheckCircle2, Maximize2, Minimize2, ChevronsUpDown, Check } from "lucide-react"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -18,6 +18,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
 import {
   Dialog,
   DialogContent,
@@ -97,6 +110,7 @@ export default function NuevaVentaPage() {
   const [localizacionesFiltradas, setLocalizacionesFiltradas] = React.useState<Localizacion[]>([])
   
   const [clienteId, setClienteId] = React.useState<string>("")
+  const [clienteComboOpen, setClienteComboOpen] = React.useState(false)
   const [numeroFactura, setNumeroFactura] = React.useState("")
   // Fecha local (dia de negocio). NO usar toISOString(): de noche adelanta el dia.
   const [fecha, setFecha] = React.useState(hoyISO())
@@ -460,7 +474,6 @@ export default function NuevaVentaPage() {
     const cid = Number(clienteId)
     if (!cid) { setListaAplicada(null); return }
     getListaAplicadaCliente(cid).then((r) => setListaAplicada(r.data))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clienteId, puedeListas])
 
   // Precio de venta efectivo de un producto: precio de la lista del cliente si
@@ -1603,21 +1616,46 @@ export default function NuevaVentaPage() {
               </Tooltip>
             </TooltipProvider>
           </div>
-          <Select value={clienteId} onValueChange={setClienteId}>
-            <SelectTrigger className="h-12 text-base">
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-muted-foreground" />
-                <SelectValue placeholder="Seleccionar cliente..." />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              {clientes.map(c => (
-                <SelectItem key={c.id} value={c.id!.toString()}>
-                  {c.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Popover open={clienteComboOpen} onOpenChange={setClienteComboOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={clienteComboOpen}
+                className="w-full h-12 justify-between text-base font-normal"
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="truncate">{selectedCliente ? selectedCliente.nombre : "Seleccionar cliente..."}</span>
+                </span>
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Buscar cliente por nombre o RTN..." className="h-10" />
+                <CommandList className="max-h-72">
+                  <CommandEmpty>No se encontraron clientes.</CommandEmpty>
+                  <CommandGroup>
+                    {clientes.map((c) => (
+                      <CommandItem
+                        key={c.id}
+                        value={`${c.nombre} ${c.rtn || ""}`}
+                        onSelect={() => { setClienteId(c.id!.toString()); setClienteComboOpen(false) }}
+                        className="cursor-pointer"
+                      >
+                        <Check className={`mr-2 h-4 w-4 shrink-0 ${clienteId === c.id!.toString() ? "opacity-100" : "opacity-0"}`} />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate">{c.nombre}</p>
+                          {c.rtn && <p className="truncate font-mono text-xs text-muted-foreground">{c.rtn}</p>}
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
           {selectedCliente && (
             <p className="text-xs text-muted-foreground mt-2">
               RTN: {selectedCliente.rtn || "N/A"}
