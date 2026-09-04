@@ -298,17 +298,41 @@ function NuevoLinkDialog({ onDone }: { onDone: () => void }) {
     }
   }, [open, productos.length])
 
-  const productosFiltrados = useMemo(() => {
+  // Todo lo que calza con el filtro (sin tope): base de "seleccionar todo".
+  const productosFiltradosTodos = useMemo(() => {
     const q = filtro.trim().toLowerCase()
-    if (!q) return productos.slice(0, 100)
-    return productos.filter((p) => p.nombre.toLowerCase().includes(q)).slice(0, 100)
+    if (!q) return productos
+    return productos.filter((p) => p.nombre.toLowerCase().includes(q))
   }, [productos, filtro])
+
+  // La lista visible se limita a 100 por rendimiento.
+  const productosFiltrados = useMemo(
+    () => productosFiltradosTodos.slice(0, 100),
+    [productosFiltradosTodos],
+  )
+
+  const todosFiltradosSeleccionados =
+    productosFiltradosTodos.length > 0 &&
+    productosFiltradosTodos.every((p) => seleccion.has(p.id!))
 
   function toggle(id: number) {
     setSeleccion((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
+      return next
+    })
+  }
+
+  // Marca/desmarca TODO lo filtrado (incluye lo que no cabe en los 100 visibles).
+  function toggleTodosFiltrados() {
+    setSeleccion((prev) => {
+      const next = new Set(prev)
+      if (todosFiltradosSeleccionados) {
+        productosFiltradosTodos.forEach((p) => next.delete(p.id!))
+      } else {
+        productosFiltradosTodos.forEach((p) => next.add(p.id!))
+      }
       return next
     })
   }
@@ -397,6 +421,15 @@ function NuevoLinkDialog({ onDone }: { onDone: () => void }) {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
                     <Input className="pl-9" placeholder="Filtrar productos…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
                   </div>
+                  {productosFiltradosTodos.length > 0 && (
+                    <label className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-stone-50 cursor-pointer">
+                      <Checkbox checked={todosFiltradosSeleccionados} onCheckedChange={toggleTodosFiltrados} />
+                      <span className="text-sm font-medium flex-1">
+                        {todosFiltradosSeleccionados ? "Quitar todo lo filtrado" : "Seleccionar todo lo filtrado"}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{productosFiltradosTodos.length}</span>
+                    </label>
+                  )}
                   <ScrollArea className="h-52 rounded-md border">
                     <div className="p-2 space-y-1">
                       {productosFiltrados.map((p) => (
