@@ -1409,16 +1409,38 @@ export default function ProductosConfigPage() {
             ) : (
               // Al crear con el sistema activo: opción "tiene tallas" (producto por talla).
               <div className="grid gap-2">
-                <label className="flex items-center gap-2 cursor-pointer">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTieneTallas((v) => !v)
+                    if (validationErrors.tallas) setValidationErrors((prev) => ({ ...prev, tallas: "" }))
+                  }}
+                  aria-pressed={tieneTallas}
+                  className={`flex items-center gap-3 rounded-xl border-2 p-3.5 text-left transition-colors ${
+                    tieneTallas
+                      ? "border-amber-400 bg-amber-50 ring-1 ring-amber-200"
+                      : "border-dashed border-stone-300 bg-white hover:border-amber-300 hover:bg-amber-50/40"
+                  }`}
+                >
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${tieneTallas ? "bg-amber-200 text-amber-800" : "bg-stone-100 text-stone-500"}`}>
+                    <Layers3 className="h-5 w-5" />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-semibold text-stone-800">¿Este producto tiene tallas?</span>
+                    <span className="block text-xs text-stone-500">
+                      Actívalo para crear una talla por línea (S, M, L…) con su propia cantidad.
+                    </span>
+                  </span>
                   <Checkbox
                     checked={tieneTallas}
                     onCheckedChange={(v) => {
                       setTieneTallas(!!v)
                       if (validationErrors.tallas) setValidationErrors((prev) => ({ ...prev, tallas: "" }))
                     }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-5 w-5 shrink-0"
                   />
-                  <span className="text-sm font-medium">Este producto tiene tallas</span>
-                </label>
+                </button>
 
                 {tieneTallas ? (
                   <div className="rounded-lg border border-stone-200 bg-stone-50/50 p-3 space-y-3">
