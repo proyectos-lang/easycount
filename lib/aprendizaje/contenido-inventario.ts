@@ -152,7 +152,8 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
     descripcion:
       "Cuadra el inventario contra un conteo físico: escribe la cantidad real y el sistema genera las entradas/salidas para corregir, sin cambiar el costo.",
     queHace: [
-      "Dos modos: ajustar un producto puntual, o contar una localización completa (lista todo el catálogo con su stock en esa localización).",
+      "Dos modos: ajustar un producto puntual, o contar 'Varios productos' a la vez (selecciona con casillas los que vas a contar —varios, o todos los filtrados— y cuadra todos al confirmar).",
+      "En 'Varios productos' marcas las casillas de los productos a contar (o 'Seleccionar todo lo filtrado'); solo los seleccionados con cantidad escrita entran al ajuste.",
       "Muestra la cantidad actual del sistema y te deja escribir la cantidad real contada.",
       "Genera automáticamente un movimiento de 'Ajuste' por producto en el kardex: entrada si sobra, salida si falta.",
       "Usa el costo promedio ACTUAL del producto en el movimiento, así el ajuste NO altera la valoración/costo promedio.",
@@ -175,12 +176,14 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
         ],
       },
       {
-        titulo: "Contar una localización completa",
+        titulo: "Contar varios productos a la vez (conteo físico masivo)",
         pasos: [
-          "Elige almacén y localización, y entra a la pestaña 'Localización completa'.",
-          "El sistema lista los productos con su stock actual; escribe la cantidad real de cada uno (usa el buscador para ubicarlos).",
-          "Solo las filas con diferencia se ajustarán. Revisa el resumen de entradas/salidas.",
-          "Motivo (opcional) y 'Aplicar ajuste' → confirma.",
+          "Elige almacén y localización, y entra a la pestaña 'Varios productos'.",
+          "El sistema lista los productos con su stock actual (la casilla 'Real' arranca vacía).",
+          "Marca las casillas de los productos que vas a contar; usa 'Seleccionar todo lo filtrado' para marcar todos los que muestra el buscador de una vez.",
+          "Escribe la cantidad real contada de cada producto seleccionado. Verás la diferencia por fila.",
+          "Si dejas un producto seleccionado sin cantidad, el sistema te avisa y no deja aplicar hasta que la escribas o lo desmarques.",
+          "Solo se ajustan los seleccionados cuya cantidad real difiere del sistema. Motivo (opcional) y 'Aplicar ajuste' → confirma el resumen y se cuadran todos de una vez.",
         ],
       },
     ],
@@ -191,9 +194,9 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
           "No. El movimiento de ajuste usa el costo promedio actual, así la valoración no se distorsiona. Solo cambia la cantidad en existencia.",
       },
       {
-        pregunta: "Conté una localización y no pasó nada con varios productos.",
+        pregunta: "Conté varios productos y no pasó nada con algunos.",
         respuesta:
-          "Es lo esperado: solo se generan movimientos para los productos cuya cantidad real difiere de la del sistema. Los que ya cuadraban no se tocan.",
+          "Es lo esperado: solo se ajustan los productos SELECCIONADOS cuya cantidad real difiere de la del sistema. Los que ya cuadraban (o no marcaste) no se tocan. Si marcaste un producto pero dejaste su cantidad vacía, el sistema no deja aplicar hasta que la escribas o lo desmarques (así no se pone en cero por error).",
       },
       {
         pregunta: "¿Dónde veo el ajuste después?",
@@ -201,7 +204,7 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
           "En Inventario → Historial de Transacciones aparece como movimiento 'Ajuste' (con la cantidad en + o −). El motivo y el antes/después quedan en la bitácora de ajustes.",
       },
     ],
-    keywords: ["ajuste", "conteo", "cuadrar", "inventario fisico", "merma", "faltante", "sobrante", "toma fisica"],
+    keywords: ["ajuste", "conteo", "cuadrar", "inventario fisico", "merma", "faltante", "sobrante", "toma fisica", "varios productos", "seleccionar", "masivo", "conteo masivo"],
   },
   {
     modulo: "Ajuste de Costo",

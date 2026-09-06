@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Spinner } from "@/components/ui/spinner"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -54,9 +55,10 @@ export default function AjustesInventarioPage() {
   const [stockActualProd, setStockActualProd] = React.useState<number | null>(null)
   const [realProd, setRealProd] = React.useState("")
 
-  // Modo POR LOCALIZACIÓN
+  // Modo POR LOCALIZACIÓN (conteo físico de varios productos seleccionados)
   const [conteo, setConteo] = React.useState<Record<number, string>>({}) // producto_id -> real
   const [stockLoc, setStockLoc] = React.useState<Record<number, number>>({})
+  const [seleccionados, setSeleccionados] = React.useState<Set<number>>(new Set())
   const [busquedaLoc, setBusquedaLoc] = React.useState("")
   const [cargandoStock, setCargandoStock] = React.useState(false)
 
@@ -90,23 +92,32 @@ export default function AjustesInventarioPage() {
     }
   }, [productoId, localizacionId])
 
-  // ---- Modo localización: cargar stock de todo el catálogo en la loc ----
+  // ---- Modo localización: cargar el stock del catálogo en la loc ----
+  // La casilla "Real" arranca VACÍA: el conteo físico obliga a escribir la
+  // cantidad de cada producto seleccionado (no se asume el stock del sistema).
   const cargarConteoLocalizacion = React.useCallback(async () => {
     if (!localizacionId || productos.length === 0) return
     setCargandoStock(true)
     const ids = productos.map((p) => p.id!).filter(Boolean)
     const res = await getStockMultipleProducts(ids, Number(localizacionId))
     setStockLoc(res.data)
-    // Pre-llena el conteo con el stock actual (para que el usuario solo cambie lo que difiere).
-    const inicial: Record<number, string> = {}
-    for (const id of ids) inicial[id] = String(res.data[id] ?? 0)
-    setConteo(inicial)
+    setConteo({})
+    setSeleccionados(new Set())
     setCargandoStock(false)
   }, [localizacionId, productos])
 
   function resetSeleccion() {
     setProductoId(""); setRealProd(""); setStockActualProd(null)
-    setConteo({}); setStockLoc({}); setBusquedaLoc(""); setBusquedaProd("")
+    setConteo({}); setStockLoc({}); setSeleccionados(new Set()); setBusquedaLoc(""); setBusquedaProd("")
+  }
+
+  function toggleSeleccion(id: number) {
+    setSeleccionados((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   // ---- Construcción de líneas a ajustar según el modo ----
@@ -124,17 +135,22 @@ export default function AjustesInventarioPage() {
         producto_nombre: selectedProducto.nombre,
       }]
     }
+    // Solo los productos SELECCIONADOS con una cantidad real escrita (no vacía).
+    // Un seleccionado con la casilla vacía se ignora aquí y se bloquea al aplicar.
     return productos
+      .filter((p) => seleccionados.has(p.id!))
+      .filter((p) => {
+        const realStr = conteo[p.id!]
+        return realStr !== undefined && realStr.trim() !== ""
+      })
       .map((p) => {
         const actual = stockLoc[p.id!] ?? 0
-        const realStr = conteo[p.id!]
-        const real = realStr === undefined || realStr === "" ? actual : Number(realStr)
         return {
           producto_id: p.id!,
           almacen_id: Number(almacenId),
           localizacion_id: Number(localizacionId),
           stock_actual: actual,
-          stock_real: real,
+          stock_real: Number(conteo[p.id!]),
           costo_unitario: Number(p.costo_promedio || 0),
           producto_nombre: p.nombre,
         }
@@ -145,7 +161,7 @@ export default function AjustesInventarioPage() {
   const lineasCambio = React.useMemo(
     () => calcularLineasAjuste(construirLineas(modoActual)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [modoActual, productoId, realProd, stockActualProd, conteo, stockLoc, almacenId, localizacionId]
+    [modoActual, productoId, realProd, stockActualProd, conteo, stockLoc, seleccionados, almacenId, localizacionId]
   )
   const entradas = lineasCambio.filter((l) => l.delta > 0)
   const salidas = lineasCambio.filter((l) => l.delta < 0)
@@ -172,6 +188,34 @@ export default function AjustesInventarioPage() {
       : productos
     return base.slice(0, 300)
   }, [productos, busquedaLoc])
+
+  // ¿Están todos los productos VISIBLES (filtro actual) seleccionados?
+  const todosVisiblesSeleccionados =
+    productosBusquedaLoc.length > 0 &&
+    productosBusquedaLoc.every((p) => seleccionados.has(p.id!))
+
+  function toggleSeleccionarTodosVisibles() {
+    setSeleccionados((prev) => {
+      const next = new Set(prev)
+      if (todosVisiblesSeleccionados) {
+        productosBusquedaLoc.forEach((p) => next.delete(p.id!))
+      } else {
+        productosBusquedaLoc.forEach((p) => next.add(p.id!))
+      }
+      return next
+    })
+  }
+
+  // Seleccionados a los que les falta escribir la cantidad real (se bloquean).
+  const seleccionadosSinConteo = React.useMemo(
+    () =>
+      productos.filter(
+        (p) =>
+          seleccionados.has(p.id!) &&
+          (conteo[p.id!] === undefined || conteo[p.id!].trim() === ""),
+      ),
+    [productos, seleccionados, conteo]
+  )
 
   if (loading) {
     return <div className="flex justify-center py-24"><Spinner className="h-8 w-8" /></div>
@@ -234,7 +278,7 @@ export default function AjustesInventarioPage() {
           <TabsList>
             <TabsTrigger value="producto">Un producto</TabsTrigger>
             <TabsTrigger value="localizacion" onClick={() => { if (Object.keys(stockLoc).length === 0) cargarConteoLocalizacion() }}>
-              Localización completa
+              Varios productos
             </TabsTrigger>
           </TabsList>
 
@@ -293,8 +337,11 @@ export default function AjustesInventarioPage() {
           <TabsContent value="localizacion" className="space-y-4">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Conteo de la localización</CardTitle>
-                <CardDescription>Escribe la cantidad real de cada producto. Solo se ajustan los que difieren.</CardDescription>
+                <CardTitle className="text-base">Conteo por producto</CardTitle>
+                <CardDescription>
+                  Selecciona los productos que vas a contar (o marca todos), escribe la cantidad real
+                  de cada uno y aplica el ajuste. Solo se cuadran los seleccionados con cantidad escrita.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="relative">
@@ -304,41 +351,65 @@ export default function AjustesInventarioPage() {
                 {cargandoStock ? (
                   <div className="flex justify-center py-10"><Spinner className="h-6 w-6" /></div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <Table containerClassName="max-h-[60vh] overflow-y-auto">
-                      <TableHeader sticky>
-                        <TableRow>
-                          <TableHead>Producto</TableHead>
-                          <TableHead className="text-center">Actual</TableHead>
-                          <TableHead className="text-center w-32">Real</TableHead>
-                          <TableHead className="text-center">Dif.</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {productosBusquedaLoc.map((p) => {
-                          const actual = stockLoc[p.id!] ?? 0
-                          const realStr = conteo[p.id!] ?? String(actual)
-                          const dif = +(Number(realStr || 0) - actual).toFixed(2)
-                          return (
-                            <TableRow key={p.id}>
-                              <TableCell className="text-sm max-w-[240px] truncate">{p.nombre}</TableCell>
-                              <TableCell className="text-center text-stone-600">{actual}</TableCell>
-                              <TableCell>
-                                <Input
-                                  type="number" step="0.01" className="h-8 text-center"
-                                  value={realStr}
-                                  onChange={(e) => setConteo((prev) => ({ ...prev, [p.id!]: e.target.value }))}
-                                />
-                              </TableCell>
-                              <TableCell className={`text-center font-medium ${dif > 0 ? "text-emerald-700" : dif < 0 ? "text-red-700" : "text-stone-300"}`}>
-                                {dif > 0 ? "+" : ""}{dif !== 0 ? dif : "—"}
-                              </TableCell>
-                            </TableRow>
-                          )
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
+                  <>
+                    <div className="flex items-center justify-between flex-wrap gap-2 text-sm">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox checked={todosVisiblesSeleccionados} onCheckedChange={toggleSeleccionarTodosVisibles} />
+                        <span className="font-medium">
+                          {todosVisiblesSeleccionados ? "Quitar selección" : "Seleccionar todo lo filtrado"}
+                          <span className="text-stone-400 font-normal"> ({productosBusquedaLoc.length})</span>
+                        </span>
+                      </label>
+                      <span className="text-stone-500">{seleccionados.size} seleccionado(s)</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                        <TableHeader sticky>
+                          <TableRow>
+                            <TableHead className="w-10"></TableHead>
+                            <TableHead>Producto</TableHead>
+                            <TableHead className="text-center">Actual</TableHead>
+                            <TableHead className="text-center w-32">Real</TableHead>
+                            <TableHead className="text-center">Dif.</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {productosBusquedaLoc.map((p) => {
+                            const actual = stockLoc[p.id!] ?? 0
+                            const realStr = conteo[p.id!] ?? ""
+                            const marcado = seleccionados.has(p.id!)
+                            const tieneReal = realStr.trim() !== ""
+                            const dif = tieneReal ? +(Number(realStr) - actual).toFixed(2) : 0
+                            return (
+                              <TableRow key={p.id} className={marcado ? "bg-sky-50/40" : undefined}>
+                                <TableCell>
+                                  <Checkbox checked={marcado} onCheckedChange={() => toggleSeleccion(p.id!)} />
+                                </TableCell>
+                                <TableCell className="text-sm max-w-[240px] truncate">
+                                  {p.nombre}
+                                  {p.talla ? <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">{p.talla}</span> : null}
+                                </TableCell>
+                                <TableCell className="text-center text-stone-600">{actual}</TableCell>
+                                <TableCell>
+                                  <Input
+                                    type="number" step="0.01" min="0"
+                                    className={`h-8 text-center ${marcado && !tieneReal ? "border-amber-400 bg-amber-50" : ""}`}
+                                    placeholder={marcado ? "contar" : ""}
+                                    disabled={!marcado}
+                                    value={realStr}
+                                    onChange={(e) => setConteo((prev) => ({ ...prev, [p.id!]: e.target.value }))}
+                                  />
+                                </TableCell>
+                                <TableCell className={`text-center font-medium ${!marcado || !tieneReal ? "text-stone-300" : dif > 0 ? "text-emerald-700" : dif < 0 ? "text-red-700" : "text-stone-300"}`}>
+                                  {marcado && tieneReal ? `${dif > 0 ? "+" : ""}${dif !== 0 ? dif : "—"}` : "—"}
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -351,6 +422,15 @@ export default function AjustesInventarioPage() {
                 <Label htmlFor="motivo">Motivo (opcional)</Label>
                 <Textarea id="motivo" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Conteo físico, merma, robo, corrección…" rows={2} />
               </div>
+              {modoActual === "localizacion" && seleccionadosSinConteo.length > 0 && (
+                <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 p-2 text-xs text-amber-800">
+                  <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>{seleccionadosSinConteo.length}</strong> producto(s) seleccionado(s) sin cantidad real escrita.
+                    Escríbela o quítalos de la selección para poder aplicar el ajuste.
+                  </span>
+                </div>
+              )}
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-3 text-sm">
                   <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 gap-1">
@@ -360,7 +440,11 @@ export default function AjustesInventarioPage() {
                     <ArrowDownCircle className="h-3.5 w-3.5" /> {salidas.length} salidas
                   </Badge>
                 </div>
-                <Button disabled={lineasCambio.length === 0} onClick={() => setConfirmando(true)} className="gap-2">
+                <Button
+                  disabled={lineasCambio.length === 0 || (modoActual === "localizacion" && seleccionadosSinConteo.length > 0)}
+                  onClick={() => setConfirmando(true)}
+                  className="gap-2"
+                >
                   <Scale className="h-4 w-4" /> Aplicar ajuste ({lineasCambio.length})
                 </Button>
               </div>
