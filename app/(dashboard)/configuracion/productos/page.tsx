@@ -225,24 +225,22 @@ export default function ProductosConfigPage() {
   })
 
   // Creador "por tallas" (solo al crear producto nuevo). Si tieneTallas, al
-  // guardar se genera UN producto por cada talla marcada, en vez de uno solo.
+  // guardar se genera UN producto por cada linea de talla. Cada linea tiene su
+  // propia cantidad inicial; el precio de venta y el costo son unicos (los del
+  // formulario general) para todas las tallas.
   const [tieneTallas, setTieneTallas] = useState(false)
-  const [tallasSeleccionadas, setTallasSeleccionadas] = useState<string[]>([])
-  const [tallaLibre, setTallaLibre] = useState("")
+  const [lineasTalla, setLineasTalla] = useState<{ talla: string; cantidad: string }[]>([])
 
-  function toggleTalla(t: string) {
-    setTallasSeleccionadas((prev) =>
-      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
-    )
+  function agregarLineaTalla() {
+    setLineasTalla((prev) => [...prev, { talla: "", cantidad: "" }])
   }
 
-  function agregarTallaLibre() {
-    const t = tallaLibre.trim()
-    if (!t) return
-    if (!tallasSeleccionadas.includes(t)) {
-      setTallasSeleccionadas((prev) => [...prev, t])
-    }
-    setTallaLibre("")
+  function quitarLineaTalla(idx: number) {
+    setLineasTalla((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  function setLineaTalla(idx: number, campo: "talla" | "cantidad", valor: string) {
+    setLineasTalla((prev) => prev.map((l, i) => (i === idx ? { ...l, [campo]: valor } : l)))
   }
   
   // Price calculator state
@@ -707,8 +705,7 @@ export default function ProductosConfigPage() {
     })
     setInvInicial({ cantidad: 0, costo_unitario: 0, almacen_id: 0, localizacion_id: 0 })
     setTieneTallas(false)
-    setTallasSeleccionadas([])
-    setTallaLibre("")
+    setLineasTalla([])
     setImagePreview("")
     setImageFile(null)
     setShowCalculator(false)
@@ -723,8 +720,7 @@ export default function ProductosConfigPage() {
     // El creador por tallas es solo para productos nuevos. Al editar, se usa el
     // campo de talla individual del producto existente.
     setTieneTallas(false)
-    setTallasSeleccionadas([])
-    setTallaLibre("")
+    setLineasTalla([])
     setFormData({
       ...producto,
       costo_promedio: producto.costo_promedio ?? 0,
@@ -802,14 +798,24 @@ export default function ProductosConfigPage() {
       errors.categoria_id = "La categoria es requerida"
     }
 
-    // Creador por tallas (solo al crear): exige al menos una talla marcada.
-    if (!editingProducto && tallasActivo && tieneTallas && tallasSeleccionadas.length === 0) {
-      errors.tallas = "Selecciona al menos una talla o desactiva la opción"
+    // Creador por tallas (solo al crear): exige al menos una linea con talla y
+    // sin tallas repetidas. La cantidad por talla es opcional (puede ser 0).
+    const modoTallas = !editingProducto && tallasActivo && tieneTallas
+    if (modoTallas) {
+      const tallas = lineasTalla.map((l) => l.talla.trim()).filter(Boolean)
+      if (tallas.length === 0) {
+        errors.tallas = "Agrega al menos una línea de talla o desactiva la opción"
+      } else if (new Set(tallas.map((t) => t.toLowerCase())).size !== tallas.length) {
+        errors.tallas = "Hay tallas repetidas; cada talla debe ser única"
+      }
     }
 
-    // Inventario inicial (solo al crear): si se indica cantidad, exige
-    // almacen y localizacion para poder generar el ingreso.
-    if (!editingProducto && invInicial.cantidad > 0) {
+    // Inventario inicial (solo al crear): si se indica cantidad, exige almacen y
+    // localizacion. En modo tallas, la cantidad total viene de las lineas.
+    const hayCantidadInicial = modoTallas
+      ? lineasTalla.some((l) => Number(l.cantidad) > 0)
+      : invInicial.cantidad > 0
+    if (!editingProducto && hayCantidadInicial) {
       if (!invInicial.almacen_id) errors.inv_almacen = "Selecciona el almacén del inventario inicial"
       if (!invInicial.localizacion_id) errors.inv_localizacion = "Selecciona la localización"
     }
@@ -827,6 +833,7 @@ export default function ProductosConfigPage() {
   async function guardarUnProducto(
     talla: string | null,
     codigoBarras: string,
+    cantidadOverride?: number,
   ): Promise<{ error: string | null; id: number | null }> {
     const productoData: Producto = {
       ...editingProducto,
@@ -848,19 +855,20 @@ export default function ProductosConfigPage() {
     if (error) return { error, id: null }
 
     // Inventario inicial: genera un ingreso manual con la cantidad indicada.
-    // Solo al crear (no al editar) y si la cantidad es > 0. Con varias tallas,
-    // la misma cantidad inicial se aplica a cada producto creado.
-    if (!editingProducto && invInicial.cantidad > 0 && creado?.id) {
+    // Solo al crear y si la cantidad es > 0. En modo tallas, cada talla trae su
+    // propia cantidad (cantidadOverride); el costo es el unico del formulario.
+    const cantidad = cantidadOverride ?? invInicial.cantidad
+    if (!editingProducto && cantidad > 0 && creado?.id) {
       const ing = await procesarIngresoManual({
         producto_id: creado.id,
         almacen_id: invInicial.almacen_id,
         localizacion_id: invInicial.localizacion_id,
-        cantidad: invInicial.cantidad,
+        cantidad,
         costo_unitario: invInicial.costo_unitario,
         observaciones: "Inventario inicial (creación de producto)",
         stock_anterior: 0,
         costo_anterior: 0,
-        nuevo_stock: invInicial.cantidad,
+        nuevo_stock: cantidad,
         nuevo_costo: invInicial.costo_unitario,
       })
       if (ing.error) {
@@ -882,17 +890,21 @@ export default function ProductosConfigPage() {
 
     setSaving(true)
 
-    // Camino "por tallas": crea un producto independiente por cada talla marcada.
-    // Solo al crear (nunca al editar). Cada talla lleva su propio codigo de
-    // barras (codigo base + "-" + talla) para no chocar entre si.
-    if (!editingProducto && tallasActivo && tieneTallas && tallasSeleccionadas.length > 0) {
+    // Camino "por tallas": crea un producto independiente por cada linea de
+    // talla, con la cantidad inicial propia de esa talla. Solo al crear. Precio
+    // y costo son unicos (del formulario); cada talla lleva su propio codigo
+    // (codigo base + "-" + talla) para no chocar entre si.
+    const lineasValidas = lineasTalla
+      .map((l) => ({ talla: l.talla.trim(), cantidad: Number(l.cantidad) || 0 }))
+      .filter((l) => l.talla !== "")
+    if (!editingProducto && tallasActivo && tieneTallas && lineasValidas.length > 0) {
       const baseCodigo = formData.codigo_barras!.trim()
       let creados = 0
       const errores: string[] = []
       const idsCreados: number[] = []
-      for (const talla of tallasSeleccionadas) {
+      for (const { talla, cantidad } of lineasValidas) {
         const codigoTalla = `${baseCodigo}-${talla}`
-        const { error: err, id } = await guardarUnProducto(talla, codigoTalla)
+        const { error: err, id } = await guardarUnProducto(talla, codigoTalla, cantidad)
         if (err) errores.push(`${talla}: ${err}`)
         else creados++
         if (id) idsCreados.push(id)
@@ -908,12 +920,13 @@ export default function ProductosConfigPage() {
       }
       setSaving(false)
       if (creados > 0) {
+        const totalUnidades = lineasValidas.reduce((a, l) => a + l.cantidad, 0)
         toast({
           title: `Se crearon ${creados} producto(s) por talla`,
           description:
             errores.length > 0
               ? `Con avisos: ${errores.join(" · ")}`
-              : `Tallas: ${tallasSeleccionadas.join(", ")}${invInicial.cantidad > 0 ? ` · ${invInicial.cantidad} unidad(es) iniciales c/u` : ""}`,
+              : `Tallas: ${lineasValidas.map((l) => `${l.talla}${l.cantidad > 0 ? ` (${l.cantidad})` : ""}`).join(", ")}${totalUnidades > 0 ? ` · ${totalUnidades} unidad(es) en total` : ""}`,
           variant: errores.length > 0 ? "destructive" : undefined,
         })
         setDialogOpen(false)
@@ -1410,70 +1423,77 @@ export default function ProductosConfigPage() {
                 {tieneTallas ? (
                   <div className="rounded-lg border border-stone-200 bg-stone-50/50 p-3 space-y-3">
                     <p className="text-xs text-muted-foreground">
-                      Marca las tallas que aplican. Al guardar se crea un producto por
-                      cada talla (mismo nombre + talla, su propio stock). El código de
-                      barras de cada uno será <span className="font-mono">código-talla</span>.
+                      Agrega una línea por talla y escribe la cantidad inicial de cada una.
+                      El <strong>precio de venta</strong> y el <strong>costo</strong> son los del
+                      formulario (únicos para todas). Cada talla se crea como su propio producto
+                      (código <span className="font-mono">código-talla</span>) y quedan agrupadas.
                     </p>
-                    <div className="flex flex-wrap gap-2">
-                      {TALLAS_PRESET.map((t) => {
-                        const activo = tallasSeleccionadas.includes(t)
-                        return (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={() => {
-                              toggleTalla(t)
-                              if (validationErrors.tallas) setValidationErrors((prev) => ({ ...prev, tallas: "" }))
-                            }}
-                            className={`rounded-full border px-3 py-1 text-sm transition-colors ${
-                              activo
-                                ? "border-amber-400 bg-amber-100 text-amber-900 font-medium"
-                                : "border-stone-200 bg-white text-stone-600 hover:bg-stone-100"
-                            }`}
-                          >
-                            {t}
-                          </button>
-                        )
-                      })}
-                    </div>
-                    {/* Tallas personalizadas fuera del preset */}
-                    {tallasSeleccionadas.filter((t) => !TALLAS_PRESET.includes(t as typeof TALLAS_PRESET[number])).length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {tallasSeleccionadas
-                          .filter((t) => !TALLAS_PRESET.includes(t as typeof TALLAS_PRESET[number]))
-                          .map((t) => (
-                            <button
-                              key={t}
+
+                    {/* Datalist con tallas frecuentes para escribir/elegir rápido */}
+                    <datalist id="tallas-preset">
+                      {TALLAS_PRESET.map((t) => <option key={t} value={t} />)}
+                    </datalist>
+
+                    {lineasTalla.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="hidden sm:flex items-center gap-2 px-1 text-[11px] font-medium text-stone-500">
+                          <span className="flex-1">Talla</span>
+                          <span className="w-32">Cantidad inicial</span>
+                          <span className="w-8" />
+                        </div>
+                        {lineasTalla.map((linea, idx) => (
+                          <div key={idx} className="flex items-end gap-2">
+                            <div className="grid gap-1 flex-1 min-w-0">
+                              <Label className="text-xs text-stone-500 sm:hidden">Talla</Label>
+                              <Input
+                                list="tallas-preset"
+                                value={linea.talla}
+                                onChange={(e) => {
+                                  setLineaTalla(idx, "talla", e.target.value)
+                                  if (validationErrors.tallas) setValidationErrors((prev) => ({ ...prev, tallas: "" }))
+                                }}
+                                placeholder="Ej: S, M, 40, XXL"
+                                className="h-10"
+                              />
+                            </div>
+                            <div className="grid gap-1 w-32 shrink-0">
+                              <Label className="text-xs text-stone-500 sm:hidden">Cantidad</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={linea.cantidad}
+                                onChange={(e) => setLineaTalla(idx, "cantidad", e.target.value)}
+                                placeholder="0"
+                                className="h-10 text-base"
+                              />
+                            </div>
+                            <Button
                               type="button"
-                              onClick={() => toggleTalla(t)}
-                              className="rounded-full border border-amber-400 bg-amber-100 px-3 py-1 text-sm font-medium text-amber-900"
+                              variant="ghost"
+                              size="icon"
+                              className="h-10 w-8 shrink-0 text-stone-500 hover:text-destructive"
+                              title="Quitar talla"
+                              onClick={() => quitarLineaTalla(idx)}
                             >
-                              {t} ✕
-                            </button>
-                          ))}
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
                       </div>
                     )}
-                    <div className="flex gap-2">
-                      <Input
-                        value={tallaLibre}
-                        onChange={(e) => setTallaLibre(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault()
-                            agregarTallaLibre()
-                          }
-                        }}
-                        placeholder="Otra talla (ej: 40, XXL)"
-                        className="h-9"
-                      />
-                      <Button type="button" variant="outline" size="sm" onClick={agregarTallaLibre} disabled={!tallaLibre.trim()}>
-                        Agregar
-                      </Button>
-                    </div>
-                    {tallasSeleccionadas.length > 0 && (
+
+                    <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={agregarLineaTalla}>
+                      <Plus className="h-4 w-4" /> Agregar talla
+                    </Button>
+
+                    {lineasTalla.filter((l) => l.talla.trim()).length > 0 && (
                       <p className="text-xs text-stone-600">
-                        Se crearán <span className="font-medium">{tallasSeleccionadas.length}</span> producto(s):{" "}
-                        {tallasSeleccionadas.join(", ")}
+                        Se crearán <span className="font-medium">{lineasTalla.filter((l) => l.talla.trim()).length}</span> producto(s)
+                        {(() => {
+                          const total = lineasTalla.reduce((a, l) => a + (Number(l.cantidad) || 0), 0)
+                          return total > 0 ? ` · ${total} unidad(es) en total` : ""
+                        })()}
                       </p>
                     )}
                     {validationErrors.tallas && (
@@ -1761,34 +1781,43 @@ export default function ProductosConfigPage() {
               )}
             </div>
 
-            {/* Inventario inicial: SOLO al crear un producto nuevo */}
-            {!editingProducto && (
+            {/* Inventario inicial: SOLO al crear un producto nuevo. En modo tallas
+                la cantidad viene por talla; aquí solo se define el costo único y,
+                si hay cantidades, el almacén/localización comunes. */}
+            {!editingProducto && (() => {
+              const modoTallasUI = tallasActivo && tieneTallas
+              const hayCantidad = modoTallasUI
+                ? lineasTalla.some((l) => Number(l.cantidad) > 0)
+                : invInicial.cantidad > 0
+              return (
               <div className="rounded-lg border border-sky-200 bg-sky-50/40 p-4 space-y-4">
                 <div>
                   <p className="text-sm font-medium text-sky-900">Inventario inicial (opcional)</p>
                   <p className="text-xs text-muted-foreground">
-                    Indica la cantidad con la que arranca este producto. Se generará un
-                    ingreso manual al inventario en el almacén y localización que elijas.
-                    Déjalo en 0 si aún no tienes existencias.
+                    {modoTallasUI
+                      ? "La cantidad inicial se pone por talla arriba. Aquí define el costo único (igual para todas) y el almacén/localización donde entrará el inventario."
+                      : "Indica la cantidad con la que arranca este producto. Se generará un ingreso manual al inventario en el almacén y localización que elijas. Déjalo en 0 si aún no tienes existencias."}
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
+                  {!modoTallasUI && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="inv-cantidad">Cantidad inicial</Label>
+                      <Input
+                        id="inv-cantidad"
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="0"
+                        value={invInicial.cantidad || ""}
+                        onChange={(e) =>
+                          setInvInicial({ ...invInicial, cantidad: parseFloat(e.target.value) || 0 })
+                        }
+                      />
+                    </div>
+                  )}
                   <div className="grid gap-2">
-                    <Label htmlFor="inv-cantidad">Cantidad inicial</Label>
-                    <Input
-                      id="inv-cantidad"
-                      type="number"
-                      min="0"
-                      step="1"
-                      placeholder="0"
-                      value={invInicial.cantidad || ""}
-                      onChange={(e) =>
-                        setInvInicial({ ...invInicial, cantidad: parseFloat(e.target.value) || 0 })
-                      }
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="inv-costo">Costo unitario (LPS)</Label>
+                    <Label htmlFor="inv-costo">Costo unitario (LPS){modoTallasUI ? " · igual para todas las tallas" : ""}</Label>
                     <Input
                       id="inv-costo"
                       type="number"
@@ -1802,7 +1831,7 @@ export default function ProductosConfigPage() {
                     />
                   </div>
                 </div>
-                {invInicial.cantidad > 0 && (
+                {hayCantidad && (
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="inv-almacen">Almacén</Label>
@@ -1852,7 +1881,8 @@ export default function ProductosConfigPage() {
                   </div>
                 )}
               </div>
-            )}
+              )
+            })()}
 
             {/* Read-only Fields Section */}
             {editingProducto && (
@@ -2229,41 +2259,46 @@ function EditarGrupoDialog({
 
         <div className="space-y-2">
           {tallas.map((t) => (
-            <div key={t.id} className="flex items-center gap-2 rounded-lg border border-stone-200 p-2">
-              <span className="w-16 shrink-0 rounded-full bg-amber-100 px-2 py-1 text-center text-xs font-semibold text-amber-900">
-                {t.talla || "—"}
-              </span>
-              <span className="w-28 shrink-0 font-mono text-xs text-stone-500 truncate">{t.codigo_barras}</span>
-              <span className="w-20 shrink-0 text-xs text-stone-500">Stock: {t.stock_total || 0}</span>
-              <div className="flex items-center gap-1 flex-1">
-                <span className="text-xs text-stone-500">L</span>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={precios[t.id!] ?? ""}
-                  onChange={(e) => setPrecios((prev) => ({ ...prev, [t.id!]: e.target.value }))}
-                  className="h-8"
-                />
+            <div key={t.id} className="rounded-lg border border-stone-200 p-3 space-y-2">
+              {/* Datos de la talla */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-center text-xs font-semibold text-amber-900">
+                  Talla {t.talla || "—"}
+                </span>
+                <span className="font-mono text-xs text-stone-500 truncate">{t.codigo_barras}</span>
+                <span className="text-xs text-stone-500">Stock: {t.stock_total || 0}</span>
                 <Button
-                  size="sm"
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 ml-auto shrink-0 text-stone-500 hover:text-destructive"
+                  title="Quitar del grupo"
+                  onClick={() => quitarTalla(t)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+              {/* Precio: input amplio para que el valor completo sea visible */}
+              <div className="flex items-end gap-2">
+                <div className="grid gap-1 flex-1 min-w-0">
+                  <Label className="text-xs text-stone-500">Precio de venta (L)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={precios[t.id!] ?? ""}
+                    onChange={(e) => setPrecios((prev) => ({ ...prev, [t.id!]: e.target.value }))}
+                    className="h-10 text-base w-full"
+                  />
+                </div>
+                <Button
                   variant="outline"
-                  className="h-8"
+                  className="h-10 shrink-0"
                   disabled={guardandoPrecio === t.id || Number(precios[t.id!]) === (t.precio_venta_sugerido ?? 0)}
                   onClick={() => guardarPrecio(t)}
                 >
-                  {guardandoPrecio === t.id ? <Spinner className="h-3.5 w-3.5" /> : "Guardar"}
+                  {guardandoPrecio === t.id ? <Spinner className="h-4 w-4" /> : "Guardar"}
                 </Button>
               </div>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 shrink-0 text-stone-500 hover:text-destructive"
-                title="Quitar del grupo"
-                onClick={() => quitarTalla(t)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
             </div>
           ))}
         </div>
