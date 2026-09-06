@@ -408,6 +408,11 @@ function ProductGrid({ productos, idsEnVenta, onAdd, disabled, getStock, precioF
               <p className="text-[10px] sm:text-[11px] font-medium leading-tight line-clamp-2 break-words">
                 {p.nombre}
               </p>
+              {p.talla && (
+                <span className="w-fit rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] sm:text-[9px] font-semibold text-amber-900">
+                  Talla {p.talla}
+                </span>
+              )}
               {p.codigo_barras && (
                 <p className="text-[9px] sm:text-[10px] font-mono text-muted-foreground truncate">
                   {p.codigo_barras}
@@ -481,6 +486,11 @@ function ProductTable({ productos, idsEnVenta, onAdd, disabled, getStock, precio
                 </td>
                 <td className="px-2 sm:px-3 py-1.5 max-w-[16rem]">
                   <span className="font-medium line-clamp-2 break-words">{p.nombre}</span>
+                  {p.talla && (
+                    <span className="ml-1 inline-block rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-900 align-middle">
+                      Talla {p.talla}
+                    </span>
+                  )}
                   {enVenta && (
                     <Badge variant="secondary" className="mt-1 text-[9px]">
                       En venta

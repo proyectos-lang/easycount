@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, Fragment } from "react"
 import {
   Plus,
   Package,
@@ -20,6 +20,9 @@ import {
   ArrowUp,
   ArrowDown,
   ImageDown,
+  ChevronRight,
+  ChevronDown,
+  Layers3,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -49,6 +52,7 @@ import {
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Spinner } from "@/components/ui/spinner"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -74,10 +78,24 @@ import {
   getLocalizaciones,
 } from "@/lib/services/catalogos"
 import { procesarIngresoManual } from "@/lib/services/inventario"
+import {
+  getGruposTallas,
+  crearGrupoConProductos,
+  agregarProductoAGrupo,
+  quitarDeGrupo,
+  GRUPOS_TALLAS_FEATURE_PENDING,
+  type GrupoTallaRef,
+} from "@/lib/services/grupos-tallas"
 import { formatCurrency } from "@/lib/utils/format"
 import { useTenant } from "@/lib/hooks/use-tenant"
+import { useAuth } from "@/lib/contexts/auth-context"
 import { ImportarProductosDialog } from "./importar-productos-dialog"
 import { ManageCategoriasDialog } from "@/components/productos/manage-categorias-dialog"
+
+// Tallas predefinidas para el creador rapido "por tallas". El usuario marca
+// las que aplican y al guardar se crea un producto independiente por cada una
+// (mismo nombre + talla, su propio stock/codigo). Puede escribir otras a mano.
+const TALLAS_PRESET = ["S", "M", "L", "XL", "6", "8", "10", "12", "14", "16"] as const
 
 // Columnas por las que se puede ordenar la tabla de productos.
 type SortKey =
@@ -127,6 +145,10 @@ function SortHeader({
 export default function ProductosConfigPage() {
   const { toast } = useToast()
   const { ready, razonSocialId } = useTenant()
+  const { user } = useAuth()
+  // Sistema de productos por talla: solo si la empresa lo tiene activo (flag del
+  // super-admin). Si esta apagado, ni el check ni el agrupamiento aparecen.
+  const tallasActivo = user?.flags?.productos_por_talla ?? false
   
   const [productos, setProductos] = useState<Producto[]>([])
   const [marcas, setMarcas] = useState<Marca[]>([])
@@ -142,6 +164,14 @@ export default function ProductosConfigPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingProducto, setEditingProducto] = useState<Producto | null>(null)
   const [saving, setSaving] = useState(false)
+
+  // Grupos de tallas: mapa producto_id -> {grupo_id, nombre_grupo}. Con esto
+  // agrupamos en la lista los productos hermanos (misma prenda, varias tallas).
+  const [gruposTallas, setGruposTallas] = useState<Map<number, GrupoTallaRef>>(new Map())
+  // grupo_id expandidos (mostrando sus tallas) en la vista de lista.
+  const [gruposExpandidos, setGruposExpandidos] = useState<Set<number>>(new Set())
+  // Editor de grupo: grupo_id abierto (o null). Su contenido se deriva de productos.
+  const [grupoEditando, setGrupoEditando] = useState<number | null>(null)
   
   // Filter state
   const [filterMarca, setFilterMarca] = useState<string>("all")
@@ -193,6 +223,27 @@ export default function ProductosConfigPage() {
     almacen_id: 0,
     localizacion_id: 0,
   })
+
+  // Creador "por tallas" (solo al crear producto nuevo). Si tieneTallas, al
+  // guardar se genera UN producto por cada talla marcada, en vez de uno solo.
+  const [tieneTallas, setTieneTallas] = useState(false)
+  const [tallasSeleccionadas, setTallasSeleccionadas] = useState<string[]>([])
+  const [tallaLibre, setTallaLibre] = useState("")
+
+  function toggleTalla(t: string) {
+    setTallasSeleccionadas((prev) =>
+      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
+    )
+  }
+
+  function agregarTallaLibre() {
+    const t = tallaLibre.trim()
+    if (!t) return
+    if (!tallasSeleccionadas.includes(t)) {
+      setTallasSeleccionadas((prev) => [...prev, t])
+    }
+    setTallaLibre("")
+  }
   
   // Price calculator state
   const [showCalculator, setShowCalculator] = useState(false)
@@ -217,12 +268,13 @@ export default function ProductosConfigPage() {
   async function loadAll() {
     setLoading(true)
     try {
-      const [prodRes, marcaRes, catRes, subRes, almRes] = await Promise.all([
+      const [prodRes, marcaRes, catRes, subRes, almRes, gruposRes] = await Promise.all([
         getProductos(),
         getMarcas(),
         getCategorias(),
         getSubcategorias(),
         getAlmacenes(),
+        getGruposTallas(),
       ])
       if (prodRes.error) {
         console.log('[Productos] error:', prodRes.error)
@@ -234,6 +286,7 @@ export default function ProductosConfigPage() {
       if (!catRes.error) setCategorias(catRes.data)
       if (!subRes.error) setSubcategorias(subRes.data)
       if (!almRes.error) setAlmacenes(almRes.data)
+      setGruposTallas(gruposRes.data)
     } catch (err: any) {
       console.log('[Productos] excepcion:', err)
       toast({ title: "No se pudieron cargar los datos", description: err?.message || "Error de conexion", variant: "destructive" })
@@ -261,12 +314,13 @@ export default function ProductosConfigPage() {
   }, [invInicial.almacen_id])
 
   async function loadProductos() {
-    const { data, error } = await getProductos()
+    const [{ data, error }, gruposRes] = await Promise.all([getProductos(), getGruposTallas()])
     if (error) {
       toast({ title: "Error", description: error, variant: "destructive" })
     } else {
       setProductos(data)
     }
+    setGruposTallas(gruposRes.data)
   }
 
   async function loadMarcas() {
@@ -358,6 +412,246 @@ export default function ProductosConfigPage() {
     return arr
   }, [productos, filterMarca, filterCategoria, searchTerm, sortKey, sortDir])
 
+  /**
+   * Agrupa `filteredProductos` para la lista: los productos que comparten
+   * grupo_id (tallas de la misma prenda) se muestran como UNA fila desplegable;
+   * el resto como fila normal. Conserva el orden de aparicion de la lista ya
+   * filtrada/ordenada (el grupo toma la posicion de su primera talla).
+   */
+  const filas = useMemo(() => {
+    const out: (
+      | { tipo: "single"; producto: Producto }
+      | {
+          tipo: "grupo"
+          grupoId: number
+          nombre: string
+          marca_nombre?: string
+          categoria_nombre?: string
+          tallas: Producto[]
+          stockTotal: number
+          precioMin: number
+          precioMax: number
+        }
+    )[] = []
+    const grupoIndex = new Map<number, number>() // grupo_id -> indice en out
+    for (const p of filteredProductos) {
+      // Si el sistema de tallas esta apagado para la empresa, no agrupamos nada.
+      const ref = tallasActivo && p.id != null ? gruposTallas.get(p.id) : undefined
+      if (!ref) {
+        out.push({ tipo: "single", producto: p })
+        continue
+      }
+      const idx = grupoIndex.get(ref.grupo_id)
+      if (idx == null) {
+        grupoIndex.set(ref.grupo_id, out.length)
+        out.push({
+          tipo: "grupo",
+          grupoId: ref.grupo_id,
+          nombre: ref.nombre_grupo || p.nombre,
+          marca_nombre: p.marca_nombre,
+          categoria_nombre: p.categoria_nombre,
+          tallas: [p],
+          stockTotal: p.stock_total || 0,
+          precioMin: p.precio_venta_sugerido || 0,
+          precioMax: p.precio_venta_sugerido || 0,
+        })
+      } else {
+        const g = out[idx]
+        if (g.tipo === "grupo") {
+          g.tallas.push(p)
+          g.stockTotal += p.stock_total || 0
+          const precio = p.precio_venta_sugerido || 0
+          g.precioMin = Math.min(g.precioMin, precio)
+          g.precioMax = Math.max(g.precioMax, precio)
+        }
+      }
+    }
+    return out
+  }, [filteredProductos, gruposTallas, tallasActivo])
+
+  function toggleGrupo(grupoId: number) {
+    setGruposExpandidos((prev) => {
+      const next = new Set(prev)
+      if (next.has(grupoId)) next.delete(grupoId)
+      else next.add(grupoId)
+      return next
+    })
+  }
+
+  // Tallas (productos) de un grupo, ordenadas por talla para el editor/despliegue.
+  function tallasDeGrupo(grupoId: number): Producto[] {
+    return productos
+      .filter((p) => p.id != null && gruposTallas.get(p.id)?.grupo_id === grupoId)
+      .sort((a, b) => (a.talla || "").localeCompare(b.talla || "", "es", { numeric: true }))
+  }
+
+  /**
+   * Renderiza una fila normal de producto en la tabla desktop. `sangria=true`
+   * para las tallas dentro de un grupo desplegado (se indentan y muestran su
+   * talla en vez del nombre completo).
+   */
+  function renderProductoRow(producto: Producto, sangria: boolean) {
+    const precio = producto.precio_venta_sugerido || 0
+    const costo = producto.costo_promedio || 0
+    const ganancia = precio - costo
+    const margen = precio > 0 ? (ganancia / precio) * 100 : 0
+    const color = ganancia >= 0 ? "text-emerald-700" : "text-red-600"
+    return (
+      <TableRow key={producto.id} className={sangria ? "bg-stone-50/40" : undefined}>
+        <TableCell>
+          {producto.foto_url ? (
+            <img src={producto.foto_url} alt={producto.nombre} className={`h-10 w-10 rounded-lg object-cover ${sangria ? "ml-6" : ""}`} />
+          ) : (
+            <div className={`h-10 w-10 rounded-lg bg-stone-100 flex items-center justify-center ${sangria ? "ml-6" : ""}`}>
+              <ImageIcon className="h-5 w-5 text-stone-400" />
+            </div>
+          )}
+        </TableCell>
+        <TableCell className="font-medium">
+          {sangria ? (
+            <span className="inline-flex items-center gap-1.5 pl-2">
+              <span className="text-stone-300">└</span>
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                Talla {producto.talla || "—"}
+              </span>
+            </span>
+          ) : (
+            <>
+              {producto.nombre}
+              {producto.talla && (
+                <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                  {producto.talla}
+                </span>
+              )}
+            </>
+          )}
+        </TableCell>
+        <TableCell className="font-mono text-sm text-stone-600">{producto.codigo_barras}</TableCell>
+        <TableCell>
+          {producto.marca_nombre ? (
+            <Badge variant="outline" className="bg-amber-50 border-amber-200 text-amber-800 rounded-full font-normal">
+              {producto.marca_nombre}
+            </Badge>
+          ) : (
+            <span className="text-stone-400 text-xs">-</span>
+          )}
+        </TableCell>
+        <TableCell>
+          {producto.categoria_nombre ? (
+            <Badge variant="outline" className="bg-stone-50 border-stone-200 text-stone-700 rounded-full font-normal">
+              {producto.categoria_nombre}
+            </Badge>
+          ) : (
+            <span className="text-stone-400 text-xs">-</span>
+          )}
+        </TableCell>
+        <TableCell>
+          {producto.subcategoria_nombre ? (
+            <Badge variant="outline" className="bg-stone-100 border-stone-300 text-stone-600 rounded-full font-normal">
+              {producto.subcategoria_nombre}
+            </Badge>
+          ) : (
+            <span className="text-stone-400 text-xs">-</span>
+          )}
+        </TableCell>
+        <TableCell className="text-right font-medium text-emerald-700">L {precio.toFixed(2)}</TableCell>
+        <TableCell className="text-right text-stone-600">L {costo.toFixed(2)}</TableCell>
+        <TableCell className={`text-right font-medium ${color}`}>{formatCurrency(ganancia)}</TableCell>
+        <TableCell className={`text-right ${color}`}>{margen.toFixed(1)}%</TableCell>
+        <TableCell className="text-right">{producto.stock_total || 0}</TableCell>
+        <TableCell>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(producto)}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10" onClick={() => handleDelete(producto)}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </TableCell>
+      </TableRow>
+    )
+  }
+
+  /**
+   * Tarjeta de producto para la vista movil. `sangria=true` para las tallas
+   * dentro de un grupo desplegado (muestra la talla en vez del nombre).
+   */
+  function renderProductoCard(producto: Producto, sangria = false) {
+    const precio = producto.precio_venta_sugerido || 0
+    const costo = producto.costo_promedio || 0
+    const ganancia = precio - costo
+    const margen = precio > 0 ? (ganancia / precio) * 100 : 0
+    const color = ganancia >= 0 ? "text-emerald-700" : "text-red-600"
+    return (
+      <div
+        key={producto.id}
+        className={`border rounded-xl p-3 bg-white flex items-center gap-3 ${sangria ? "border-stone-100 bg-stone-50/60" : "border-stone-200"}`}
+      >
+        {producto.foto_url ? (
+          <img src={producto.foto_url} alt={producto.nombre} className="h-14 w-14 rounded-lg object-cover shrink-0" />
+        ) : (
+          <div className="h-14 w-14 rounded-lg bg-stone-100 flex items-center justify-center shrink-0">
+            <ImageIcon className="h-5 w-5 text-stone-400" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          {sangria ? (
+            <p className="font-medium text-sm">
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                Talla {producto.talla || "—"}
+              </span>
+            </p>
+          ) : (
+            <p className="font-medium truncate text-sm">
+              {producto.nombre}
+              {producto.talla && (
+                <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                  {producto.talla}
+                </span>
+              )}
+            </p>
+          )}
+          <p className="text-xs text-stone-500 font-mono">{producto.codigo_barras}</p>
+          {!sangria && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {producto.marca_nombre && (
+                <Badge variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-800 rounded-full">
+                  {producto.marca_nombre}
+                </Badge>
+              )}
+              {producto.categoria_nombre && (
+                <Badge variant="outline" className="text-xs bg-stone-50 border-stone-200 text-stone-700 rounded-full">
+                  {producto.categoria_nombre}
+                </Badge>
+              )}
+              {producto.subcategoria_nombre && (
+                <Badge variant="outline" className="text-xs bg-stone-100 border-stone-300 text-stone-600 rounded-full">
+                  {producto.subcategoria_nombre}
+                </Badge>
+              )}
+            </div>
+          )}
+          <div className="flex gap-3 mt-1 text-xs">
+            <span className="text-emerald-700 font-medium">L {precio.toFixed(2)}</span>
+            <span className="text-stone-500">Stock: {producto.stock_total || 0}</span>
+          </div>
+          <div className={`mt-0.5 text-xs ${color}`}>
+            Ganancia: {formatCurrency(ganancia)} · {margen.toFixed(1)}%
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(producto)}>
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10" onClick={() => handleDelete(producto)}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   async function handleCreateMarca() {
     if (!newMarcaName.trim()) {
       toast({ title: "Error", description: "El nombre es requerido", variant: "destructive" })
@@ -412,6 +706,9 @@ export default function ProductosConfigPage() {
       talla: "",
     })
     setInvInicial({ cantidad: 0, costo_unitario: 0, almacen_id: 0, localizacion_id: 0 })
+    setTieneTallas(false)
+    setTallasSeleccionadas([])
+    setTallaLibre("")
     setImagePreview("")
     setImageFile(null)
     setShowCalculator(false)
@@ -423,6 +720,11 @@ export default function ProductosConfigPage() {
   function openEditDialog(producto: Producto) {
     setValidationErrors({})
     setEditingProducto(producto)
+    // El creador por tallas es solo para productos nuevos. Al editar, se usa el
+    // campo de talla individual del producto existente.
+    setTieneTallas(false)
+    setTallasSeleccionadas([])
+    setTallaLibre("")
     setFormData({
       ...producto,
       costo_promedio: producto.costo_promedio ?? 0,
@@ -500,6 +802,11 @@ export default function ProductosConfigPage() {
       errors.categoria_id = "La categoria es requerida"
     }
 
+    // Creador por tallas (solo al crear): exige al menos una talla marcada.
+    if (!editingProducto && tallasActivo && tieneTallas && tallasSeleccionadas.length === 0) {
+      errors.tallas = "Selecciona al menos una talla o desactiva la opción"
+    }
+
     // Inventario inicial (solo al crear): si se indica cantidad, exige
     // almacen y localizacion para poder generar el ingreso.
     if (!editingProducto && invInicial.cantidad > 0) {
@@ -511,18 +818,20 @@ export default function ProductosConfigPage() {
     return Object.keys(errors).length === 0
   }
 
-  async function handleSave() {
-    if (!validateForm()) {
-      toast({ title: "Error de validacion", description: "Complete todos los campos requeridos", variant: "destructive" })
-      return
-    }
-
-    setSaving(true)
-
+  /**
+   * Crea (o actualiza) UN producto con la talla indicada y, al crear con
+   * cantidad inicial > 0, genera su ingreso manual. Devuelve un error legible
+   * o null. `codigoBarras` puede diferir del formulario cuando se crean varias
+   * tallas (cada una necesita su propio codigo unico).
+   */
+  async function guardarUnProducto(
+    talla: string | null,
+    codigoBarras: string,
+  ): Promise<{ error: string | null; id: number | null }> {
     const productoData: Producto = {
       ...editingProducto,
       nombre: formData.nombre!,
-      codigo_barras: formData.codigo_barras!,
+      codigo_barras: codigoBarras,
       precio_venta_sugerido: Number(formData.precio_venta_sugerido) || 0,
       costo_promedio: Number(formData.costo_promedio) || 0,
       foto_url: formData.foto_url || "",
@@ -532,20 +841,15 @@ export default function ProductosConfigPage() {
       subcategoria_id: formData.categoria_id
         ? formData.subcategoria_id ?? null
         : null,
-      // Talla opcional.
-      talla: (formData.talla ?? "").toString().trim() || null,
+      talla: talla || null,
     }
 
     const { data: creado, error } = await saveProducto(productoData, !editingProducto)
-
-    if (error) {
-      setSaving(false)
-      toast({ title: "Error", description: error, variant: "destructive" })
-      return
-    }
+    if (error) return { error, id: null }
 
     // Inventario inicial: genera un ingreso manual con la cantidad indicada.
-    // Solo al crear (no al editar) y si la cantidad es > 0.
+    // Solo al crear (no al editar) y si la cantidad es > 0. Con varias tallas,
+    // la misma cantidad inicial se aplica a cada producto creado.
     if (!editingProducto && invInicial.cantidad > 0 && creado?.id) {
       const ing = await procesarIngresoManual({
         producto_id: creado.id,
@@ -559,26 +863,92 @@ export default function ProductosConfigPage() {
         nuevo_stock: invInicial.cantidad,
         nuevo_costo: invInicial.costo_unitario,
       })
-      setSaving(false)
       if (ing.error) {
-        // El producto ya existe; solo fallo el ingreso inicial.
-        toast({
-          title: "Producto creado, sin inventario inicial",
-          description: `No se pudo registrar la cantidad inicial: ${ing.error}. Regístrala en Inventario → Ingreso Manual.`,
-          variant: "destructive",
-        })
-      } else {
-        toast({
-          title: "Producto creado",
-          description: `Se ingresaron ${invInicial.cantidad} unidad(es) al inventario inicial.`,
-        })
+        // El producto quedo creado; solo fallo el ingreso inicial.
+        return {
+          error: `Producto creado sin inventario inicial: ${ing.error}. Regístralo en Inventario → Ingreso Manual.`,
+          id: creado?.id ?? null,
+        }
       }
-      setDialogOpen(false)
-      loadProductos()
+    }
+    return { error: null, id: creado?.id ?? null }
+  }
+
+  async function handleSave() {
+    if (!validateForm()) {
+      toast({ title: "Error de validacion", description: "Complete todos los campos requeridos", variant: "destructive" })
       return
     }
 
+    setSaving(true)
+
+    // Camino "por tallas": crea un producto independiente por cada talla marcada.
+    // Solo al crear (nunca al editar). Cada talla lleva su propio codigo de
+    // barras (codigo base + "-" + talla) para no chocar entre si.
+    if (!editingProducto && tallasActivo && tieneTallas && tallasSeleccionadas.length > 0) {
+      const baseCodigo = formData.codigo_barras!.trim()
+      let creados = 0
+      const errores: string[] = []
+      const idsCreados: number[] = []
+      for (const talla of tallasSeleccionadas) {
+        const codigoTalla = `${baseCodigo}-${talla}`
+        const { error: err, id } = await guardarUnProducto(talla, codigoTalla)
+        if (err) errores.push(`${talla}: ${err}`)
+        else creados++
+        if (id) idsCreados.push(id)
+      }
+      // Vincula todas las tallas creadas en un mismo grupo, para que en las
+      // listas (Productos/Inventario) aparezcan como un solo producto que se
+      // despliega en sus tallas. Degrada si el script 043 no se aplico.
+      if (idsCreados.length > 1) {
+        const g = await crearGrupoConProductos(formData.nombre!.trim(), idsCreados)
+        if (g.error && g.error !== GRUPOS_TALLAS_FEATURE_PENDING) {
+          errores.push(`Agrupado: ${g.error}`)
+        }
+      }
+      setSaving(false)
+      if (creados > 0) {
+        toast({
+          title: `Se crearon ${creados} producto(s) por talla`,
+          description:
+            errores.length > 0
+              ? `Con avisos: ${errores.join(" · ")}`
+              : `Tallas: ${tallasSeleccionadas.join(", ")}${invInicial.cantidad > 0 ? ` · ${invInicial.cantidad} unidad(es) iniciales c/u` : ""}`,
+          variant: errores.length > 0 ? "destructive" : undefined,
+        })
+        setDialogOpen(false)
+        loadProductos()
+      } else {
+        toast({
+          title: "No se crearon productos",
+          description: errores.join(" · ") || "Revisa los datos e intenta de nuevo.",
+          variant: "destructive",
+        })
+      }
+      return
+    }
+
+    // Camino normal: un solo producto (con la talla individual del formulario).
+    const { error: err } = await guardarUnProducto(
+      (formData.talla ?? "").toString().trim() || null,
+      formData.codigo_barras!,
+    )
     setSaving(false)
+    if (err) {
+      // Si el producto se creó pero falló el inventario inicial, el mensaje ya
+      // lo explica; igual cerramos y refrescamos para reflejar el producto.
+      const soloAvisoInventario = err.startsWith("Producto creado sin inventario inicial")
+      toast({
+        title: soloAvisoInventario ? "Producto creado, sin inventario inicial" : "Error",
+        description: err,
+        variant: "destructive",
+      })
+      if (soloAvisoInventario) {
+        setDialogOpen(false)
+        loadProductos()
+      }
+      return
+    }
     toast({ title: "Exito", description: `Producto ${editingProducto ? "actualizado" : "creado"} correctamente` })
     setDialogOpen(false)
     loadProductos()
@@ -756,62 +1126,41 @@ export default function ProductosConfigPage() {
             <>
               {/* Mobile Card View */}
               <div className="block md:hidden space-y-3">
-                {filteredProductos.map((producto) => (
-                  <div key={producto.id} className="border border-stone-200 rounded-xl p-3 bg-white flex items-center gap-3">
-                    {producto.foto_url ? (
-                      <img src={producto.foto_url} alt={producto.nombre} className="h-14 w-14 rounded-lg object-cover shrink-0" />
-                    ) : (
-                      <div className="h-14 w-14 rounded-lg bg-stone-100 flex items-center justify-center shrink-0">
-                        <ImageIcon className="h-5 w-5 text-stone-400" />
+                {filas.map((fila) => {
+                  if (fila.tipo === "single") {
+                    return renderProductoCard(fila.producto)
+                  }
+                  const expandido = gruposExpandidos.has(fila.grupoId)
+                  const rangoPrecio =
+                    fila.precioMin === fila.precioMax
+                      ? `L ${fila.precioMin.toFixed(2)}`
+                      : `L ${fila.precioMin.toFixed(2)} - ${fila.precioMax.toFixed(2)}`
+                  return (
+                    <div key={`g-${fila.grupoId}`} className="border border-amber-200 rounded-xl bg-amber-50/40">
+                      <div className="p-3 flex items-center gap-3">
+                        <div className="h-14 w-14 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+                          <Layers3 className="h-6 w-6 text-amber-700" />
+                        </div>
+                        <button type="button" onClick={() => toggleGrupo(fila.grupoId)} className="flex-1 min-w-0 text-left">
+                          <p className="font-medium truncate text-sm flex items-center gap-1">
+                            {expandido ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+                            {fila.nombre}
+                          </p>
+                          <p className="text-xs text-amber-800">{fila.tallas.length} tallas · Stock: {fila.stockTotal}</p>
+                          <p className="text-xs text-emerald-700 font-medium">{rangoPrecio}</p>
+                        </button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setGrupoEditando(fila.grupoId)} title="Editar grupo">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
                       </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate text-sm">{producto.nombre}</p>
-                      <p className="text-xs text-stone-500 font-mono">{producto.codigo_barras}</p>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {producto.marca_nombre && (
-                          <Badge variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-800 rounded-full">
-                            {producto.marca_nombre}
-                          </Badge>
-                        )}
-                        {producto.categoria_nombre && (
-                          <Badge variant="outline" className="text-xs bg-stone-50 border-stone-200 text-stone-700 rounded-full">
-                            {producto.categoria_nombre}
-                          </Badge>
-                        )}
-                        {producto.subcategoria_nombre && (
-                          <Badge variant="outline" className="text-xs bg-stone-100 border-stone-300 text-stone-600 rounded-full">
-                            {producto.subcategoria_nombre}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex gap-3 mt-1 text-xs">
-                        <span className="text-emerald-700 font-medium">L {(producto.precio_venta_sugerido || 0).toFixed(2)}</span>
-                        <span className="text-stone-500">Stock: {producto.stock_total || 0}</span>
-                      </div>
-                      {(() => {
-                        const precio = producto.precio_venta_sugerido || 0
-                        const costo = producto.costo_promedio || 0
-                        const ganancia = precio - costo
-                        const margen = precio > 0 ? (ganancia / precio) * 100 : 0
-                        const color = ganancia >= 0 ? "text-emerald-700" : "text-red-600"
-                        return (
-                          <div className={`mt-0.5 text-xs ${color}`}>
-                            Ganancia: {formatCurrency(ganancia)} · {margen.toFixed(1)}%
-                          </div>
-                        )
-                      })()}
+                      {expandido && (
+                        <div className="px-3 pb-3 space-y-2">
+                          {tallasDeGrupo(fila.grupoId).map((t) => renderProductoCard(t, true))}
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(producto)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10" onClick={() => handleDelete(producto)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
 
               {/* Desktop Table */}
@@ -834,74 +1183,79 @@ export default function ProductosConfigPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredProductos.map((producto) => (
-                      <TableRow key={producto.id}>
-                        <TableCell>
-                          {producto.foto_url ? (
-                            <img src={producto.foto_url} alt={producto.nombre} className="h-10 w-10 rounded-lg object-cover" />
-                          ) : (
-                            <div className="h-10 w-10 rounded-lg bg-stone-100 flex items-center justify-center">
-                              <ImageIcon className="h-5 w-5 text-stone-400" />
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="font-medium">{producto.nombre}</TableCell>
-                        <TableCell className="font-mono text-sm text-stone-600">{producto.codigo_barras}</TableCell>
-                        <TableCell>
-                          {producto.marca_nombre ? (
-                            <Badge variant="outline" className="bg-amber-50 border-amber-200 text-amber-800 rounded-full font-normal">
-                              {producto.marca_nombre}
-                            </Badge>
-                          ) : (
-                            <span className="text-stone-400 text-xs">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {producto.categoria_nombre ? (
-                            <Badge variant="outline" className="bg-stone-50 border-stone-200 text-stone-700 rounded-full font-normal">
-                              {producto.categoria_nombre}
-                            </Badge>
-                          ) : (
-                            <span className="text-stone-400 text-xs">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {producto.subcategoria_nombre ? (
-                            <Badge variant="outline" className="bg-stone-100 border-stone-300 text-stone-600 rounded-full font-normal">
-                              {producto.subcategoria_nombre}
-                            </Badge>
-                          ) : (
-                            <span className="text-stone-400 text-xs">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right font-medium text-emerald-700">L {(producto.precio_venta_sugerido || 0).toFixed(2)}</TableCell>
-                        <TableCell className="text-right text-stone-600">L {(producto.costo_promedio || 0).toFixed(2)}</TableCell>
-                        {(() => {
-                          const precio = producto.precio_venta_sugerido || 0
-                          const costo = producto.costo_promedio || 0
-                          const ganancia = precio - costo
-                          const margen = precio > 0 ? (ganancia / precio) * 100 : 0
-                          const color = ganancia >= 0 ? "text-emerald-700" : "text-red-600"
-                          return (
-                            <>
-                              <TableCell className={`text-right font-medium ${color}`}>{formatCurrency(ganancia)}</TableCell>
-                              <TableCell className={`text-right ${color}`}>{margen.toFixed(1)}%</TableCell>
-                            </>
-                          )
-                        })()}
-                        <TableCell className="text-right">{producto.stock_total || 0}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(producto)}>
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10" onClick={() => handleDelete(producto)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {filas.map((fila) => {
+                      if (fila.tipo === "single") {
+                        return renderProductoRow(fila.producto, false)
+                      }
+                      // Fila de GRUPO de tallas (una prenda, varias tallas).
+                      const expandido = gruposExpandidos.has(fila.grupoId)
+                      const rangoPrecio =
+                        fila.precioMin === fila.precioMax
+                          ? `L ${fila.precioMin.toFixed(2)}`
+                          : `L ${fila.precioMin.toFixed(2)} - ${fila.precioMax.toFixed(2)}`
+                      return (
+                        <Fragment key={`g-${fila.grupoId}`}>
+                          <TableRow className="bg-amber-50/40 hover:bg-amber-50/70">
+                            <TableCell>
+                              <div className="h-10 w-10 rounded-lg bg-amber-100 flex items-center justify-center">
+                                <Layers3 className="h-5 w-5 text-amber-700" />
+                              </div>
+                            </TableCell>
+                            <TableCell className="font-medium">
+                              <button
+                                type="button"
+                                onClick={() => toggleGrupo(fila.grupoId)}
+                                className="inline-flex items-center gap-1.5 text-left hover:text-stone-900"
+                              >
+                                {expandido ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+                                <span>{fila.nombre}</span>
+                                <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
+                                  {fila.tallas.length} tallas
+                                </span>
+                              </button>
+                            </TableCell>
+                            <TableCell className="text-stone-400 text-xs">—</TableCell>
+                            <TableCell>
+                              {fila.marca_nombre ? (
+                                <Badge variant="outline" className="bg-amber-50 border-amber-200 text-amber-800 rounded-full font-normal">
+                                  {fila.marca_nombre}
+                                </Badge>
+                              ) : (
+                                <span className="text-stone-400 text-xs">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {fila.categoria_nombre ? (
+                                <Badge variant="outline" className="bg-stone-50 border-stone-200 text-stone-700 rounded-full font-normal">
+                                  {fila.categoria_nombre}
+                                </Badge>
+                              ) : (
+                                <span className="text-stone-400 text-xs">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-stone-400 text-xs">—</TableCell>
+                            <TableCell className="text-right font-medium text-emerald-700">{rangoPrecio}</TableCell>
+                            <TableCell className="text-stone-400 text-xs text-right">—</TableCell>
+                            <TableCell className="text-stone-400 text-xs text-right">—</TableCell>
+                            <TableCell className="text-stone-400 text-xs text-right">—</TableCell>
+                            <TableCell className="text-right font-medium">{fila.stockTotal}</TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => setGrupoEditando(fila.grupoId)}
+                                title="Editar grupo y sus tallas"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                          {expandido &&
+                            tallasDeGrupo(fila.grupoId).map((t) => renderProductoRow(t, true))}
+                        </Fragment>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -1024,18 +1378,119 @@ export default function ProductosConfigPage() {
               )}
             </div>
 
-            {/* Talla (opcional) */}
-            <div className="grid gap-2">
-              <Label htmlFor="talla">
-                Talla <span className="text-stone-400 text-xs font-normal">(opcional)</span>
-              </Label>
-              <Input
-                id="talla"
-                value={(formData.talla ?? "") as string}
-                onChange={(e) => setFormData({ ...formData, talla: e.target.value })}
-                placeholder="Ej: S, M, L, 38"
-              />
-            </div>
+            {/* Tallas */}
+            {editingProducto || !tallasActivo ? (
+              // Al editar, o si la empresa NO tiene activado el sistema de tallas:
+              // campo de talla individual del producto (comportamiento clasico).
+              <div className="grid gap-2">
+                <Label htmlFor="talla">
+                  Talla <span className="text-stone-400 text-xs font-normal">(opcional)</span>
+                </Label>
+                <Input
+                  id="talla"
+                  value={(formData.talla ?? "") as string}
+                  onChange={(e) => setFormData({ ...formData, talla: e.target.value })}
+                  placeholder="Ej: S, M, L, 38"
+                />
+              </div>
+            ) : (
+              // Al crear con el sistema activo: opción "tiene tallas" (producto por talla).
+              <div className="grid gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox
+                    checked={tieneTallas}
+                    onCheckedChange={(v) => {
+                      setTieneTallas(!!v)
+                      if (validationErrors.tallas) setValidationErrors((prev) => ({ ...prev, tallas: "" }))
+                    }}
+                  />
+                  <span className="text-sm font-medium">Este producto tiene tallas</span>
+                </label>
+
+                {tieneTallas ? (
+                  <div className="rounded-lg border border-stone-200 bg-stone-50/50 p-3 space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      Marca las tallas que aplican. Al guardar se crea un producto por
+                      cada talla (mismo nombre + talla, su propio stock). El código de
+                      barras de cada uno será <span className="font-mono">código-talla</span>.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {TALLAS_PRESET.map((t) => {
+                        const activo = tallasSeleccionadas.includes(t)
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => {
+                              toggleTalla(t)
+                              if (validationErrors.tallas) setValidationErrors((prev) => ({ ...prev, tallas: "" }))
+                            }}
+                            className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                              activo
+                                ? "border-amber-400 bg-amber-100 text-amber-900 font-medium"
+                                : "border-stone-200 bg-white text-stone-600 hover:bg-stone-100"
+                            }`}
+                          >
+                            {t}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {/* Tallas personalizadas fuera del preset */}
+                    {tallasSeleccionadas.filter((t) => !TALLAS_PRESET.includes(t as typeof TALLAS_PRESET[number])).length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {tallasSeleccionadas
+                          .filter((t) => !TALLAS_PRESET.includes(t as typeof TALLAS_PRESET[number]))
+                          .map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => toggleTalla(t)}
+                              className="rounded-full border border-amber-400 bg-amber-100 px-3 py-1 text-sm font-medium text-amber-900"
+                            >
+                              {t} ✕
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <Input
+                        value={tallaLibre}
+                        onChange={(e) => setTallaLibre(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            agregarTallaLibre()
+                          }
+                        }}
+                        placeholder="Otra talla (ej: 40, XXL)"
+                        className="h-9"
+                      />
+                      <Button type="button" variant="outline" size="sm" onClick={agregarTallaLibre} disabled={!tallaLibre.trim()}>
+                        Agregar
+                      </Button>
+                    </div>
+                    {tallasSeleccionadas.length > 0 && (
+                      <p className="text-xs text-stone-600">
+                        Se crearán <span className="font-medium">{tallasSeleccionadas.length}</span> producto(s):{" "}
+                        {tallasSeleccionadas.join(", ")}
+                      </p>
+                    )}
+                    {validationErrors.tallas && (
+                      <p className="text-sm text-destructive">{validationErrors.tallas}</p>
+                    )}
+                  </div>
+                ) : (
+                  // Sin tallas: un solo campo de talla individual (opcional).
+                  <Input
+                    id="talla"
+                    value={(formData.talla ?? "") as string}
+                    onChange={(e) => setFormData({ ...formData, talla: e.target.value })}
+                    placeholder="Talla individual (opcional): S, M, L, 38"
+                  />
+                )}
+              </div>
+            )}
 
             {/* Marca */}
             <div className="grid gap-2">
@@ -1448,6 +1903,18 @@ export default function ProductosConfigPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Editor de grupo de tallas: ver/editar precio por talla y agregar tallas nuevas */}
+      {grupoEditando != null && (
+        <EditarGrupoDialog
+          grupoId={grupoEditando}
+          tallas={tallasDeGrupo(grupoEditando)}
+          nombreGrupo={gruposTallas.get(tallasDeGrupo(grupoEditando)[0]?.id ?? -1)?.nombre_grupo || tallasDeGrupo(grupoEditando)[0]?.nombre || ""}
+          almacenes={almacenes}
+          onClose={() => setGrupoEditando(null)}
+          onDone={() => { setGrupoEditando(null); loadProductos() }}
+        />
+      )}
+
       {/* Quick-create Marca Modal */}
       <Dialog open={marcaDialogOpen} onOpenChange={setMarcaDialogOpen}>
         <DialogContent className="max-w-sm rounded-xl">
@@ -1604,5 +2071,250 @@ export default function ProductosConfigPage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+// ==================== EDITOR DE GRUPO DE TALLAS ====================
+
+/**
+ * Panel para gestionar un grupo de tallas: ver todas sus tallas con su stock,
+ * editar el precio de cada una, quitar una talla del grupo (o eliminarla) y
+ * agregar tallas nuevas (crea un producto hermano con el mismo nombre/marca).
+ * El stock es de solo lectura (lo gobierna el inventario); al agregar una talla
+ * se puede indicar una cantidad inicial que genera su ingreso manual.
+ */
+function EditarGrupoDialog({
+  grupoId,
+  tallas,
+  nombreGrupo,
+  almacenes,
+  onClose,
+  onDone,
+}: {
+  grupoId: number
+  tallas: Producto[]
+  nombreGrupo: string
+  almacenes: Almacen[]
+  onClose: () => void
+  onDone: () => void
+}) {
+  const { toast } = useToast()
+  const base = tallas[0]
+  // Precio editable por talla (producto_id -> texto del input).
+  const [precios, setPrecios] = useState<Record<number, string>>(() =>
+    Object.fromEntries(tallas.map((t) => [t.id!, String(t.precio_venta_sugerido ?? 0)])),
+  )
+  const [guardandoPrecio, setGuardandoPrecio] = useState<number | null>(null)
+
+  // Agregar talla nueva.
+  const [nuevaTalla, setNuevaTalla] = useState("")
+  const [nuevaCantidad, setNuevaCantidad] = useState("")
+  const [nuevoAlmacen, setNuevoAlmacen] = useState<number>(0)
+  const [nuevaLocalizacion, setNuevaLocalizacion] = useState<number>(0)
+  const [locsNueva, setLocsNueva] = useState<Localizacion[]>([])
+  const [agregando, setAgregando] = useState(false)
+
+  useEffect(() => {
+    if (nuevoAlmacen) {
+      getLocalizaciones(nuevoAlmacen).then((r) => { setLocsNueva(r.data); setNuevaLocalizacion(0) })
+    } else {
+      setLocsNueva([])
+    }
+  }, [nuevoAlmacen])
+
+  const tallasExistentes = new Set(tallas.map((t) => (t.talla || "").toLowerCase()))
+
+  async function guardarPrecio(t: Producto) {
+    const nuevo = Number(precios[t.id!])
+    if (!Number.isFinite(nuevo) || nuevo <= 0) {
+      toast({ title: "Precio inválido", description: "Debe ser mayor a 0", variant: "destructive" })
+      return
+    }
+    setGuardandoPrecio(t.id!)
+    const { error } = await saveProducto({ ...t, precio_venta_sugerido: nuevo }, false)
+    setGuardandoPrecio(null)
+    if (error) {
+      toast({ title: "Error", description: error, variant: "destructive" })
+      return
+    }
+    toast({ title: "Precio actualizado", description: `Talla ${t.talla}: L ${nuevo.toFixed(2)}` })
+    onDone()
+  }
+
+  async function quitarTalla(t: Producto) {
+    if (!t.id) return
+    if (!confirm(`¿Quitar la talla "${t.talla}" del grupo? El producto no se elimina, solo deja de estar agrupado.`)) return
+    const { error } = await quitarDeGrupo(t.id)
+    if (error) {
+      toast({ title: "Error", description: error, variant: "destructive" })
+      return
+    }
+    toast({ title: "Talla desagrupada", description: `"${t.talla}" ya no pertenece al grupo.` })
+    onDone()
+  }
+
+  async function agregarTalla() {
+    const talla = nuevaTalla.trim()
+    if (!talla) {
+      toast({ title: "Escribe la talla", variant: "destructive" })
+      return
+    }
+    if (tallasExistentes.has(talla.toLowerCase())) {
+      toast({ title: "Talla repetida", description: `El grupo ya tiene la talla ${talla}.`, variant: "destructive" })
+      return
+    }
+    if (!base) return
+    const cantidad = Number(nuevaCantidad) || 0
+    if (cantidad > 0 && (!nuevoAlmacen || !nuevaLocalizacion)) {
+      toast({ title: "Faltan datos", description: "Elige almacén y localización para la cantidad inicial.", variant: "destructive" })
+      return
+    }
+    setAgregando(true)
+    // Crea el producto hermano con el mismo nombre/marca/categoria/precio del
+    // grupo y su codigo base + talla.
+    const codigoBase = (base.codigo_barras || "").replace(/-[^-]*$/, "") || base.codigo_barras || ""
+    const nuevoProducto: Producto = {
+      nombre: base.nombre,
+      codigo_barras: `${codigoBase}-${talla}`,
+      precio_venta_sugerido: base.precio_venta_sugerido ?? 0,
+      costo_promedio: 0,
+      foto_url: base.foto_url || "",
+      marca_id: base.marca_id ?? null,
+      categoria_id: base.categoria_id ?? null,
+      subcategoria_id: base.subcategoria_id ?? null,
+      talla,
+    }
+    const { data: creado, error } = await saveProducto(nuevoProducto, true)
+    if (error || !creado?.id) {
+      setAgregando(false)
+      toast({ title: "Error", description: error || "No se pudo crear la talla", variant: "destructive" })
+      return
+    }
+    // Vincula la nueva talla al grupo.
+    await agregarProductoAGrupo(grupoId, creado.id, nombreGrupo || base.nombre)
+    // Inventario inicial opcional.
+    if (cantidad > 0) {
+      await procesarIngresoManual({
+        producto_id: creado.id,
+        almacen_id: nuevoAlmacen,
+        localizacion_id: nuevaLocalizacion,
+        cantidad,
+        costo_unitario: 0,
+        observaciones: "Inventario inicial (talla nueva)",
+        stock_anterior: 0,
+        costo_anterior: 0,
+        nuevo_stock: cantidad,
+        nuevo_costo: 0,
+      })
+    }
+    setAgregando(false)
+    toast({ title: "Talla agregada", description: `Se creó la talla ${talla}.` })
+    setNuevaTalla(""); setNuevaCantidad(""); setNuevoAlmacen(0); setNuevaLocalizacion(0)
+    onDone()
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Layers3 className="h-5 w-5 text-amber-700" />
+            {nombreGrupo || base?.nombre || "Grupo de tallas"}
+          </DialogTitle>
+          <DialogDescription>
+            {tallas.length} talla(s). Edita el precio de cada una o agrega tallas nuevas.
+            El stock lo gobierna el inventario.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-2">
+          {tallas.map((t) => (
+            <div key={t.id} className="flex items-center gap-2 rounded-lg border border-stone-200 p-2">
+              <span className="w-16 shrink-0 rounded-full bg-amber-100 px-2 py-1 text-center text-xs font-semibold text-amber-900">
+                {t.talla || "—"}
+              </span>
+              <span className="w-28 shrink-0 font-mono text-xs text-stone-500 truncate">{t.codigo_barras}</span>
+              <span className="w-20 shrink-0 text-xs text-stone-500">Stock: {t.stock_total || 0}</span>
+              <div className="flex items-center gap-1 flex-1">
+                <span className="text-xs text-stone-500">L</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={precios[t.id!] ?? ""}
+                  onChange={(e) => setPrecios((prev) => ({ ...prev, [t.id!]: e.target.value }))}
+                  className="h-8"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  disabled={guardandoPrecio === t.id || Number(precios[t.id!]) === (t.precio_venta_sugerido ?? 0)}
+                  onClick={() => guardarPrecio(t)}
+                >
+                  {guardandoPrecio === t.id ? <Spinner className="h-3.5 w-3.5" /> : "Guardar"}
+                </Button>
+              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0 text-stone-500 hover:text-destructive"
+                title="Quitar del grupo"
+                onClick={() => quitarTalla(t)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+
+        {/* Agregar talla nueva */}
+        <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 space-y-3">
+          <p className="text-sm font-medium text-amber-900 flex items-center gap-1.5">
+            <Plus className="h-4 w-4" /> Agregar una talla
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1.5">
+              <Label className="text-xs">Talla</Label>
+              <Input value={nuevaTalla} onChange={(e) => setNuevaTalla(e.target.value)} placeholder="Ej: XL, 42" className="h-9" />
+            </div>
+            <div className="grid gap-1.5">
+              <Label className="text-xs">Cantidad inicial (opcional)</Label>
+              <Input type="number" min="0" value={nuevaCantidad} onChange={(e) => setNuevaCantidad(e.target.value)} placeholder="0" className="h-9" />
+            </div>
+          </div>
+          {Number(nuevaCantidad) > 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label className="text-xs">Almacén</Label>
+                <Select value={nuevoAlmacen ? String(nuevoAlmacen) : ""} onValueChange={(v) => setNuevoAlmacen(Number(v))}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                  <SelectContent>
+                    {almacenes.map((a) => (<SelectItem key={a.id} value={String(a.id)}>{a.nombre}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-1.5">
+                <Label className="text-xs">Localización</Label>
+                <Select value={nuevaLocalizacion ? String(nuevaLocalizacion) : ""} onValueChange={(v) => setNuevaLocalizacion(Number(v))} disabled={!nuevoAlmacen}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder={nuevoAlmacen ? "Seleccionar" : "Elige almacén"} /></SelectTrigger>
+                  <SelectContent>
+                    {locsNueva.map((l) => (<SelectItem key={l.id} value={String(l.id)}>{l.nombre}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <Button size="sm" onClick={agregarTalla} disabled={agregando || !nuevaTalla.trim()} className="bg-amber-600 hover:bg-amber-700 text-white">
+            {agregando && <Spinner className="mr-2 h-4 w-4" />}
+            Agregar talla
+          </Button>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cerrar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

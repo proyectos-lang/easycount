@@ -161,6 +161,9 @@ export default async function PlataformaPage() {
                 <th className="px-4 py-2 font-medium" title="Activar el lector de codigo de barras en Nueva Venta (escanear = ubicar/agregar)">
                   Lector codigo
                 </th>
+                <th className="px-4 py-2 font-medium" title="Productos por talla: check 'tiene tallas' al crear + agrupamiento de tallas en Productos e Inventario">
+                  Productos por talla
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -225,6 +228,15 @@ export default async function PlataformaPage() {
                         razonSocialId={e.id}
                         flag="ventas_lector_codigo_barras"
                         initial={e.flags.ventas_lector_codigo_barras}
+                        onLabel="Activo"
+                        offLabel="Inactivo"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <FlagToggle
+                        razonSocialId={e.id}
+                        flag="productos_por_talla"
+                        initial={e.flags.productos_por_talla}
                         onLabel="Activo"
                         offLabel="Inactivo"
                       />

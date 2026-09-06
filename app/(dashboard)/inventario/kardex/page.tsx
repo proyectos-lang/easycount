@@ -26,10 +26,14 @@ import { useToast } from "@/hooks/use-toast"
 import { getProductos, getAlmacenes, getLocalizaciones, type Producto, type Almacen, type Localizacion } from "@/lib/services/catalogos"
 import { getAllTransacciones, getKardexByProducto, type TransaccionInventario } from "@/lib/services/inventario"
 import { exportToXlsx } from "@/lib/utils/export"
+import { useAuth } from "@/lib/contexts/auth-context"
 
 export default function KardexPage() {
   const { toast } = useToast()
-  
+  const { user } = useAuth()
+  // Mostrar la talla en el selector/encabezado solo si la empresa usa tallas.
+  const tallasActivo = user?.flags?.productos_por_talla ?? false
+
   // Catalogos
   const [productos, setProductos] = React.useState<Producto[]>([])
   const [almacenes, setAlmacenes] = React.useState<Almacen[]>([])
@@ -115,9 +119,10 @@ export default function KardexPage() {
     return productos.filter(
       (p) =>
         (p.nombre || "").toLowerCase().includes(q) ||
-        (p.codigo_barras || "").toLowerCase().includes(q)
+        (p.codigo_barras || "").toLowerCase().includes(q) ||
+        (tallasActivo && (p.talla || "").toLowerCase().includes(q))
     )
-  }, [productos, busquedaProducto])
+  }, [productos, busquedaProducto, tallasActivo])
 
   const productoSel = React.useMemo(
     () => productos.find((p) => String(p.id) === filtroProductoId) || null,
@@ -312,7 +317,7 @@ export default function KardexPage() {
           <CardTitle className="text-lg">
             {esKardex
               ? productoSel
-                ? `Kardex: ${productoSel.codigo_barras ? `[${productoSel.codigo_barras}] ` : ""}${productoSel.nombre}`
+                ? `Kardex: ${productoSel.codigo_barras ? `[${productoSel.codigo_barras}] ` : ""}${productoSel.nombre}${tallasActivo && productoSel.talla ? ` · Talla ${productoSel.talla}` : ""}`
                 : "Kardex por producto"
               : "Movimientos"}
           </CardTitle>
@@ -401,6 +406,7 @@ export default function KardexPage() {
                     {productosParaSelect.slice(0, 100).map(p => (
                       <SelectItem key={p.id} value={p.id!.toString()}>
                         {p.codigo_barras ? `[${p.codigo_barras}] ` : ''}{p.nombre}
+                        {tallasActivo && p.talla ? ` · Talla ${p.talla}` : ''}
                       </SelectItem>
                     ))}
                     {productosParaSelect.length === 0 && (

@@ -16,12 +16,19 @@ export interface FeatureFlags {
   tirilla_mostrar_codigo: boolean
   /** Activa el lector de codigo de barras en Nueva Venta (escanear = ubicar/agregar). */
   ventas_lector_codigo_barras: boolean
+  /**
+   * Activa el sistema de productos por TALLA: el check "tiene tallas" al crear
+   * producto, el agrupamiento de tallas en Productos e Inventario, y el editor
+   * de grupo. Si es false, la empresa no ve nada del sistema de tallas.
+   */
+  productos_por_talla: boolean
 }
 
 export const DEFAULT_FLAGS: FeatureFlags = {
   ventas_mostrar_isv: true,
   tirilla_mostrar_codigo: false,
   ventas_lector_codigo_barras: false,
+  productos_por_talla: false,
 }
 
 /** Etiquetas legibles para el portal (que flags se pueden togglear por empresa). */
@@ -29,6 +36,7 @@ export const FLAG_LABELS: Record<keyof FeatureFlags, string> = {
   ventas_mostrar_isv: "Mostrar ISV en ventas",
   tirilla_mostrar_codigo: "Mostrar codigo del producto en la tirilla",
   ventas_lector_codigo_barras: "Lector de codigo de barras en ventas",
+  productos_por_talla: "Productos por talla (tallas agrupadas)",
 }
 
 /**
@@ -50,5 +58,9 @@ export function mergeFlags(config: Record<string, unknown> | null | undefined): 
       c.ventas_lector_codigo_barras === undefined
         ? DEFAULT_FLAGS.ventas_lector_codigo_barras
         : Boolean(c.ventas_lector_codigo_barras),
+    productos_por_talla:
+      c.productos_por_talla === undefined
+        ? DEFAULT_FLAGS.productos_por_talla
+        : Boolean(c.productos_por_talla),
   }
 }

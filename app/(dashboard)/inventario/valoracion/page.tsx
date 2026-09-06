@@ -43,12 +43,29 @@ import {
 import { Progress } from "@/components/ui/progress"
 import { useToast } from "@/hooks/use-toast"
 import { getValoracionInventarioExtendida, getValoracionPorAlmacen, type ProductoValoracionExtendida } from "@/lib/services/inventario"
+import { getGruposTallas, type GrupoTallaRef } from "@/lib/services/grupos-tallas"
+import { useAuth } from "@/lib/contexts/auth-context"
 import { getAlmacenes, type Almacen } from "@/lib/services/catalogos"
 import { exportToXlsx } from "@/lib/utils/export"
 import { Indicador } from "@/components/ui/indicador"
 
 type EstadoInventario = "todos" | "con_stock" | "sin_stock" | "stock_bajo"
 type RotacionFiltro = "todos" | "sin_ventas" | "mas_30_dias" | "mas_60_dias" | "mas_90_dias"
+
+/** Fila renderizable de la tabla: producto suelto o grupo de tallas agregado. */
+type FilaVal =
+  | { tipo: "single"; p: ProductoValoracionExtendida }
+  | {
+      tipo: "grupo"
+      grupoId: number
+      nombre: string
+      codigo_barras?: string
+      stock: number
+      valorCosto: number
+      valorComercial: number
+      margen: number
+      tallas: ProductoValoracionExtendida[]
+    }
 
 /** Chip-filtro de estado (con stock / stock bajo / sin stock). */
 function FiltroChip({ label, count, active, onClick, color = "neutral" }: {
@@ -96,6 +113,9 @@ function RotChip({ label, value, active, onClick, color }: {
 
 export default function ValoracionPage() {
   const { toast } = useToast()
+  const { user } = useAuth()
+  // Agrupar tallas solo si la empresa tiene activo el sistema de productos por talla.
+  const tallasActivo = user?.flags?.productos_por_talla ?? false
   const [productos, setProductos] = React.useState<ProductoValoracionExtendida[]>([])
   const [almacenes, setAlmacenes] = React.useState<Almacen[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -105,6 +125,9 @@ export default function ValoracionPage() {
   const [estadoFiltro, setEstadoFiltro] = React.useState<EstadoInventario>("todos")
   const [rotacionFiltro, setRotacionFiltro] = React.useState<RotacionFiltro>("todos")
   const [expandedRows, setExpandedRows] = React.useState<Set<number>>(new Set())
+  // Grupos de tallas: mapa producto_id -> ref de grupo, y set de grupos expandidos.
+  const [gruposTallas, setGruposTallas] = React.useState<Map<number, GrupoTallaRef>>(new Map())
+  const [gruposExpandidos, setGruposExpandidos] = React.useState<Set<number>>(new Set())
   // Paginacion client-side (50/100/1000).
   const [pageSize, setPageSize] = React.useState(100)
   const [pageIndex, setPageIndex] = React.useState(0)
@@ -144,6 +167,10 @@ export default function ValoracionPage() {
       setProductos(valoracionRes.data)
     }
 
+    // Grupos de tallas (degrada a mapa vacio si la tabla no existe).
+    const gruposRes = await getGruposTallas()
+    setGruposTallas(gruposRes.data)
+
     setLoading(false)
     setLoadingTable(false)
   }
@@ -178,14 +205,55 @@ export default function ValoracionPage() {
     })
   }, [productos, searchTerm, estadoFiltro, almacenFiltro, rotacionFiltro])
 
+  // Filas renderizables: agrupa las tallas hermanas en una sola fila "grupo".
+  // Se recorre en orden; cada grupo toma la posicion de su primer miembro y
+  // agrega stock/valores. Un producto sin entrada en el mapa es una fila suelta.
+  const filasValoracion = React.useMemo<FilaVal[]>(() => {
+    const filas: FilaVal[] = []
+    const indicePorGrupo = new Map<number, number>() // grupo_id -> indice en `filas`
+    for (const p of productosFiltrados) {
+      // Si la empresa no tiene activo el sistema de tallas, no agrupamos.
+      const ref = tallasActivo ? gruposTallas.get(p.id) : undefined
+      if (!ref) {
+        filas.push({ tipo: "single", p })
+        continue
+      }
+      const existente = indicePorGrupo.get(ref.grupo_id)
+      if (existente === undefined) {
+        filas.push({
+          tipo: "grupo",
+          grupoId: ref.grupo_id,
+          nombre: ref.nombre_grupo || p.nombre,
+          codigo_barras: p.codigo_barras || undefined,
+          stock: p.stock_total,
+          valorCosto: p.valor_costo,
+          valorComercial: p.valor_comercial,
+          margen: p.margen_potencial,
+          tallas: [p],
+        })
+        indicePorGrupo.set(ref.grupo_id, filas.length - 1)
+      } else {
+        const fila = filas[existente]
+        if (fila.tipo === "grupo") {
+          fila.stock += p.stock_total
+          fila.valorCosto += p.valor_costo
+          fila.valorComercial += p.valor_comercial
+          fila.margen += p.margen_potencial
+          fila.tallas.push(p)
+        }
+      }
+    }
+    return filas
+  }, [productosFiltrados, gruposTallas, tallasActivo])
+
   // Slice paginado (los totales/footer siguen sobre productosFiltrados completo).
-  const productosPaginados = React.useMemo(
-    () => productosFiltrados.slice(pageIndex * pageSize, pageIndex * pageSize + pageSize),
-    [productosFiltrados, pageIndex, pageSize]
+  const filasPaginadas = React.useMemo(
+    () => filasValoracion.slice(pageIndex * pageSize, pageIndex * pageSize + pageSize),
+    [filasValoracion, pageIndex, pageSize]
   )
   // Reset de pagina al cambiar filtros o tamano.
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  React.useEffect(() => { setPageIndex(0); setExpandedRows(new Set()) }, [
+  React.useEffect(() => { setPageIndex(0); setExpandedRows(new Set()); setGruposExpandidos(new Set()) }, [
     searchTerm, estadoFiltro, almacenFiltro, rotacionFiltro, pageSize,
   ])
 
@@ -248,6 +316,16 @@ export default function ValoracionPage() {
       newExpanded.add(id)
     }
     setExpandedRows(newExpanded)
+  }
+
+  function toggleGrupo(grupoId: number) {
+    const nuevo = new Set(gruposExpandidos)
+    if (nuevo.has(grupoId)) {
+      nuevo.delete(grupoId)
+    } else {
+      nuevo.add(grupoId)
+    }
+    setGruposExpandidos(nuevo)
   }
 
   function formatCurrency(value: number): string {
@@ -529,7 +607,86 @@ export default function ValoracionPage() {
             <>
               {/* Mobile Card View */}
               <div className="block lg:hidden divide-y">
-                {productosPaginados.map((p) => (
+                {filasPaginadas.map((fila) => fila.tipo === "grupo" ? (
+                  <div key={`g-${fila.grupoId}`}>
+                    <button
+                      type="button"
+                      onClick={() => toggleGrupo(fila.grupoId)}
+                      className="w-full text-left p-4"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          {gruposExpandidos.has(fila.grupoId) ? (
+                            <ChevronDown className="h-4 w-4 shrink-0 text-stone-500" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 shrink-0 text-stone-500" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{fila.nombre}</p>
+                            <p className="text-xs text-muted-foreground font-mono">{fila.codigo_barras || '-'}</p>
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className="text-xs bg-indigo-100 text-indigo-700 shrink-0">
+                          {fila.tallas.length} tallas
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-sm mt-3">
+                        <div>
+                          <p className="text-muted-foreground text-xs">Stock</p>
+                          <p className="font-bold">{fila.stock}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground text-xs">Val. Costo</p>
+                          <p className="font-medium">{formatCurrency(fila.valorCosto)}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground text-xs">Val. Comercial</p>
+                          <p className="font-medium text-emerald-600">{formatCurrency(fila.valorComercial)}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground text-xs">Margen</p>
+                          <p className={`font-medium ${fila.margen >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(fila.margen)}</p>
+                        </div>
+                      </div>
+                    </button>
+                    {gruposExpandidos.has(fila.grupoId) && (
+                      <div className="px-4 pb-4 space-y-2">
+                        {fila.tallas.map((t) => (
+                          <div key={t.id} className="p-3 rounded-lg bg-muted/50 text-sm">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <Badge variant="outline" className="text-xs border-indigo-300 text-indigo-700 bg-indigo-50">
+                                Talla {t.talla || '-'}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground font-mono">{t.codigo_barras || '-'}</span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-xs">
+                              <div>
+                                <p className="text-muted-foreground">Stock</p>
+                                <p className="font-medium">{t.stock_total}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">Costo</p>
+                                <p>{formatCurrency(t.costo_promedio)}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">Precio</p>
+                                <p>{formatCurrency(t.precio_venta)}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">Val. Costo</p>
+                                <p>{formatCurrency(t.valor_costo)}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">Val. Comercial</p>
+                                <p className="text-emerald-600">{formatCurrency(t.valor_comercial)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (() => { const p = fila.p; return (
                   <Collapsible key={p.id}>
                     <div className="p-4">
                       <div className="flex items-start justify-between gap-2 mb-2">
@@ -613,7 +770,7 @@ export default function ValoracionPage() {
                       </div>
                     </CollapsibleContent>
                   </Collapsible>
-                ))}
+                ) })())}
               </div>
 
               {/* Desktop Table */}
@@ -678,7 +835,67 @@ export default function ValoracionPage() {
                     )}
 
                     {/* Data Rows */}
-                    {!loadingTable && productosPaginados.map((p) => (
+                    {!loadingTable && filasPaginadas.map((fila) => {
+                      if (fila.tipo === "grupo") {
+                        const abierto = gruposExpandidos.has(fila.grupoId)
+                        return (
+                          <React.Fragment key={`g-${fila.grupoId}`}>
+                            <TableRow
+                              className={`cursor-pointer hover:bg-stone-50 transition-colors ${abierto ? 'bg-stone-50' : ''}`}
+                              onClick={() => toggleGrupo(fila.grupoId)}
+                            >
+                              <TableCell className="w-8">
+                                <Button variant="ghost" size="icon" className="h-6 w-6">
+                                  {abierto ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                </Button>
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">{fila.codigo_barras || '-'}</TableCell>
+                              <TableCell className="font-medium">
+                                <span className="inline-flex items-center gap-2">
+                                  <Package className="h-4 w-4 text-indigo-500" />
+                                  {fila.nombre}
+                                  <Badge variant="secondary" className="text-xs bg-indigo-100 text-indigo-700">{fila.tallas.length} tallas</Badge>
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-center">{getStockBadge(fila.stock)}</TableCell>
+                              <TableCell className="text-center"><span className="text-xs text-muted-foreground">-</span></TableCell>
+                              <TableCell className="text-right font-mono">{fila.stock}</TableCell>
+                              <TableCell className="text-right font-mono text-muted-foreground">-</TableCell>
+                              <TableCell className="text-right font-mono text-muted-foreground">-</TableCell>
+                              <TableCell className="text-right font-mono font-medium">{formatCurrency(fila.valorCosto)}</TableCell>
+                              <TableCell className="text-right font-mono font-medium text-emerald-600">{formatCurrency(fila.valorComercial)}</TableCell>
+                              <TableCell className="text-right">
+                                <span className={`font-mono font-medium ${fila.margen >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                  {formatCurrency(fila.margen)}
+                                </span>
+                              </TableCell>
+                            </TableRow>
+
+                            {/* Sub-filas: una por talla */}
+                            {abierto && fila.tallas.map((t) => (
+                              <TableRow key={`t-${t.id}`} className="bg-muted/20">
+                                <TableCell className="w-8"></TableCell>
+                                <TableCell className="font-mono text-sm pl-8">{t.codigo_barras || '-'}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="text-xs border-indigo-300 text-indigo-700 bg-indigo-50">
+                                    Talla {t.talla || '-'}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-center">{getStockBadge(t.stock_total)}</TableCell>
+                                <TableCell className="text-center"><span className="text-xs text-muted-foreground">-</span></TableCell>
+                                <TableCell className="text-right font-mono">{t.stock_total}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(t.costo_promedio)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(t.precio_venta)}</TableCell>
+                                <TableCell className="text-right font-mono font-medium">{formatCurrency(t.valor_costo)}</TableCell>
+                                <TableCell className="text-right font-mono font-medium text-emerald-600">{formatCurrency(t.valor_comercial)}</TableCell>
+                                <TableCell className="text-right"><span className="text-xs text-muted-foreground">-</span></TableCell>
+                              </TableRow>
+                            ))}
+                          </React.Fragment>
+                        )
+                      }
+                      const p = fila.p
+                      return (
                       <React.Fragment key={p.id}>
                         <TableRow
                           className={`cursor-pointer hover:bg-stone-50 transition-colors ${expandedRows.has(p.id) ? 'bg-stone-50' : ''}`}
@@ -772,7 +989,8 @@ export default function ValoracionPage() {
                           </TableRow>
                         )}
                       </React.Fragment>
-                    ))}
+                      )
+                    })}
 
                   </TableBody>
                 </Table>
@@ -781,7 +999,7 @@ export default function ValoracionPage() {
               <TablePaginator
                 pageIndex={pageIndex}
                 pageSize={pageSize}
-                totalItems={productosFiltrados.length}
+                totalItems={filasValoracion.length}
                 onPageIndexChange={setPageIndex}
                 onPageSizeChange={setPageSize}
                 className="border-t"

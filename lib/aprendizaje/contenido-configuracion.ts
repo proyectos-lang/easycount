@@ -154,6 +154,9 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "La foto se sube al almacenamiento de la nube y aparece en el catálogo de Nueva Venta. Las fotos grandes (de celular) se comprimen automáticamente al subir para que carguen rápido.",
       "Botón 'Comprimir fotos': optimiza de una sola vez el peso de las fotos ya subidas de la empresa (baja la resolución sin borrar ni cambiar los productos). Útil si el catálogo carga lento por fotos de muy alta resolución.",
       "Al crear un producto puedes indicar una cantidad inicial (con su costo, almacén y localización): el sistema genera automáticamente un ingreso manual al inventario para que arranque con existencias.",
+      "Opción 'Este producto tiene tallas' (al crear, solo si tu empresa tiene activado el sistema de tallas): marca las tallas que aplican (S, M, L, XL, 6, 8, 10, 12, 14, 16, o escribe otras) y el sistema crea un producto independiente por cada talla —mismo nombre + talla, su propio stock y código— en un solo guardado, sin repetir el formulario. Si pusiste cantidad inicial, se aplica a cada talla. La talla se muestra en el catálogo de Nueva Venta.",
+      "Los productos tallados se AGRUPAN en la lista: la prenda aparece una sola vez con un contador de tallas y un botón para desplegar/contraer sus tallas (cada una con su stock y precio). El mismo agrupamiento se ve en Inventario → Valoración (stock y valor sumados del grupo).",
+      "Editar grupo de tallas: en la fila del grupo, el botón de editar abre un panel con todas sus tallas para cambiar el precio de cada una, quitar una talla del grupo o agregar tallas nuevas (crea el producto hermano, con cantidad inicial opcional).",
       "Carga masiva desde Excel: descarga una plantilla, complétala con tus productos (código, nombre, categoría, marca, precio, costo y cantidad inicial) y súbela eligiendo el almacén y la bodega; el sistema crea todos los productos y genera su inventario inicial de una sola vez.",
       "Elimina productos: si solo tiene movimientos de inventario, se borran en cascada junto con el producto (te avisa cuántos); si tiene ventas o compras registradas, no se borra para proteger el historial.",
     ],
@@ -171,6 +174,27 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "Define el precio de venta sugerido y sube la foto si la tienes.",
           "En 'Inventario inicial (opcional)' indica la cantidad y el costo unitario con que arranca; elige almacén y localización.",
           "Guarda: se crea el producto y, si pusiste cantidad, se genera el ingreso al inventario automáticamente. Déjalo en 0 si aún no tienes existencias (las cargas luego por Compras o Ingreso Manual).",
+        ],
+      },
+      {
+        titulo: "Crear un producto con varias tallas de una vez",
+        pasos: [
+          "En Nuevo Producto, llena los datos comunes (nombre, precio, marca, categoría, código de barras) una sola vez.",
+          "Marca la casilla 'Este producto tiene tallas'.",
+          "Selecciona las tallas que aplican (S, M, L, XL, 6, 8, 10, 12, 14, 16) o escribe otras y presiona Agregar.",
+          "Si indicas cantidad inicial, esa misma cantidad se ingresará para cada talla; deja 0 si aún no tienes existencias.",
+          "Guarda: el sistema crea un producto por cada talla (mismo nombre + talla, código base con la talla al final) sin que repitas el formulario, y los deja agrupados como una sola prenda.",
+          "En Nueva Venta cada talla aparece como su propia tarjeta con la talla visible; edita cada una por separado si necesitas ajustar precio o stock.",
+        ],
+      },
+      {
+        titulo: "Ver y editar las tallas de una prenda (grupo de tallas)",
+        pasos: [
+          "En la lista de Productos, la prenda tallada aparece una sola vez con el conteo de tallas; toca el nombre (o la flecha) para desplegar y ver cada talla con su stock y precio.",
+          "Presiona el botón de editar del grupo para abrir el panel de tallas.",
+          "Ahí puedes cambiar el precio de cada talla (edita y presiona Guardar en esa fila), quitar una talla del grupo, o Agregar una talla nueva.",
+          "Al agregar una talla escribe su nombre (ej. XL, 42) y, si quieres, una cantidad inicial con su almacén y localización; se crea el producto hermano y queda dentro del grupo.",
+          "El mismo agrupamiento se ve en Inventario → Valoración: la prenda aparece una vez con el stock y el valor sumados, y al desplegar muestra cada talla.",
         ],
       },
       {
@@ -214,8 +238,13 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
         respuesta:
           "Porque tiene ventas o compras registradas. Para no perder la trazabilidad de esos documentos, un producto con historial de ventas o compras no se elimina. Si solo tiene movimientos de inventario, sí se puede borrar y esos movimientos se eliminan en cascada con él.",
       },
+      {
+        pregunta: "Vendo la misma prenda en varias tallas, ¿tengo que crear el producto una y otra vez?",
+        respuesta:
+          "No, si tu empresa tiene activado el sistema de tallas (se habilita por empresa desde el panel de administración). Al crear el producto marca 'Este producto tiene tallas', elige las tallas y guarda una sola vez: el sistema crea un producto por cada talla (con su propio stock, código y precio) y los deja agrupados. En la lista de Productos y en Inventario → Valoración la prenda aparece una sola vez y se despliega para ver cada talla; el botón de editar del grupo permite cambiar precios, quitar tallas o agregar nuevas. En Nueva Venta cada talla se ve por separado con su etiqueta. Si tu empresa no maneja tallas, no verás nada de esto.",
+      },
     ],
-    keywords: ["producto", "codigo de barras", "sku", "precio", "marca", "categoria", "foto", "catalogo", "eliminar", "borrar", "cascada", "comprimir fotos", "imagen pesada", "resolucion", "carga lenta", "carga masiva", "importar productos", "plantilla", "excel", "masivo", "inventario inicial"],
+    keywords: ["producto", "codigo de barras", "sku", "precio", "marca", "categoria", "talla", "tallas", "variantes", "grupo", "agrupar", "desplegar", "foto", "catalogo", "eliminar", "borrar", "cascada", "comprimir fotos", "imagen pesada", "resolucion", "carga lenta", "carga masiva", "importar productos", "plantilla", "excel", "masivo", "inventario inicial"],
   },
   {
     modulo: "Almacenes",

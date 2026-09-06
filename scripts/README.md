@@ -46,7 +46,10 @@ SQL Editor de Supabase. Son en su mayoría idempotentes (`IF NOT EXISTS` /
 | 039 | `039-tesoreria-limpieza-automatica.sql` | Red de seguridad: función + triggers `AFTER DELETE` en `gastos`/`ventas_encabezado`/`devoluciones_encabezado` que borran automáticamente los movimientos de tesorería (`caja_chica_movimientos`/`cuenta_movimientos` con ese `ref_tipo`/`ref_id`) y recalculan el saldo de las cuentas. Garantiza que borrar un padre nunca deje tesorería huérfana |
 | 040 | `040-fecha-honduras-backstop.sql` | Backstop de hora de Honduras: triggers `BEFORE INSERT` en `transacciones_inventario`/`cuenta_movimientos`/`caja_chica_movimientos`/`pagos_ventas`/`devoluciones_encabezado` que fuerzan `fecha` a HN (`now()-6h`) cuando viene NULL o en UTC real (app cacheada vieja). Evita el desfase de +6h aunque el cliente esté desactualizado |
 | 041 | `041-localizaciones-punto-venta.sql` | Config por localización: tabla `localizaciones_config` (`es_punto_venta`) + RLS (el admin de la empresa lee/escribe su config). La localización marcada como "Punto de venta" se preselecciona en Nueva Venta |
+| 042 | `042-listas-precios.sql` | Listas de precios: tablas `listas_precios`, `listas_precios_detalle`, `cliente_lista_precio` + RLS + registro del módulo "Listas de Precios" (nace deshabilitado por empresa) |
+| 043 | `043-producto-grupo-tallas.sql` | Grupo de tallas: tabla mapa `producto_grupo_tallas` (producto→grupo) + RLS. Vincula productos hermanos (misma prenda, varias tallas) para agruparlos en Productos/Inventario. No toca `productos` |
 | — | `add-almacen-to-ventas-encabezado.sql` | Agrega `almacen_id` a ventas (aplicar tras 011) |
+| — | `agrupar-tallas-coral-razon-10.sql` | ONE-OFF: agrupa las tallas ya existentes de Coral Swimwear (razón 10) por (nombre, marca). Requiere el 043 |
 
 > **Huecos 006–008:** la numeración salta de 005 a 009. No faltan migraciones;
 > los números simplemente no se usaron. El orden de arriba es el completo.

@@ -151,6 +151,8 @@ export interface ProductoValoracionExtendida {
   id: number
   nombre: string
   codigo_barras: string
+  /** Talla del producto (para agrupar tallados en la valoracion). */
+  talla: string | null
   stock_total: number
   costo_promedio: number
   precio_venta: number
@@ -174,7 +176,7 @@ export async function getValoracionInventarioExtendida(): Promise<{ data: Produc
     
     const now = new Date()
     
-    const valoracion = productos.map((p: { id: number; nombre: string; codigo_barras: string; stock_total: number; costo_promedio: number; precio_venta_sugerido: number }) => {
+    const valoracion = productos.map((p: { id: number; nombre: string; codigo_barras: string; talla?: string | null; stock_total: number; costo_promedio: number; precio_venta_sugerido: number }) => {
       const stockPorAlmacen = almacenes.map((a: { id: number; nombre: string }) => {
         const stock = transacciones
           .filter(t => t.producto_id === p.id && t.almacen_id === a.id)
@@ -205,6 +207,7 @@ export async function getValoracionInventarioExtendida(): Promise<{ data: Produc
         id: p.id,
         nombre: p.nombre,
         codigo_barras: p.codigo_barras || '',
+        talla: p.talla ?? null,
         stock_total: p.stock_total || 0,
         costo_promedio: p.costo_promedio || 0,
         precio_venta: p.precio_venta_sugerido || 0,
@@ -222,7 +225,7 @@ export async function getValoracionInventarioExtendida(): Promise<{ data: Produc
   const supabase = createClient()
   if (!supabase) return { data: [], error: 'Cliente no disponible' }
 
-  type ProdRow = { id: number; nombre: string; codigo_barras: string | null; stock_total: number | null; costo_promedio: number | null; precio_venta_sugerido: number | null }
+  type ProdRow = { id: number; nombre: string; codigo_barras: string | null; talla: string | null; stock_total: number | null; costo_promedio: number | null; precio_venta_sugerido: number | null }
   type TransRow = { producto_id: number; almacen_id: number; cantidad: number | null; tipo_movimiento: string; fecha: string | null; almacenes: { nombre?: string } | { nombre?: string }[] | null }
 
   try {
@@ -230,7 +233,7 @@ export async function getValoracionInventarioExtendida(): Promise<{ data: Produc
     const { data: productos, error: prodError } = await fetchAllRows<ProdRow>(() =>
       supabase
         .from('productos')
-        .select('id, nombre, codigo_barras, stock_total, costo_promedio, precio_venta_sugerido')
+        .select('id, nombre, codigo_barras, talla, stock_total, costo_promedio, precio_venta_sugerido')
         .order('nombre', { ascending: true })
     )
     if (prodError) return { data: [], error: prodError }
@@ -290,6 +293,7 @@ export async function getValoracionInventarioExtendida(): Promise<{ data: Produc
         id: p.id,
         nombre: p.nombre,
         codigo_barras: p.codigo_barras || '',
+        talla: p.talla ?? null,
         stock_total: p.stock_total || 0,
         costo_promedio: p.costo_promedio || 0,
         precio_venta: p.precio_venta_sugerido || 0,
@@ -322,7 +326,7 @@ export async function getValoracionPorAlmacen(almacenId: number): Promise<{ data
     
     const now = new Date()
     
-    const valoracion = productos.map((p: { id: number; nombre: string; codigo_barras: string; costo_promedio: number; precio_venta_sugerido: number }) => {
+    const valoracion = productos.map((p: { id: number; nombre: string; codigo_barras: string; talla?: string | null; costo_promedio: number; precio_venta_sugerido: number }) => {
       // Get stock only for the specific almacen
       const stockAlmacen = transacciones
         .filter(t => t.producto_id === p.id && t.almacen_id === almacenId)
@@ -347,6 +351,7 @@ export async function getValoracionPorAlmacen(almacenId: number): Promise<{ data
         id: p.id,
         nombre: p.nombre,
         codigo_barras: p.codigo_barras || '',
+        talla: p.talla ?? null,
         stock_total: stockAlmacen,
         costo_promedio: p.costo_promedio || 0,
         precio_venta: p.precio_venta_sugerido || 0,
@@ -371,7 +376,7 @@ export async function getValoracionPorAlmacen(almacenId: number): Promise<{ data
   const supabase = createClient()
   if (!supabase) return { data: [], error: 'Cliente no disponible' }
 
-  type ProdRowA = { id: number; nombre: string; codigo_barras: string | null; costo_promedio: number | null; precio_venta_sugerido: number | null }
+  type ProdRowA = { id: number; nombre: string; codigo_barras: string | null; talla: string | null; costo_promedio: number | null; precio_venta_sugerido: number | null }
   type TransRowA = { producto_id: number; cantidad: number | null; tipo_movimiento: string; fecha: string | null }
 
   try {
@@ -379,7 +384,7 @@ export async function getValoracionPorAlmacen(almacenId: number): Promise<{ data
     const { data: productos, error: prodError } = await fetchAllRows<ProdRowA>(() =>
       supabase
         .from('productos')
-        .select('id, nombre, codigo_barras, costo_promedio, precio_venta_sugerido')
+        .select('id, nombre, codigo_barras, talla, costo_promedio, precio_venta_sugerido')
         .order('nombre', { ascending: true })
     )
     if (prodError) return { data: [], error: prodError }
@@ -426,6 +431,7 @@ export async function getValoracionPorAlmacen(almacenId: number): Promise<{ data
         id: p.id,
         nombre: p.nombre,
         codigo_barras: p.codigo_barras || '',
+        talla: p.talla ?? null,
         stock_total: stockAlmacen,
         costo_promedio: p.costo_promedio || 0,
         precio_venta: p.precio_venta_sugerido || 0,
