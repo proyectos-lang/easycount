@@ -154,7 +154,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
     queHace: [
       "Lista todas las facturas con filtros por fecha, cliente y método de pago.",
       "Detalle de cada factura: productos, cantidades, pagos registrados y saldo pendiente.",
-      "Reimprime la factura en PDF.",
+      "Reimprime cualquier factura en dos formatos: factura A4 en PDF (ícono de descarga) o tirilla térmica de 80 mm (ícono de impresora), con el mismo formato que se imprime al momento de la venta.",
       "Registra abonos (parciales o totales) a facturas con saldo pendiente: el botón verde de pago aparece directo en la fila. El efectivo entra a la caja chica y los pagos por banco a la cuenta que elijas.",
       "Pestaña 'Detalle por Producto': todas las líneas vendidas con costo y utilidad, exportable a Excel.",
       "Importar ventas desde Excel: sube una plantilla (una línea por producto), el sistema agrupa por factura y crea cada venta con sus mismas transacciones (inventario, caja/banco).",
@@ -174,7 +174,8 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
           "Abre Ventas → Historial Ventas.",
           "Filtra por rango de fechas o busca por cliente/número.",
           "Haz clic en el ícono de ojo para ver el detalle.",
-          "Usa el botón de PDF para regenerar la factura.",
+          "En la fila, usa el ícono de descarga para regenerar la factura A4 en PDF, o el ícono de impresora para reimprimir la tirilla térmica de 80 mm.",
+          "La tirilla respeta la configuración de tu empresa (mostrar u ocultar el ISV y el código de cada producto), igual que al momento de la venta.",
         ],
       },
       {
@@ -240,8 +241,13 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
         respuesta:
           "Confirma que el abono se guardó en la factura correcta (detalle → pagos). El saldo pendiente es total menos abonos acumulados.",
       },
+      {
+        pregunta: "¿Puedo reimprimir la tirilla de una venta de días pasados?",
+        respuesta:
+          "Sí. En Resumen de Facturas cada fila tiene el ícono de impresora: reimprime la tirilla de 80 mm de esa venta con sus productos, pagos y saldo tal como quedaron guardados. Junto a él, el ícono de descarga regenera la factura A4 en PDF.",
+      },
     ],
-    keywords: ["facturas", "consultar", "reimprimir", "abono", "eliminar venta", "exportar", "excel", "historial"],
+    keywords: ["facturas", "consultar", "reimprimir", "tirilla", "termica", "80mm", "abono", "eliminar venta", "exportar", "excel", "historial"],
   },
   {
     modulo: "Catalogo",

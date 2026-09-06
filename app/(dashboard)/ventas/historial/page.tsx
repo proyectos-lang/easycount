@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Eye, CreditCard, Download, FileSpreadsheet, CalendarIcon, Banknote, Wallet, Shuffle, Trash2, Loader2, Pencil } from "lucide-react"
+import { Eye, CreditCard, Download, FileSpreadsheet, CalendarIcon, Banknote, Wallet, Shuffle, Trash2, Loader2, Pencil, Printer } from "lucide-react"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 import { exportToXlsx } from "@/lib/utils/export"
@@ -69,10 +69,15 @@ import {
   type VentaDetalleAnalitico,
 } from "@/lib/services/ventas"
 import { getMetodosPagoPorVenta, getComisionesPorVenta, type ComisionVenta } from "@/lib/services/ventas-analytics"
+import { useAuth } from "@/lib/contexts/auth-context"
+import { printTirilla } from "@/lib/print-tirilla"
+import { tirillaLogoUrl } from "@/lib/utils/tirilla-logos"
+import { buildTirillaVentaHtml, metodoPagoLabel, type TirillaVenta } from "@/lib/utils/tirilla-venta"
 
 export default function HistorialVentasPage() {
   const { toast } = useToast()
   const router = useRouter()
+  const { user } = useAuth()
 
   // --- Shared state ---
   const [loading, setLoading] = React.useState(true)
@@ -92,6 +97,8 @@ export default function HistorialVentasPage() {
    * no entran en el Map (la columna muestra "—").
    */
   const [comisionesPorVenta, setComisionesPorVenta] = React.useState<Map<number, ComisionVenta>>(new Map())
+  /** Id de la venta cuya tirilla se esta preparando para reimprimir (spinner). */
+  const [tirillaVentaId, setTirillaVentaId] = React.useState<number | null>(null)
 
   // --- Resumen de Facturas tab filters ---
   const [filtroFechaInicioFacturas, setFiltroFechaInicioFacturas] = React.useState("")
@@ -601,6 +608,88 @@ export default function HistorialVentasPage() {
   }
 
   /**
+   * Reimprime la tirilla termica (80 mm) de una venta del historial. Reconstruye
+   * la misma `TirillaVenta` que arma Nueva Venta, pero a partir de lo persistido:
+   * encabezado + detalles + desglose de pagos. Respeta los flags de la empresa
+   * (mostrar ISV, mostrar codigo de producto) igual que en el punto de venta.
+   */
+  async function reimprimirTirilla(venta: VentaEncabezado) {
+    if (venta.id == null) return
+    setTirillaVentaId(venta.id)
+    try {
+      const [detallesRes, pagosDetalleRes, razonSocial] = await Promise.all([
+        getDetallesVenta(venta.id),
+        getPagosDetalleVenta(venta.id),
+        getRazonSocialForPdf(),
+      ])
+      const detalles = detallesRes.data
+      const pagos = pagosDetalleRes.data
+      const cliente = clientes.find((c) => c.id === venta.cliente_id)
+
+      const subtotal = venta.subtotal ?? 0
+      const descuentoPct = venta.descuento ?? 0
+      const descuentoMonto = +(subtotal * (descuentoPct / 100)).toFixed(2)
+      // Solo mostramos ISV si la empresa lo tiene activo Y la venta aplico impuesto.
+      const mostrarIsv = (user?.flags?.ventas_mostrar_isv ?? true) && !!venta.aplica_impuesto
+      const valorPagado = venta.valorpago ?? 0
+
+      // Si no hay desglose en ventas_pagos_detalle (ventas viejas o migracion
+      // pendiente), caemos a una sola linea con el metodo agregado conocido.
+      const pagosTirilla =
+        pagos.length > 0
+          ? pagos.map((p) => ({
+              metodo: metodoPagoLabel(
+                p.metodo_pago,
+                cuentas.find((c) => c.id === p.cuenta_id)?.nombre,
+              ),
+              monto: Number(p.monto_bruto) || 0,
+            }))
+          : valorPagado > 0
+            ? [{ metodo: metodosPago.get(venta.id) || "Pago", monto: valorPagado }]
+            : []
+
+      const tirilla: TirillaVenta = {
+        empresa: {
+          nombre:
+            razonSocial?.nombre_comercial ||
+            razonSocial?.nombre_empresa ||
+            user?.razon_social_nombre ||
+            "",
+          rtn: razonSocial?.documento || null,
+          direccion: razonSocial?.direccion || null,
+          telefono: razonSocial?.telefono || null,
+          logoUrl: tirillaLogoUrl(user?.razon_social_id),
+        },
+        numeroFactura: venta.numero_factura,
+        fechaISO: venta.fecha_venta || new Date().toISOString(),
+        cliente: cliente?.nombre || venta.cliente_nombre || "Consumidor Final",
+        lineas: detalles.map((d) => ({
+          nombre: d.producto_nombre || "",
+          cantidad: d.cantidad ?? 0,
+          precioUnitario: d.precio_unitario ?? 0,
+          codigo: d.producto_codigo,
+        })),
+        subtotal,
+        descuentoPct,
+        descuentoMonto,
+        mostrarIsv,
+        isv: venta.impuesto_total ?? 0,
+        total: venta.total_venta ?? 0,
+        pagos: pagosTirilla,
+        valorPagado,
+        saldo: Math.max(0, +(((venta.total_venta ?? 0) - valorPagado)).toFixed(2)),
+        mostrarCodigoProducto: user?.flags?.tirilla_mostrar_codigo ?? false,
+      }
+
+      printTirilla(buildTirillaVentaHtml(tirilla), { widthMm: 80 })
+    } catch {
+      toast({ title: "Error", description: "No se pudo preparar la tirilla", variant: "destructive" })
+    } finally {
+      setTirillaVentaId(null)
+    }
+  }
+
+  /**
    * Pinta un badge compacto con el metodo de pago agregado de la venta.
    * Mapea las etiquetas del helper (Efectivo / Banco / Mixto / Credito / Otro)
    * a un icono + color consistente. Si no hay registro -> guion suave.
@@ -904,8 +993,21 @@ export default function HistorialVentasPage() {
                             <Button variant="ghost" size="icon" onClick={() => viewDetalle(venta)} title="Ver detalle">
                               <Eye className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => generatePdf(venta)} title="Descargar PDF">
+                            <Button variant="ghost" size="icon" onClick={() => generatePdf(venta)} title="Descargar factura (PDF)">
                               <Download className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => reimprimirTirilla(venta)}
+                              disabled={tirillaVentaId === venta.id}
+                              title="Reimprimir tirilla (80 mm)"
+                            >
+                              {tirillaVentaId === venta.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Printer className="h-4 w-4" />
+                              )}
                             </Button>
                             <Button
                               variant="ghost"
