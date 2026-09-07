@@ -79,6 +79,13 @@ export interface Cliente {
    * Usado para alertas de cumpleanos en el modulo de clientes.
    */
   fecha_nacimiento?: string
+  /**
+   * Virtual (no es columna): true si el cliente esta activo. Un cliente con
+   * ventas no se borra, se DESACTIVA (tabla `clientes_inactivos`, script 044) y
+   * deja de aparecer en los selectores, pero sigue en el historial de ventas.
+   * Lo llena getClientes leyendo la tabla mapa. Ausente = activo.
+   */
+  activo?: boolean
 }
 
 export interface Proveedor {
@@ -1180,7 +1187,28 @@ export async function deleteLocalizacion(id: number): Promise<{ success: boolean
 
 // ==================== CLIENTES ====================
 
-export async function getClientes(): Promise<{ data: Cliente[]; error: string | null }> {
+/**
+ * Devuelve el set de cliente_id DESACTIVADOS del tenant (tabla clientes_inactivos,
+ * script 044). Vacio si la tabla no existe todavia (degrada sin romper).
+ */
+async function getClientesInactivosSet(
+  supabase: NonNullable<ReturnType<typeof createClient>>
+): Promise<Set<number>> {
+  const { data, error } = await supabase.from('clientes_inactivos').select('cliente_id')
+  if (error) return new Set() // tabla ausente u otro error -> nadie inactivo
+  return new Set((data || []).map((r: { cliente_id: number }) => r.cliente_id))
+}
+
+/**
+ * Lista de clientes. Por defecto trae TODOS y marca cada uno con `activo`
+ * (leyendo `clientes_inactivos`). Con `{ soloActivos: true }` excluye los
+ * desactivados: esa variante se usa en los SELECTORES (Nueva Venta, etc.) para
+ * que un cliente desactivado no aparezca. La config de Clientes los muestra
+ * todos (para poder reactivar) y el historial de ventas no depende de esto.
+ */
+export async function getClientes(
+  opts?: { soloActivos?: boolean }
+): Promise<{ data: Cliente[]; error: string | null }> {
   if (!isSupabaseConfigured()) {
     const saved = localStorage.getItem('clientes')
     return { data: saved ? JSON.parse(saved) : [], error: null }
@@ -1190,13 +1218,15 @@ export async function getClientes(): Promise<{ data: Cliente[]; error: string | 
   if (!supabase) return { data: [], error: 'Cliente no disponible' }
 
   try {
-    const { data, error } = await supabase
-      .from('clientes')
-      .select('*')
-      .order('id', { ascending: true })
+    const [{ data, error }, inactivos] = await Promise.all([
+      supabase.from('clientes').select('*').order('id', { ascending: true }),
+      getClientesInactivosSet(supabase),
+    ])
 
     if (error) return { data: [], error: error.message }
-    return { data: data || [], error: null }
+    let lista = (data || []).map((c: Cliente) => ({ ...c, activo: !inactivos.has(c.id!) }))
+    if (opts?.soloActivos) lista = lista.filter((c) => c.activo)
+    return { data: lista, error: null }
   } catch (err) {
     console.error('[Supabase] Error obteniendo clientes:', err)
     return { data: [], error: 'Error de conexion' }
@@ -1331,26 +1361,95 @@ export async function saveCliente(
   }
 }
 
-export async function deleteCliente(id: number): Promise<{ success: boolean; error: string | null }> {
+/** Cuenta las ventas de un cliente (para decidir borrar vs. desactivar). */
+export async function contarVentasCliente(
+  id: number
+): Promise<{ count: number; error: string | null }> {
+  if (!isSupabaseConfigured()) return { count: 0, error: null }
+  const supabase = createClient()
+  if (!supabase) return { count: 0, error: 'Cliente no disponible' }
+  const { count, error } = await supabase
+    .from('ventas_encabezado')
+    .select('id', { count: 'exact', head: true })
+    .eq('cliente_id', id)
+  if (error) {
+    if (esTablaAusente(error)) return { count: 0, error: null }
+    return { count: 0, error: error.message }
+  }
+  return { count: count || 0, error: null }
+}
+
+/**
+ * Borra o desactiva un cliente segun tenga transacciones:
+ * - Sin ventas -> borrado fisico (y limpia su lista de precios asignada).
+ * - Con ventas -> se DESACTIVA (insert en clientes_inactivos): deja de aparecer
+ *   en los selectores pero sigue en el historial de ventas (el nombre viene por
+ *   join a `clientes`, que permanece). Devuelve el modo aplicado.
+ */
+export async function deleteCliente(
+  id: number
+): Promise<{ success: boolean; modo: 'borrado' | 'desactivado' | null; error: string | null }> {
   if (!isSupabaseConfigured()) {
     const saved = localStorage.getItem('clientes')
     const clientes: Cliente[] = saved ? JSON.parse(saved) : []
-    const filtered = clientes.filter(c => c.id !== id)
-    localStorage.setItem('clientes', JSON.stringify(filtered))
-    return { success: true, error: null }
+    localStorage.setItem('clientes', JSON.stringify(clientes.filter(c => c.id !== id)))
+    return { success: true, modo: 'borrado', error: null }
   }
 
   const supabase = createClient()
-  if (!supabase) return { success: false, error: 'Cliente no disponible' }
+  if (!supabase) return { success: false, modo: null, error: 'Cliente no disponible' }
 
   try {
+    const { count, error: cErr } = await contarVentasCliente(id)
+    if (cErr) return { success: false, modo: null, error: cErr }
+
+    if (count > 0) {
+      // Tiene historial: desactivar (no se puede borrar sin romper las ventas).
+      const stamp = await getTenantStamp(supabase)
+      if (!isValidStamp(stamp)) return { success: false, modo: null, error: SESION_INVALIDA_ERROR }
+      const { error } = await supabase
+        .from('clientes_inactivos')
+        .upsert({ cliente_id: id, ...stamp }, { onConflict: 'cliente_id' })
+      if (error) {
+        if (esTablaAusente(error)) {
+          return {
+            success: false,
+            modo: null,
+            error: 'Este cliente tiene ventas y no se puede borrar. Aplica scripts/044-clientes-inactivos.sql para poder desactivarlo.',
+          }
+        }
+        return { success: false, modo: null, error: error.message }
+      }
+      return { success: true, modo: 'desactivado', error: null }
+    }
+
+    // Sin ventas: borrado fisico. Limpia primero su lista de precios asignada.
+    const delLista = await supabase.from('cliente_lista_precio').delete().eq('cliente_id', id)
+    if (delLista.error && !esTablaAusente(delLista.error)) {
+      console.warn('[deleteCliente] No se pudo limpiar cliente_lista_precio:', delLista.error.message)
+    }
     const { error } = await supabase.from('clientes').delete().eq('id', id)
-    if (error) return { success: false, error: error.message }
-    return { success: true, error: null }
+    if (error) return { success: false, modo: null, error: error.message }
+    return { success: true, modo: 'borrado', error: null }
   } catch (err) {
     console.error('[Supabase] Error eliminando cliente:', err)
-    return { success: false, error: 'Error de conexion' }
+    return { success: false, modo: null, error: 'Error de conexion' }
   }
+}
+
+/** Reactiva un cliente desactivado (lo quita de clientes_inactivos). */
+export async function reactivarCliente(
+  id: number
+): Promise<{ success: boolean; error: string | null }> {
+  if (!isSupabaseConfigured()) return { success: true, error: null }
+  const supabase = createClient()
+  if (!supabase) return { success: false, error: 'Cliente no disponible' }
+  const { error } = await supabase.from('clientes_inactivos').delete().eq('cliente_id', id)
+  if (error) {
+    if (esTablaAusente(error)) return { success: true, error: null }
+    return { success: false, error: error.message }
+  }
+  return { success: true, error: null }
 }
 
 // ==================== PROVEEDORES ====================

@@ -502,7 +502,7 @@ function RevisarPedidoDialog({ pedido, onDone }: { pedido: PedidoEncabezado; onD
 
   async function prepararAprobacion() {
     setAprobando(true)
-    const [c, a, cu] = await Promise.all([getClientes(), getAlmacenes(), getCuentas()])
+    const [c, a, cu] = await Promise.all([getClientes({ soloActivos: true }), getAlmacenes(), getCuentas()])
     setClientes(c.data || [])
     setAlmacenes(a.data || [])
     setCuentas((cu.data || []).filter((x) => x.activo !== false))

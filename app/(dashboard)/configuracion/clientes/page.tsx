@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Users, Pencil, Trash2, Loader2, Cake } from "lucide-react"
+import { Plus, Users, Pencil, Trash2, Loader2, Cake, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -36,6 +36,7 @@ import {
   getClientes,
   saveCliente,
   deleteCliente,
+  reactivarCliente,
 } from "@/lib/services/catalogos"
 import { useTenant } from "@/lib/hooks/use-tenant"
 import { useAuth } from "@/lib/contexts/auth-context"
@@ -189,16 +190,35 @@ export default function ClientesConfigPage() {
 
   async function handleDelete(cliente: Cliente) {
     if (!cliente.id) return
-    
-    if (!confirm(`Eliminar cliente "${cliente.nombre}"?`)) {
+
+    if (!confirm(
+      `¿Eliminar el cliente "${cliente.nombre}"?\n\nSi tiene ventas registradas no se borra: se desactiva y deja de aparecer en el punto de venta y demás listas, pero se conserva en el historial de ventas.`
+    )) {
       return
     }
 
-    const { error } = await deleteCliente(cliente.id)
-    if (error) {
-      toast({ title: "Error", description: error, variant: "destructive" })
+    const { success, modo, error } = await deleteCliente(cliente.id)
+    if (!success || error) {
+      toast({ title: "Error", description: error || "No se pudo eliminar", variant: "destructive" })
     } else {
-      toast({ title: "Exito", description: "Cliente eliminado" })
+      toast({
+        title: modo === "desactivado" ? "Cliente desactivado" : "Cliente eliminado",
+        description:
+          modo === "desactivado"
+            ? "Tenía ventas registradas: se ocultó de las listas pero sigue en el historial de ventas."
+            : "Se eliminó del catálogo.",
+      })
+      loadClientes()
+    }
+  }
+
+  async function handleReactivar(cliente: Cliente) {
+    if (!cliente.id) return
+    const { success, error } = await reactivarCliente(cliente.id)
+    if (!success || error) {
+      toast({ title: "Error", description: error || "No se pudo reactivar", variant: "destructive" })
+    } else {
+      toast({ title: "Cliente reactivado", description: `"${cliente.nombre}" vuelve a estar disponible.` })
       loadClientes()
     }
   }
@@ -243,11 +263,14 @@ export default function ClientesConfigPage() {
                 {clientes.map((cliente) => {
                   const alerta = getAlertaCumple(cliente.fecha_nacimiento)
                   return (
-                    <div key={cliente.id} className="border rounded-lg p-3 bg-card">
+                    <div key={cliente.id} className={`border rounded-lg p-3 ${cliente.activo === false ? "bg-stone-50 opacity-80" : "bg-card"}`}>
                       <div className="flex justify-between items-start">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-medium truncate">{cliente.nombre}</p>
+                            {cliente.activo === false && (
+                              <Badge variant="outline" className="border-stone-300 bg-stone-100 text-stone-500 text-[10px]">Inactivo</Badge>
+                            )}
                             {alerta.estado !== "none" && (
                               <BirthdayBadge alerta={alerta} compact />
                             )}
@@ -265,9 +288,15 @@ export default function ClientesConfigPage() {
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(cliente)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10" onClick={() => handleDelete(cliente)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {cliente.activo === false ? (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" title="Reactivar" onClick={() => handleReactivar(cliente)}>
+                              <RotateCcw className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10" onClick={() => handleDelete(cliente)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -284,14 +313,16 @@ export default function ClientesConfigPage() {
                     <TableHead>Telefono</TableHead>
                     <TableHead>Fecha Nacimiento</TableHead>
                     <TableHead>Direccion</TableHead>
+                    <TableHead>Estado</TableHead>
                     <TableHead className="w-24"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {clientes.map((cliente) => {
                     const alerta = getAlertaCumple(cliente.fecha_nacimiento)
+                    const inactivo = cliente.activo === false
                     return (
-                      <TableRow key={cliente.id}>
+                      <TableRow key={cliente.id} className={inactivo ? "opacity-70" : undefined}>
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             <span>{cliente.nombre}</span>
@@ -309,6 +340,13 @@ export default function ClientesConfigPage() {
                         </TableCell>
                         <TableCell>{cliente.direccion || "-"}</TableCell>
                         <TableCell>
+                          {inactivo ? (
+                            <Badge variant="outline" className="border-stone-300 bg-stone-100 text-stone-500">Inactivo</Badge>
+                          ) : (
+                            <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">Activo</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           <div className="flex items-center gap-1">
                             <Button
                               variant="ghost"
@@ -318,14 +356,27 @@ export default function ClientesConfigPage() {
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 hover:bg-destructive/10"
-                              onClick={() => handleDelete(cliente)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {inactivo ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-emerald-600 hover:bg-emerald-50"
+                                title="Reactivar cliente"
+                                onClick={() => handleReactivar(cliente)}
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 hover:bg-destructive/10"
+                                title="Eliminar / desactivar"
+                                onClick={() => handleDelete(cliente)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

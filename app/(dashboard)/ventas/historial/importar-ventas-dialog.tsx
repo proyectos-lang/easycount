@@ -60,7 +60,7 @@ export function ImportarVentasDialog({ onImported }: { onImported: () => void })
 
   React.useEffect(() => {
     if (!open) return
-    Promise.all([getClientes(), getAlmacenes(), getCuentas()]).then(([c, a, cu]) => {
+    Promise.all([getClientes({ soloActivos: true }), getAlmacenes(), getCuentas()]).then(([c, a, cu]) => {
       setClientes(c.data || [])
       setAlmacenes(a.data || [])
       const activas = (cu.data || []).filter((x) => x.activo !== false)

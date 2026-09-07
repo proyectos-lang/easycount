@@ -291,9 +291,12 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "El RTN aparece en la factura del cliente.",
       "La fecha de nacimiento alimenta las alertas de cumpleaños.",
       "Los clientes se eligen en Nueva Venta y alimentan el ranking del Dashboard de Ventas.",
+      "Eliminar un cliente: si NO tiene ventas registradas, se borra del catálogo. Si SÍ tiene ventas, no se borra (rompería el historial): se DESACTIVA y deja de aparecer en el punto de venta y demás listas, pero se conserva en el registro/historial de ventas. Un cliente inactivo se puede reactivar con el botón de reactivar.",
+      "Marca el estado de cada cliente (Activo / Inactivo) en la lista.",
     ],
     queNoHace: [
       "No controla límites de crédito ni bloquea clientes morosos (la cartera se ve en Cuentas por Cobrar).",
+      "No borra un cliente con ventas: para preservar el historial, se desactiva en lugar de eliminarse.",
     ],
     operaciones: [
       {
@@ -305,6 +308,15 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "Guarda. También puedes crear clientes al vuelo desde Nueva Venta.",
         ],
       },
+      {
+        titulo: "Eliminar o desactivar un cliente",
+        pasos: [
+          "En la lista de Clientes, presiona el ícono de basura del cliente.",
+          "Si el cliente no tiene ventas, se elimina del catálogo tras confirmar.",
+          "Si tiene ventas, en lugar de borrarse se DESACTIVA: desaparece del selector de Nueva Venta y demás listas, pero sigue apareciendo en el historial de ventas (su nombre se conserva en cada factura).",
+          "Un cliente desactivado muestra el estado 'Inactivo'. Para volver a usarlo, presiona el botón de reactivar (flecha circular).",
+        ],
+      },
     ],
     faqs: [
       {
@@ -312,8 +324,13 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
         respuesta:
           "Crea un cliente genérico (ej. 'Consumidor Final') para ventas de mostrador, y registra con datos reales a quienes pidan factura o compren al crédito.",
       },
+      {
+        pregunta: "Borré un cliente pero sigue apareciendo en el historial de ventas.",
+        respuesta:
+          "Es lo correcto. Un cliente con ventas no se elimina: se desactiva para que no aparezca en el punto de venta ni en las listas, pero se conserva en el registro de ventas para no perder la trazabilidad de esas facturas. Si ya no debería verse en ningún selector, verifica que aparezca como 'Inactivo' en Clientes.",
+      },
     ],
-    keywords: ["cliente", "rtn", "cumpleaños", "directorio", "contacto"],
+    keywords: ["cliente", "rtn", "cumpleaños", "directorio", "contacto", "eliminar", "borrar", "desactivar", "inactivo", "reactivar"],
   },
   {
     modulo: "Proveedores",

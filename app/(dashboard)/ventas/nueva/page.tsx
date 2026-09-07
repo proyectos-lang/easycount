@@ -197,7 +197,7 @@ export default function NuevaVentaPage() {
     try {
       console.log("[NuevaVenta] cargando datos...")
       const [clientesRes, productosRes, almacenesRes, localizacionesRes, correlativo, cuentasRes, marcasRes, categoriasRes] = await Promise.all([
-        getClientes(),
+        getClientes({ soloActivos: true }),
         getProductos(),
         getAlmacenes(),
         getLocalizaciones(),

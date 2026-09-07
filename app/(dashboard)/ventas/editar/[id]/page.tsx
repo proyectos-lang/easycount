@@ -91,7 +91,7 @@ export default function EditarVentaPage({ params }: { params: Promise<{ id: stri
         getPagosDetalleVenta(ventaId),
         getPagosVenta(ventaId),
         getLocalizacionVenta(ventaId),
-        getClientes(),
+        getClientes({ soloActivos: true }),
         getProductos(),
         getMarcas(),
         getCategorias(),
@@ -108,7 +108,16 @@ export default function EditarVentaPage({ params }: { params: Promise<{ id: stri
       setClienteId(String(venta.cliente_id))
       setDescuentoPct(Number(venta.descuento || 0))
       setAplicaIsv(!!venta.aplica_impuesto)
-      setClientes(cli.data || [])
+      // Solo clientes activos, pero conserva el cliente ya asignado a esta venta
+      // aunque este desactivado (para no perderlo al re-guardar).
+      let listaClientes = cli.data || []
+      if (venta.cliente_id != null && !listaClientes.some((c) => c.id === venta.cliente_id)) {
+        listaClientes = [
+          ...listaClientes,
+          { id: venta.cliente_id, nombre: venta.cliente_nombre || `Cliente #${venta.cliente_id}` },
+        ]
+      }
+      setClientes(listaClientes)
       setProductos(prod.data || [])
       setMarcas(mar.data || [])
       setCategorias(cat.data || [])

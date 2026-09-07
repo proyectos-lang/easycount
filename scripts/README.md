@@ -48,6 +48,7 @@ SQL Editor de Supabase. Son en su mayoría idempotentes (`IF NOT EXISTS` /
 | 041 | `041-localizaciones-punto-venta.sql` | Config por localización: tabla `localizaciones_config` (`es_punto_venta`) + RLS (el admin de la empresa lee/escribe su config). La localización marcada como "Punto de venta" se preselecciona en Nueva Venta |
 | 042 | `042-listas-precios.sql` | Listas de precios: tablas `listas_precios`, `listas_precios_detalle`, `cliente_lista_precio` + RLS + registro del módulo "Listas de Precios" (nace deshabilitado por empresa) |
 | 043 | `043-producto-grupo-tallas.sql` | Grupo de tallas: tabla mapa `producto_grupo_tallas` (producto→grupo) + RLS. Vincula productos hermanos (misma prenda, varias tallas) para agruparlos en Productos/Inventario. No toca `productos` |
+| 044 | `044-clientes-inactivos.sql` | Soft-delete de clientes: tabla mapa `clientes_inactivos` (cliente desactivado) + RLS. Un cliente con ventas no se borra (rompería el historial): se desactiva y desaparece de los selectores, pero sigue en el registro de ventas. No toca `clientes` |
 | — | `add-almacen-to-ventas-encabezado.sql` | Agrega `almacen_id` a ventas (aplicar tras 011) |
 | — | `agrupar-tallas-coral-razon-10.sql` | ONE-OFF: agrupa las tallas ya existentes de Coral Swimwear (razón 10) por (nombre, marca). Requiere el 043 |
 

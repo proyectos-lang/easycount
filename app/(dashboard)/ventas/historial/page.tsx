@@ -158,7 +158,7 @@ export default function HistorialVentasPage() {
         // Carga TODAS las facturas (bucle por rangos en el servicio) para poder
         // paginar client-side por hojas de 50/100/1000.
         getVentas(),
-        getClientes(),
+        getClientes({ soloActivos: true }),
         getAlmacenes(),
         getProductos()
       ])
