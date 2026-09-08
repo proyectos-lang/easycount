@@ -225,3 +225,20 @@
     background-color: rgba(13, 24, 33, 0.5); /* Ink Black */
   }
 }
+
+/*
+ * Oculta las flechas (spinners) de TODOS los campos numericos de la app.
+ * Al hacer click en esas flechas cambiaba el valor sin querer; ademas
+ * angostaban el campo. El input sigue aceptando numeros por teclado.
+ * Webkit/Blink (Chrome, Edge, Safari) + Gecko (Firefox).
+ */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
