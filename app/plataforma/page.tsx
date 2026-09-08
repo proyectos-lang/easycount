@@ -164,6 +164,9 @@ export default async function PlataformaPage() {
                 <th className="px-4 py-2 font-medium" title="Productos por talla: check 'tiene tallas' al crear + agrupamiento de tallas en Productos e Inventario">
                   Productos por talla
                 </th>
+                <th className="px-4 py-2 font-medium" title="Venta rápida: en Nueva Venta, agregar una línea con descripción y precio a mano, sin afectar inventario">
+                  Venta rápida
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -237,6 +240,15 @@ export default async function PlataformaPage() {
                         razonSocialId={e.id}
                         flag="productos_por_talla"
                         initial={e.flags.productos_por_talla}
+                        onLabel="Activo"
+                        offLabel="Inactivo"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <FlagToggle
+                        razonSocialId={e.id}
+                        flag="venta_rapida"
+                        initial={e.flags.venta_rapida}
                         onLabel="Activo"
                         offLabel="Inactivo"
                       />

@@ -49,6 +49,7 @@ SQL Editor de Supabase. Son en su mayoría idempotentes (`IF NOT EXISTS` /
 | 042 | `042-listas-precios.sql` | Listas de precios: tablas `listas_precios`, `listas_precios_detalle`, `cliente_lista_precio` + RLS + registro del módulo "Listas de Precios" (nace deshabilitado por empresa) |
 | 043 | `043-producto-grupo-tallas.sql` | Grupo de tallas: tabla mapa `producto_grupo_tallas` (producto→grupo) + RLS. Vincula productos hermanos (misma prenda, varias tallas) para agruparlos en Productos/Inventario. No toca `productos` |
 | 044 | `044-clientes-inactivos.sql` | Soft-delete de clientes: tabla mapa `clientes_inactivos` (cliente desactivado) + RLS. Un cliente con ventas no se borra (rompería el historial): se desactiva y desaparece de los selectores, pero sigue en el registro de ventas. No toca `clientes` |
+| 045 | `045-ventas-detalle-descripcion.sql` | Venta Rápida: tabla mapa `ventas_detalle_descripcion` (texto libre de una línea sin producto) + RLS. La línea se guarda en `ventas_detalle` con producto_id NULL (no afecta inventario) y su descripción vive aquí para verse en el historial. No toca `ventas_detalle` |
 | — | `add-almacen-to-ventas-encabezado.sql` | Agrega `almacen_id` a ventas (aplicar tras 011) |
 | — | `agrupar-tallas-coral-razon-10.sql` | ONE-OFF: agrupa las tallas ya existentes de Coral Swimwear (razón 10) por (nombre, marca). Requiere el 043 |
 

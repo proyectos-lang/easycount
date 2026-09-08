@@ -71,9 +71,16 @@ export interface VentaEncabezado {
 export interface VentaDetalle {
   id?: number
   venta_id: number
-  producto_id: number
+  /**
+   * Producto del catalogo. NULL en lineas de "Venta Rapida" (producto/servicio
+   * no catalogado escrito a mano): esas NO afectan inventario y su texto vive en
+   * `descripcion_libre` / tabla `ventas_detalle_descripcion` (script 045).
+   */
+  producto_id: number | null
   producto_nombre?: string  // joined from productos table (not stored)
   producto_codigo?: string  // joined from productos table (not stored)
+  /** Descripcion escrita a mano (solo lineas de Venta Rapida, producto_id NULL). */
+  descripcion_libre?: string | null
   cantidad: number
   precio_unitario: number
   costo_promedio_momento: number
@@ -354,13 +361,29 @@ export async function getDetallesVenta(ventaId: number): Promise<{ data: VentaDe
       .order('id', { ascending: true })
 
     if (error) return { data: [], error: error.message }
-    
-    const formattedData = (data || []).map(d => ({
+
+    // Lineas de Venta Rapida (producto_id NULL): su nombre viene de la tabla
+    // mapa `ventas_detalle_descripcion`. Se lee best-effort (si el script 045
+    // no existe, el nombre queda vacio, sin romper).
+    const detalles = data || []
+    const idsSinProducto = detalles.filter(d => d.producto_id == null).map(d => d.id)
+    const descById = new Map<number, string>()
+    if (idsSinProducto.length > 0) {
+      const { data: descData } = await supabase
+        .from('ventas_detalle_descripcion')
+        .select('detalle_id, descripcion')
+        .in('detalle_id', idsSinProducto)
+      for (const r of (descData || []) as { detalle_id: number; descripcion: string }[]) {
+        descById.set(r.detalle_id, r.descripcion)
+      }
+    }
+
+    const formattedData = detalles.map(d => ({
       ...d,
-      producto_nombre: d.productos?.nombre || '',
+      producto_nombre: d.productos?.nombre || descById.get(d.id) || (d.producto_id == null ? 'Venta rápida' : ''),
       producto_codigo: d.productos?.codigo_barras || ''
     }))
-    
+
     return { data: formattedData, error: null }
   } catch (err) {
     console.error('[Supabase] Error obteniendo detalles:', err)
@@ -552,8 +575,9 @@ export async function crearVenta(
     allDetalles.push(...newDetalles)
     localStorage.setItem('ventas_detalle', JSON.stringify(allDetalles))
     
-    // Update products stock
+    // Update products stock (las lineas de Venta Rapida no afectan inventario)
     for (const detalle of data.detalles) {
+      if (detalle.producto_id == null) continue
       const prodIdx = productos.findIndex(p => p.id === detalle.producto_id)
       if (prodIdx >= 0) {
         productos[prodIdx] = {
@@ -680,24 +704,52 @@ export async function crearVenta(
 
     if (ventaError) return { data: null, error: ventaError.message }
 
-    // 2. Insert detalles (solo razon_social_id, no usuario)
-    const detallesConVenta = data.detalles.map(d => ({
+    // 2. Insert detalles (solo razon_social_id, no usuario). Quitamos
+    // `descripcion_libre` (no es columna de ventas_detalle: se guarda aparte
+    // en la tabla mapa). Pedimos .select() para recuperar los id insertados y
+    // poder mapear la descripcion de las lineas de Venta Rapida.
+    const detallesConVenta = data.detalles.map(({ descripcion_libre: _omit, ...d }) => ({
       ...d,
       venta_id: ventaData.id,
       razon_social_id: stamp.razon_social_id
     }))
 
-    const { error: detallesError } = await supabase
+    const { data: detallesInsertados, error: detallesError } = await supabase
       .from('ventas_detalle')
       .insert(detallesConVenta)
+      .select('id')
 
     if (detallesError) {
       await supabase.from('ventas_encabezado').delete().eq('id', ventaData.id)
       return { data: null, error: detallesError.message }
     }
 
-    // 3. Update stock and create inventory transactions (sello completo)
+    // 2b. Descripcion libre de las lineas de Venta Rapida (producto_id NULL).
+    // Best-effort: si el script 045 no se aplico, no rompe la venta (el nombre
+    // simplemente no se vera en el historial). Empareja por indice: el insert
+    // conserva el orden de las filas enviadas.
+    const filasDesc: { detalle_id: number; razon_social_id: number | null; descripcion: string }[] = []
+    ;(detallesInsertados || []).forEach((fila: { id: number }, i: number) => {
+      const orig = data.detalles[i]
+      if (orig && orig.producto_id == null && (orig.descripcion_libre || '').trim() !== '') {
+        filasDesc.push({
+          detalle_id: fila.id,
+          razon_social_id: stamp.razon_social_id,
+          descripcion: (orig.descripcion_libre as string).trim(),
+        })
+      }
+    })
+    if (filasDesc.length > 0) {
+      const { error: descErr } = await supabase.from('ventas_detalle_descripcion').insert(filasDesc)
+      if (descErr) console.warn('[crearVenta] no se guardo descripcion libre:', descErr.message)
+    }
+
+    // 3. Update stock and create inventory transactions (sello completo).
+    // Las lineas de Venta Rapida (producto_id NULL) NO afectan inventario: no
+    // ajustan stock ni generan movimiento en el kardex.
     for (const detalle of data.detalles) {
+      if (detalle.producto_id == null) continue
+
       // Descuenta el stock de forma ATOMICA (evita perdida de actualizaciones
       // si dos ventas del mismo producto ocurren a la vez). Ver script 018.
       await ajustarStock(supabase, detalle.producto_id, -detalle.cantidad)
@@ -1455,9 +1507,10 @@ export async function getVentasDashboard(anio?: number, mes?: number): Promise<{
       .sort((a, b) => b.ventas - a.ventas)
       .slice(0, 10)
     
-    // Top Productos
+    // Top Productos (excluye lineas de Venta Rapida sin producto)
     const productoMap: Record<number, { cantidad: number; ventas: number; ganancia: number }> = {}
     detallesFiltrados.forEach(d => {
+      if (d.producto_id == null) return
       if (!productoMap[d.producto_id]) {
         productoMap[d.producto_id] = { cantidad: 0, ventas: 0, ganancia: 0 }
       }
@@ -1758,16 +1811,17 @@ export async function getVentasDashboard(anio?: number, mes?: number): Promise<{
       .sort((a, b) => b.ventas - a.ventas)
       .slice(0, 10)
     
-    // Top Productos
+    // Top Productos (excluye lineas de Venta Rapida sin producto)
     const productoMap: Record<number, { nombre: string; codigo: string; cantidad: number; ventas: number; ganancia: number }> = {}
     detallesData.forEach(d => {
+      if (d.producto_id == null) return
       if (!productoMap[d.producto_id]) {
-        productoMap[d.producto_id] = { 
+        productoMap[d.producto_id] = {
           nombre: (d as { productos?: { nombre?: string } }).productos?.nombre || 'Desconocido',
           codigo: (d as { productos?: { codigo_barras?: string } }).productos?.codigo_barras || '',
-          cantidad: 0, 
-          ventas: 0, 
-          ganancia: 0 
+          cantidad: 0,
+          ventas: 0,
+          ganancia: 0
         }
       }
       productoMap[d.producto_id].cantidad += d.cantidad
@@ -1914,6 +1968,8 @@ async function revertirEfectosVenta(
   if (detErr) return { error: detErr.message }
 
   for (const linea of detalles ?? []) {
+    // Las lineas de Venta Rapida (producto_id NULL) no movieron inventario.
+    if (linea.producto_id == null) continue
     await ajustarStock(supabase, linea.producto_id, linea.cantidad || 0, stamp.razon_social_id)
     await supabase
       .from('transacciones_inventario')
@@ -2226,7 +2282,9 @@ export async function editarVenta(
     if (detInsErr) return { error: detInsErr.message }
 
     // 7. Re-aplicar inventario (stock + kardex 'Salida Venta').
+    // Las lineas de Venta Rapida (producto_id NULL) no afectan inventario.
     for (const d of data.detalles) {
+      if (d.producto_id == null) continue
       await ajustarStock(supabase, d.producto_id, -d.cantidad, stamp.razon_social_id)
       await supabase.from('transacciones_inventario').insert({
         producto_id: d.producto_id,

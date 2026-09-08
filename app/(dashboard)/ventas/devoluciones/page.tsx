@@ -177,10 +177,11 @@ export default function DevolucionesPage() {
     const res = await crearDevolucion({
       venta_id: ventaSel.id!,
       lineas: lineas
-        .filter((l) => l.a_devolver > 0)
+        // Las lineas de Venta Rapida (sin producto) no son devolvibles.
+        .filter((l) => l.a_devolver > 0 && l.producto_id != null)
         .map((l) => ({
           venta_detalle_id: l.id!,
-          producto_id: l.producto_id,
+          producto_id: l.producto_id as number,
           cantidad_devuelta: l.a_devolver,
           precio_unitario: Number(l.precio_unitario || 0),
           costo_promedio_momento: Number(l.costo_promedio_momento || 0),

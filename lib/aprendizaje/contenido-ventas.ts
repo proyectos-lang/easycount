@@ -45,6 +45,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Genera el número de factura correlativo automáticamente (FC-0001, FC-0002…).",
       "Catálogo de productos con búsqueda y stock disponible por almacén. El botón 'Seleccionar todo' agrega de una vez todas las referencias que coinciden con tu búsqueda/filtros.",
       "Lector de código de barras (si tu empresa lo tiene activo): al escanear un producto, el sistema lo ubica por su código y lo agrega solo a la venta. Un escáner USB/Bluetooth funciona como teclado, no requiere configuración extra.",
+      "Venta rápida (si tu empresa la tiene activa): botón para agregar al carrito un producto o servicio NO catalogado escribiendo su descripción y precio a mano. Esta línea NO afecta el inventario (no descuenta stock ni genera movimiento en el kardex); sirve para vender algo que no está creado. Se cobra y factura como cualquier otra línea.",
       "Descuento porcentual sobre el subtotal e impuesto ISV (15 %). El ISV viene DESACTIVADO por defecto: actívalo por venta cuando aplique.",
       "El cliente 'Consumidor Final' queda seleccionado por defecto; cámbialo si la venta es a un cliente registrado.",
       "Botón 'Pantalla completa' (arriba a la derecha): expande el módulo al 100% de la pantalla para usarlo como caja/POS físico; se sale con el mismo botón o con ESC.",
@@ -89,6 +90,16 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
           "Escanea el producto: el sistema detecta el código y lo agrega solo a la venta (muestra un aviso 'Agregado por escaneo'). Escanea de nuevo el mismo para sumar otra unidad.",
           "Si el código no coincide exacto, el código queda en el buscador con las coincidencias para que lo ubiques y lo agregues a mano.",
           "Un escáner USB o Bluetooth funciona como teclado: no necesita instalación; solo conéctalo.",
+        ],
+      },
+      {
+        titulo: "Venta rápida (producto o servicio no catalogado)",
+        pasos: [
+          "Requiere que tu empresa tenga activa la Venta Rápida (se activa de forma centralizada).",
+          "En Nueva Venta presiona el botón 'Venta rápida'.",
+          "Escribe la descripción de lo que vendes (ej. 'Reparación', 'Flete', 'Servicio'), el precio y la cantidad.",
+          "Presiona 'Agregar al carrito': la línea aparece en la venta marcada como 'Venta rápida'.",
+          "Continúa la venta normal (cliente, descuento, pago) y guarda. Esa línea NO descuenta inventario ni deja movimiento en el kardex; sí entra al total, al cobro y a la factura/tirilla.",
         ],
       },
       {
@@ -144,6 +155,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "pantalla completa", "pos", "kiosko", "caja",
       "vuelto", "cambio", "efectivo recibido", "con cuanto paga",
       "codigo de barras", "escaner", "escanear", "lector", "pistola", "barcode",
+      "venta rapida", "servicio", "no catalogado", "sin inventario", "linea manual",
     ],
   },
   {

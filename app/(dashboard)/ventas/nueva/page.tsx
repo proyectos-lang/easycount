@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Minus, Trash2, FileText, ShoppingCart, User, Receipt, Warehouse, MapPin, AlertTriangle, UserPlus, Wallet, X, Landmark, Printer, CheckCircle2, Maximize2, Minimize2, ChevronsUpDown, Check } from "lucide-react"
+import { Plus, Minus, Trash2, FileText, ShoppingCart, User, Receipt, Warehouse, MapPin, AlertTriangle, UserPlus, Wallet, X, Landmark, Printer, CheckCircle2, Maximize2, Minimize2, ChevronsUpDown, Check, Zap } from "lucide-react"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -70,9 +70,14 @@ import { buildTirillaVentaHtml, metodoPagoLabel, type TirillaVenta } from "@/lib
 import { hoyISO, timestampNaiveLocal } from "@/lib/utils/fecha"
 
 interface LineaVenta {
-  producto_id: number
+  /** Key estable para React/dedupe (las lineas de Venta Rapida no tienen id). */
+  _key: string
+  /** NULL en lineas de "Venta Rapida" (producto/servicio no catalogado, sin inventario). */
+  producto_id: number | null
   producto_nombre: string
   producto_codigo: string
+  /** Descripcion libre (solo Venta Rapida). Se persiste aparte para el historial. */
+  descripcion_libre?: string | null
   cantidad: number
   precio_unitario: number
   costo_promedio: number
@@ -80,6 +85,8 @@ interface LineaVenta {
   utilidad_linea: number
   stock_disponible: number
 }
+
+let ventaRapidaSeq = 0
 
 export default function NuevaVentaPage() {
   const router = useRouter()
@@ -92,10 +99,18 @@ export default function NuevaVentaPage() {
   const mostrarIsv = user?.flags?.ventas_mostrar_isv ?? true
   // Flag por empresa: activa el lector de codigo de barras (escanear = ubicar/agregar).
   const lectorCodigoBarras = user?.flags?.ventas_lector_codigo_barras ?? false
+  // Flag por empresa: habilita "Venta Rapida" (linea manual sin inventario).
+  const ventaRapidaActiva = user?.flags?.venta_rapida ?? false
 
   // Modo pantalla completa (kiosko POS): el modulo abarca el 100% de la pantalla.
   const [fullscreen, setFullscreen] = React.useState(false)
   const posRootRef = React.useRef<HTMLDivElement>(null)
+
+  // Dialogo "Venta Rapida" (linea manual sin inventario).
+  const [ventaRapidaOpen, setVentaRapidaOpen] = React.useState(false)
+  const [vrDescripcion, setVrDescripcion] = React.useState("")
+  const [vrPrecio, setVrPrecio] = React.useState("")
+  const [vrCantidad, setVrCantidad] = React.useState("1")
 
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
@@ -449,16 +464,18 @@ export default function NuevaVentaPage() {
 
   async function fetchStockForLineas(locId: number) {
     if (lineas.length === 0) return
-    
+
     setLoadingStock(true)
-    const productoIds = lineas.map(l => l.producto_id)
+    // Solo productos reales; las lineas de Venta Rapida (producto_id NULL) no
+    // tienen stock (se mantienen en Infinity, sin bloqueo).
+    const productoIds = lineas.map(l => l.producto_id).filter((id): id is number => id != null)
     const { data: stockMap } = await getStockMultipleProducts(productoIds, locId)
     setStockPorLocalizacion(stockMap)
-    
+
     // Update lineas with stock disponible
     setLineas(prev => prev.map(l => ({
       ...l,
-      stock_disponible: stockMap[l.producto_id] || 0
+      stock_disponible: l.producto_id == null ? Infinity : (stockMap[l.producto_id] || 0)
     })))
     setLoadingStock(false)
   }
@@ -499,6 +516,7 @@ export default function NuevaVentaPage() {
       
       const precio = precioDeVenta(producto)
       setLineas(prev => [...prev, {
+        _key: `p-${producto.id}`,
         producto_id: producto.id!,
         producto_nombre: producto.nombre,
         producto_codigo: producto.codigo_barras,
@@ -510,6 +528,46 @@ export default function NuevaVentaPage() {
         stock_disponible: stockDisponible
       }])
     }
+  }
+
+  // Agrega una linea de "Venta Rapida": descripcion y precio a mano, sin
+  // producto ni inventario. producto_id NULL, costo 0 (utilidad = precio),
+  // stock_disponible Infinity para no disparar el bloqueo por stock.
+  function addVentaRapida(descripcion: string, precio: number, cantidad: number) {
+    const desc = descripcion.trim()
+    const p = Math.max(0, precio)
+    const c = Math.max(1, cantidad)
+    ventaRapidaSeq += 1
+    setLineas(prev => [...prev, {
+      _key: `vr-${ventaRapidaSeq}`,
+      producto_id: null,
+      producto_nombre: desc,
+      producto_codigo: "",
+      descripcion_libre: desc,
+      cantidad: c,
+      precio_unitario: p,
+      costo_promedio: 0,
+      subtotal: +(p * c).toFixed(2),
+      utilidad_linea: +(p * c).toFixed(2),
+      stock_disponible: Infinity,
+    }])
+  }
+
+  function confirmarVentaRapida() {
+    const desc = vrDescripcion.trim()
+    const precio = Number(vrPrecio)
+    const cantidad = Number(vrCantidad) || 1
+    if (!desc) {
+      toast({ title: "Falta la descripción", description: "Escribe qué se está vendiendo", variant: "destructive" })
+      return
+    }
+    if (!Number.isFinite(precio) || precio <= 0) {
+      toast({ title: "Precio inválido", description: "El precio debe ser mayor a 0", variant: "destructive" })
+      return
+    }
+    addVentaRapida(desc, precio, cantidad)
+    setVrDescripcion(""); setVrPrecio(""); setVrCantidad("1")
+    setVentaRapidaOpen(false)
   }
 
   // Agrega en lote todas las referencias filtradas (boton "Seleccionar todo").
@@ -533,6 +591,7 @@ export default function NuevaVentaPage() {
       ...nuevos.map((p) => {
         const precio = precioDeVenta(p)
         return {
+          _key: `p-${p.id}`,
           producto_id: p.id!,
           producto_nombre: p.nombre,
           producto_codigo: p.codigo_barras,
@@ -913,6 +972,7 @@ export default function NuevaVentaPage() {
 
       const detalles = lineas.map(l => ({
         producto_id: l.producto_id,
+        descripcion_libre: l.producto_id == null ? (l.descripcion_libre ?? l.producto_nombre) : null,
         cantidad: l.cantidad,
         precio_unitario: l.precio_unitario,
         costo_promedio_momento: l.costo_promedio,
@@ -1434,6 +1494,17 @@ export default function NuevaVentaPage() {
               </p>
             )}
 
+            {ventaRapidaActiva && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2 border-sky-300 bg-sky-50 text-sky-800 hover:bg-sky-100"
+                onClick={() => setVentaRapidaOpen(true)}
+              >
+                <Zap className="h-4 w-4" /> Venta rápida (producto o servicio no catalogado)
+              </Button>
+            )}
+
             <Separator />
 
             {/* Catalogo de productos (ocupa el resto del contenedor) */}
@@ -1442,7 +1513,7 @@ export default function NuevaVentaPage() {
                 productos={resultadosBusqueda ?? productos}
                 marcas={marcas}
                 categorias={categorias}
-                idsEnVenta={lineas.map((l) => l.producto_id)}
+                idsEnVenta={lineas.map((l) => l.producto_id).filter((id): id is number => id != null)}
                 onAdd={(producto) => addProducto(producto)}
                 disabled={!almacenId}
                 localizacionSeleccionada={!!localizacionId}
@@ -1486,8 +1557,8 @@ export default function NuevaVentaPage() {
                   const seAgotara = localizacionId && linea.stock_disponible > 0 && linea.cantidad === linea.stock_disponible
                   
                   return (
-                  <div 
-                    key={linea.producto_id} 
+                  <div
+                    key={linea._key}
                     className={`p-3 transition-colors ${
                       stockInsuficiente ? "bg-amber-50/80 border-l-4 border-l-amber-600" : "hover:bg-muted/50"
                     }`}
@@ -1495,7 +1566,12 @@ export default function NuevaVentaPage() {
                     {/* Top row: product name + delete */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium text-foreground text-sm leading-snug line-clamp-2">{linea.producto_nombre}</p>
+                        <p className="font-medium text-foreground text-sm leading-snug line-clamp-2">
+                          {linea.producto_nombre}
+                          {linea.producto_id == null && (
+                            <span className="ml-1.5 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 align-middle">Venta rápida</span>
+                          )}
+                        </p>
                         <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">{linea.producto_codigo}</p>
                       </div>
                       <Button
@@ -1508,10 +1584,10 @@ export default function NuevaVentaPage() {
                       </Button>
                     </div>
 
-                    {/* Stock badge + warnings */}
-                    {localizacionId && (
+                    {/* Stock badge + warnings (solo productos reales; Venta Rapida no tiene stock) */}
+                    {localizacionId && linea.producto_id != null && (
                       <div className="mt-1.5">
-                        <Badge 
+                        <Badge
                           variant={stockInsuficiente ? "destructive" : "secondary"}
                           className={`text-xs ${
                             stockInsuficiente 
@@ -2212,6 +2288,66 @@ export default function NuevaVentaPage() {
               className="w-full"
             >
               Cerrar / Nueva venta
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialogo: Venta Rapida (linea manual sin inventario) */}
+      <Dialog open={ventaRapidaOpen} onOpenChange={setVentaRapidaOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-sky-600" /> Venta rápida
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            <p className="text-sm text-muted-foreground">
+              Agrega al carrito un producto o servicio no catalogado. <strong>No afecta el inventario.</strong>
+            </p>
+            <div className="grid gap-2">
+              <Label htmlFor="vr-desc">Descripción</Label>
+              <Input
+                id="vr-desc"
+                value={vrDescripcion}
+                onChange={(e) => setVrDescripcion(e.target.value)}
+                placeholder="Ej: Reparación de máquina, flete, servicio…"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confirmarVentaRapida() } }}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label htmlFor="vr-precio">Precio (L)</Label>
+                <Input
+                  id="vr-precio"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={vrPrecio}
+                  onChange={(e) => setVrPrecio(e.target.value)}
+                  placeholder="0.00"
+                  className="h-10 text-base"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="vr-cant">Cantidad</Label>
+                <Input
+                  id="vr-cant"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={vrCantidad}
+                  onChange={(e) => setVrCantidad(e.target.value)}
+                  className="h-10 text-base"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setVentaRapidaOpen(false)}>Cancelar</Button>
+            <Button onClick={confirmarVentaRapida} className="gap-2">
+              <Plus className="h-4 w-4" /> Agregar al carrito
             </Button>
           </DialogFooter>
         </DialogContent>

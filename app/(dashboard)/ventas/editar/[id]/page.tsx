@@ -38,9 +38,12 @@ import {
 } from "@/lib/services/ventas"
 
 interface LineaEdit {
-  producto_id: number
+  /** NULL en lineas de Venta Rapida (sin producto; no afectan inventario). */
+  producto_id: number | null
   producto_nombre: string
   producto_codigo: string
+  /** Descripcion libre (solo lineas de Venta Rapida). */
+  descripcion_libre?: string | null
   cantidad: number
   precio_unitario: number
   costo_promedio: number
@@ -134,6 +137,7 @@ export default function EditarVentaPage({ params }: { params: Promise<{ id: stri
         const res = await getStockMultipleProducts(ids, loc.localizacion_id)
         stockMap = { ...res.data }
         for (const d of detalles) {
+          if (d.producto_id == null) continue
           stockMap[d.producto_id] = (stockMap[d.producto_id] ?? 0) + Number(d.cantidad || 0)
         }
       }
@@ -144,10 +148,12 @@ export default function EditarVentaPage({ params }: { params: Promise<{ id: stri
           producto_id: d.producto_id,
           producto_nombre: d.producto_nombre || "",
           producto_codigo: d.producto_codigo || "",
+          descripcion_libre: d.producto_id == null ? (d.producto_nombre || "") : null,
           cantidad: Number(d.cantidad || 0),
           precio_unitario: Number(d.precio_unitario || 0),
           costo_promedio: Number(d.costo_promedio_momento || 0),
-          stock_disponible: stockMap[d.producto_id] ?? Number(d.cantidad || 0),
+          // Venta Rapida: sin tope de stock (no afecta inventario).
+          stock_disponible: d.producto_id == null ? Infinity : (stockMap[d.producto_id] ?? Number(d.cantidad || 0)),
         }))
       )
 
@@ -180,14 +186,16 @@ export default function EditarVentaPage({ params }: { params: Promise<{ id: stri
   const totalNeto = +(total - totalComisiones).toFixed(2)
   const sumaPagosBruto = +pagos.reduce((a, p) => a + Number(p.monto_bruto || 0), 0).toFixed(2)
 
-  function setCantidad(pid: number, cant: number) {
-    setLineas((prev) => prev.map((l) => l.producto_id === pid ? { ...l, cantidad: Math.max(0.01, Math.min(cant, l.stock_disponible || cant)) } : l))
+  // Las lineas se identifican por su indice en el arreglo (una venta puede
+  // tener varias lineas de Venta Rapida con producto_id NULL).
+  function setCantidad(idx: number, cant: number) {
+    setLineas((prev) => prev.map((l, i) => i === idx ? { ...l, cantidad: Math.max(0.01, Math.min(cant, l.stock_disponible || cant)) } : l))
   }
-  function setPrecio(pid: number, precio: number) {
-    setLineas((prev) => prev.map((l) => l.producto_id === pid ? { ...l, precio_unitario: Math.max(0, precio) } : l))
+  function setPrecio(idx: number, precio: number) {
+    setLineas((prev) => prev.map((l, i) => i === idx ? { ...l, precio_unitario: Math.max(0, precio) } : l))
   }
-  function quitarLinea(pid: number) {
-    setLineas((prev) => prev.filter((l) => l.producto_id !== pid))
+  function quitarLinea(idx: number) {
+    setLineas((prev) => prev.filter((_, i) => i !== idx))
   }
   function agregarProducto(p: Producto) {
     setLineas((prev) => {
@@ -252,6 +260,7 @@ export default function EditarVentaPage({ params }: { params: Promise<{ id: stri
       },
       detalles: lineas.map((l) => ({
         producto_id: l.producto_id,
+        descripcion_libre: l.producto_id == null ? (l.descripcion_libre ?? l.producto_nombre) : null,
         cantidad: l.cantidad,
         precio_unitario: l.precio_unitario,
         costo_promedio_momento: l.costo_promedio,
@@ -332,7 +341,7 @@ export default function EditarVentaPage({ params }: { params: Promise<{ id: stri
             productos={productos}
             marcas={marcas}
             categorias={categorias}
-            idsEnVenta={lineas.map((l) => l.producto_id)}
+            idsEnVenta={lineas.map((l) => l.producto_id).filter((id): id is number => id != null)}
             onAdd={agregarProducto}
             localizacionSeleccionada={ubicacion.localizacion_id != null}
             stockPorLocalizacion={stockLoc}
@@ -341,22 +350,29 @@ export default function EditarVentaPage({ params }: { params: Promise<{ id: stri
             <p className="text-sm text-muted-foreground text-center py-4">Sin productos.</p>
           ) : (
             <div className="space-y-2">
-              {lineas.map((l) => (
-                <div key={l.producto_id} className="flex items-center gap-2 border rounded-lg p-2">
+              {lineas.map((l, idx) => (
+                <div key={idx} className="flex items-center gap-2 border rounded-lg p-2">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{l.producto_nombre}</p>
-                    <p className="text-xs text-muted-foreground">Disp. {l.stock_disponible}</p>
+                    <p className="text-sm font-medium truncate">
+                      {l.producto_nombre}
+                      {l.producto_id == null && (
+                        <span className="ml-1.5 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">Venta rápida</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {l.producto_id == null ? "Sin inventario" : `Disp. ${l.stock_disponible}`}
+                    </p>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => setCantidad(l.producto_id, l.cantidad - 1)}><Minus className="h-3 w-3" /></Button>
-                    <Input type="number" className="h-7 w-16 text-center" value={l.cantidad} onChange={(e) => setCantidad(l.producto_id, Number(e.target.value) || 0)} />
-                    <Button size="icon" variant="outline" className="h-7 w-7" disabled={l.cantidad >= l.stock_disponible} onClick={() => setCantidad(l.producto_id, l.cantidad + 1)}><Plus className="h-3 w-3" /></Button>
+                    <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => setCantidad(idx, l.cantidad - 1)}><Minus className="h-3 w-3" /></Button>
+                    <Input type="number" className="h-7 w-16 text-center" value={l.cantidad} onChange={(e) => setCantidad(idx, Number(e.target.value) || 0)} />
+                    <Button size="icon" variant="outline" className="h-7 w-7" disabled={l.cantidad >= l.stock_disponible} onClick={() => setCantidad(idx, l.cantidad + 1)}><Plus className="h-3 w-3" /></Button>
                   </div>
                   <div className="w-28">
-                    <Input type="number" step="0.01" className="h-7 text-right" value={l.precio_unitario} onChange={(e) => setPrecio(l.producto_id, Number(e.target.value) || 0)} />
+                    <Input type="number" step="0.01" className="h-7 text-right" value={l.precio_unitario} onChange={(e) => setPrecio(idx, Number(e.target.value) || 0)} />
                   </div>
                   <div className="w-24 text-right text-sm font-medium">{formatCurrency(l.cantidad * l.precio_unitario)}</div>
-                  <Button size="icon" variant="ghost" className="h-7 w-7 text-red-600" onClick={() => quitarLinea(l.producto_id)}><Trash2 className="h-4 w-4" /></Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7 text-red-600" onClick={() => quitarLinea(idx)}><Trash2 className="h-4 w-4" /></Button>
                 </div>
               ))}
             </div>

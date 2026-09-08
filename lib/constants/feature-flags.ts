@@ -22,6 +22,12 @@ export interface FeatureFlags {
    * de grupo. Si es false, la empresa no ve nada del sistema de tallas.
    */
   productos_por_talla: boolean
+  /**
+   * Activa "Venta Rápida" en Nueva Venta: agregar al carrito una linea con
+   * descripcion y precio escritos a mano (producto/servicio no catalogado),
+   * SIN afectar inventario. Si es false, el boton no aparece.
+   */
+  venta_rapida: boolean
 }
 
 export const DEFAULT_FLAGS: FeatureFlags = {
@@ -29,6 +35,7 @@ export const DEFAULT_FLAGS: FeatureFlags = {
   tirilla_mostrar_codigo: false,
   ventas_lector_codigo_barras: false,
   productos_por_talla: false,
+  venta_rapida: false,
 }
 
 /** Etiquetas legibles para el portal (que flags se pueden togglear por empresa). */
@@ -37,6 +44,7 @@ export const FLAG_LABELS: Record<keyof FeatureFlags, string> = {
   tirilla_mostrar_codigo: "Mostrar codigo del producto en la tirilla",
   ventas_lector_codigo_barras: "Lector de codigo de barras en ventas",
   productos_por_talla: "Productos por talla (tallas agrupadas)",
+  venta_rapida: "Venta rápida (linea manual sin inventario)",
 }
 
 /**
@@ -62,5 +70,9 @@ export function mergeFlags(config: Record<string, unknown> | null | undefined): 
       c.productos_por_talla === undefined
         ? DEFAULT_FLAGS.productos_por_talla
         : Boolean(c.productos_por_talla),
+    venta_rapida:
+      c.venta_rapida === undefined
+        ? DEFAULT_FLAGS.venta_rapida
+        : Boolean(c.venta_rapida),
   }
 }
