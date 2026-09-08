@@ -277,12 +277,40 @@ export async function getMetodosPagoPorVenta(
       sets.set(r.venta_id, s)
     }
 
+    // FALLBACK: las ventas sin fila en ventas_pagos_detalle (p. ej. las que se
+    // crearon pendientes y se cobraron luego con "Registrar abono", que escribe
+    // en `pagos_ventas` y no en el desglose) quedarian con badge vacio. Para
+    // esas, derivamos el metodo desde `pagos_ventas.metodo_pago`.
+    const sinDesglose = ventaIds.filter((id) => !sets.has(id))
+    if (sinDesglose.length > 0) {
+      type PagoRow = { venta_id: number; metodo_pago: string | null }
+      const abonoResultados = await Promise.all(
+        chunk(sinDesglose, IN_CHUNK).map((grupo) =>
+          supabase.from("pagos_ventas").select("venta_id, metodo_pago").in("venta_id", grupo)
+        )
+      )
+      for (const r of abonoResultados) {
+        // Si la tabla no existe u otro error: ignoramos el fallback (badge queda vacio).
+        if (r.error) continue
+        for (const row of (r.data || []) as PagoRow[]) {
+          if (!row.metodo_pago) continue
+          const s = sets.get(row.venta_id) || new Set<string>()
+          s.add(row.metodo_pago)
+          sets.set(row.venta_id, s)
+        }
+      }
+    }
+
     const out = new Map<number, string>()
     for (const [id, set] of sets) {
+      // Normaliza etiquetas de ambas fuentes (ventas_pagos_detalle usa
+      // 'Efectivo'/'Banco'/'Link_Pago'/'Credito'/'Otro'; pagos_ventas suele
+      // usar 'Efectivo'/'Banco'/'Otro'). Cualquier valor no reconocido -> Otro.
       const tieneEfectivo = set.has("Efectivo")
       const tieneBanco = set.has("Banco") || set.has("Link_Pago")
       const tieneCredito = set.has("Credito")
-      const tieneOtro = set.has("Otro")
+      const conocidos = new Set(["Efectivo", "Banco", "Link_Pago", "Credito"])
+      const tieneOtro = set.has("Otro") || [...set].some((m) => !conocidos.has(m))
 
       if (tieneEfectivo && tieneBanco) out.set(id, "Mixto")
       else if (tieneEfectivo) out.set(id, "Efectivo")
