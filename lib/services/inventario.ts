@@ -536,8 +536,33 @@ export async function getStockByLocalizacion(
   }
 }
 
+/**
+ * Stock de un producto DESGLOSADO por localización (solo las que tienen saldo
+ * distinto de 0). Se deriva sumando las transacciones del kardex agrupadas por
+ * `localizacion_id`. Lo usa la conversión a producto tallado para saber en qué
+ * localización repartir (y bloquear si el stock está en más de una).
+ */
+export async function getStockPorLocalizaciones(
+  productoId: number
+): Promise<{ data: { almacen_id: number | null; localizacion_id: number | null; stock: number }[]; error: string | null }> {
+  const { data: kardex, error } = await getKardexByProducto(productoId)
+  if (error) return { data: [], error }
+
+  const map = new Map<number | null, { almacen_id: number | null; localizacion_id: number | null; stock: number }>()
+  for (const t of kardex) {
+    const key = t.localizacion_id ?? null
+    const cur = map.get(key) ?? { almacen_id: t.almacen_id ?? null, localizacion_id: key, stock: 0 }
+    cur.stock += Number(t.cantidad || 0)
+    if (cur.almacen_id == null && t.almacen_id != null) cur.almacen_id = t.almacen_id
+    map.set(key, cur)
+  }
+  // Solo las localizaciones con saldo (tolerancia por decimales).
+  const conSaldo = Array.from(map.values()).filter((l) => Math.abs(l.stock) > 0.0001)
+  return { data: conSaldo, error: null }
+}
+
 export async function getStockMultipleProducts(
-  productoIds: number[], 
+  productoIds: number[],
   localizacionId: number
 ): Promise<{ data: Record<number, number>; error: string | null }> {
   if (productoIds.length === 0 || !localizacionId) {

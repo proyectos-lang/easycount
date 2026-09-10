@@ -86,6 +86,7 @@ import {
   GRUPOS_TALLAS_FEATURE_PENDING,
   type GrupoTallaRef,
 } from "@/lib/services/grupos-tallas"
+import { getRepartoInfo, convertirProductoATallado } from "@/lib/services/convertir-tallado"
 import { formatCurrency } from "@/lib/utils/format"
 import { useTenant } from "@/lib/hooks/use-tenant"
 import { useAuth } from "@/lib/contexts/auth-context"
@@ -172,6 +173,8 @@ export default function ProductosConfigPage() {
   const [gruposExpandidos, setGruposExpandidos] = useState<Set<number>>(new Set())
   // Editor de grupo: grupo_id abierto (o null). Su contenido se deriva de productos.
   const [grupoEditando, setGrupoEditando] = useState<number | null>(null)
+  // Producto que se está convirtiendo en tallado (o null). Abre su propio diálogo.
+  const [convirtiendo, setConvirtiendo] = useState<Producto | null>(null)
   
   // Filter state
   const [filterMarca, setFilterMarca] = useState<string>("all")
@@ -1942,6 +1945,29 @@ export default function ProductosConfigPage() {
                     />
                   </div>
                 </div>
+
+                {/* Convertir en tallado: solo si la empresa usa tallas y el
+                    producto no está ya agrupado en tallas. */}
+                {tallasActivo && editingProducto?.id != null && !gruposTallas.has(editingProducto.id) && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-amber-900 flex items-center gap-1.5">
+                        <Layers3 className="h-4 w-4" /> ¿Este producto tiene tallas?
+                      </p>
+                      <p className="text-xs text-amber-800">
+                        Conviértelo en tallado y reparte su stock actual ({editingProducto.stock_total ?? 0}) entre las tallas.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0 border-amber-300 bg-white text-amber-800 hover:bg-amber-100"
+                      onClick={() => { setConvirtiendo(editingProducto); setDialogOpen(false) }}
+                    >
+                      Convertir
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1964,6 +1990,15 @@ export default function ProductosConfigPage() {
           almacenes={almacenes}
           onClose={() => setGrupoEditando(null)}
           onDone={() => { setGrupoEditando(null); loadProductos() }}
+        />
+      )}
+
+      {/* Convertir un producto existente en tallado (reparte su stock) */}
+      {convirtiendo != null && (
+        <ConvertirTalladoDialog
+          producto={convirtiendo}
+          onClose={() => setConvirtiendo(null)}
+          onDone={() => { setConvirtiendo(null); loadProductos() }}
         />
       )}
 
@@ -2370,6 +2405,197 @@ function EditarGrupoDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cerrar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ==================== CONVERTIR PRODUCTO EN TALLADO ====================
+
+/**
+ * Convierte un producto normal en tallado repartiendo su stock actual entre
+ * las tallas. El producto original queda como una talla más del grupo (su stock
+ * sale y se reingresa por talla). Costo y precio se mantienen. La suma de las
+ * cantidades debe coincidir EXACTO con el stock actual. Si el stock está en
+ * varias localizaciones, se bloquea.
+ */
+function ConvertirTalladoDialog({
+  producto,
+  onClose,
+  onDone,
+}: {
+  producto: Producto
+  onClose: () => void
+  onDone: () => void
+}) {
+  const { toast } = useToast()
+  const [cargando, setCargando] = useState(true)
+  const [stockTotal, setStockTotal] = useState(0)
+  const [numLocs, setNumLocs] = useState(0)
+  // Primera línea = el propio producto original (su talla). Las demás, nuevas.
+  const [lineas, setLineas] = useState<{ talla: string; cantidad: string }[]>([
+    { talla: "", cantidad: "" },
+    { talla: "", cantidad: "" },
+  ])
+  const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => {
+    let cancel = false
+    getRepartoInfo(producto.id!).then((r) => {
+      if (cancel) return
+      setStockTotal(r.stockTotal)
+      setNumLocs(r.localizaciones.length)
+      setCargando(false)
+    })
+    return () => { cancel = true }
+  }, [producto.id])
+
+  const bloqueadoMultiLoc = stockTotal > 0 && numLocs > 1
+  const sumaActual = lineas.reduce((a, l) => a + (Math.max(0, Math.floor(Number(l.cantidad) || 0))), 0)
+  const tallasLlenas = lineas.filter((l) => l.talla.trim() !== "").length
+  const cuadra = sumaActual === stockTotal
+
+  function setLinea(idx: number, campo: "talla" | "cantidad", valor: string) {
+    setLineas((prev) => prev.map((l, i) => (i === idx ? { ...l, [campo]: valor } : l)))
+  }
+  function agregar() { setLineas((prev) => [...prev, { talla: "", cantidad: "" }]) }
+  function quitar(idx: number) { setLineas((prev) => prev.filter((_, i) => i !== idx)) }
+
+  async function confirmar() {
+    const limpias = lineas
+      .map((l) => ({ talla: l.talla.trim(), cantidad: Math.max(0, Math.floor(Number(l.cantidad) || 0)) }))
+      .filter((l) => l.talla !== "")
+    if (limpias.length < 2) {
+      toast({ title: "Faltan tallas", description: "Agrega al menos dos tallas.", variant: "destructive" })
+      return
+    }
+    setGuardando(true)
+    const res = await convertirProductoATallado({
+      original: producto,
+      tallaOriginal: limpias[0].talla, // la primera línea es el producto original
+      lineas: limpias,
+    })
+    setGuardando(false)
+    if (!res.success) {
+      toast({ title: "No se pudo convertir", description: res.error || "Error", variant: "destructive" })
+      return
+    }
+    toast({
+      title: "Producto convertido en tallado",
+      description: res.error || `${limpias.length} tallas creadas y agrupadas.`,
+      variant: res.error ? "destructive" : undefined,
+    })
+    onDone()
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Layers3 className="h-5 w-5 text-amber-700" /> Convertir en producto tallado
+          </DialogTitle>
+          <DialogDescription>
+            {producto.nombre} · Reparte su stock actual entre las tallas. El costo y el
+            precio se mantienen para todas.
+          </DialogDescription>
+        </DialogHeader>
+
+        {cargando ? (
+          <div className="flex justify-center py-10"><Spinner className="h-6 w-6" /></div>
+        ) : bloqueadoMultiLoc ? (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            El stock de este producto ({stockTotal}) está repartido en <strong>{numLocs} localizaciones</strong>.
+            Consolídalo en una sola (con un traslado en Inventario → Traslados) antes de convertirlo en tallado.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-lg bg-stone-50 border border-stone-200 p-3 text-sm">
+              <span className="text-stone-500">Stock actual a repartir:</span>{" "}
+              <span className="font-bold text-stone-800">{stockTotal}</span>
+              {stockTotal === 0 && (
+                <p className="text-xs text-stone-500 mt-1">
+                  Sin stock: solo se crean las tallas (todas en 0). Deja las cantidades en 0.
+                </p>
+              )}
+            </div>
+
+            <datalist id="tallas-preset-conv">
+              {TALLAS_PRESET.map((t) => <option key={t} value={t} />)}
+            </datalist>
+
+            <p className="text-xs text-muted-foreground">
+              La <strong>primera</strong> talla se asigna a este mismo producto (conserva su historial);
+              las demás se crean como tallas nuevas. La suma de cantidades debe ser {stockTotal}.
+            </p>
+
+            <div className="space-y-2">
+              <div className="hidden sm:flex items-center gap-2 px-1 text-[11px] font-medium text-stone-500">
+                <span className="flex-1">Talla</span>
+                <span className="w-28">Cantidad</span>
+                <span className="w-8" />
+              </div>
+              {lineas.map((l, idx) => (
+                <div key={idx} className="flex items-end gap-2">
+                  <div className="grid gap-1 flex-1 min-w-0">
+                    {idx === 0 && <span className="text-[10px] font-semibold text-amber-700">Este producto</span>}
+                    <Input
+                      list="tallas-preset-conv"
+                      value={l.talla}
+                      onChange={(e) => setLinea(idx, "talla", e.target.value)}
+                      placeholder="Ej: S, M, 40"
+                      className="h-10"
+                    />
+                  </div>
+                  <div className="w-28 shrink-0">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={l.cantidad}
+                      onChange={(e) => setLinea(idx, "cantidad", e.target.value)}
+                      placeholder="0"
+                      className="h-10 text-base"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-10 w-8 shrink-0 text-stone-500 hover:text-destructive disabled:opacity-30"
+                    disabled={lineas.length <= 2}
+                    onClick={() => quitar(idx)}
+                    title="Quitar talla"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={agregar}>
+              <Plus className="h-4 w-4" /> Agregar talla
+            </Button>
+
+            <div className={`text-xs font-medium ${cuadra ? "text-emerald-700" : "text-amber-700"}`}>
+              Suma: {sumaActual} / {stockTotal} {cuadra ? "✓" : "· debe cuadrar exacto"}
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          {!bloqueadoMultiLoc && !cargando && (
+            <Button
+              onClick={confirmar}
+              disabled={guardando || !cuadra || tallasLlenas < 2}
+              className="bg-amber-600 hover:bg-amber-700 text-white gap-2"
+            >
+              {guardando && <Spinner className="h-4 w-4" />}
+              Convertir y repartir
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

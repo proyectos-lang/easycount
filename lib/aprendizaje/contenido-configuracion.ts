@@ -157,6 +157,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "Opción 'Este producto tiene tallas' (al crear, solo si tu empresa tiene activado el sistema de tallas): con el botón 'Agregar talla' añades una línea por cada talla y escribes la talla y su cantidad inicial propia. El precio de venta y el costo son únicos (los del formulario) para todas las tallas. Al guardar se crea un producto independiente por cada talla —mismo nombre + talla, su propio stock y código— en un solo guardado, y quedan agrupados. La talla se muestra en el catálogo de Nueva Venta.",
       "Los productos tallados se AGRUPAN en la lista: la prenda aparece una sola vez con un contador de tallas y un botón para desplegar/contraer sus tallas (cada una con su stock y precio). El mismo agrupamiento se ve en Inventario → Valoración (stock y valor sumados del grupo).",
       "Editar grupo de tallas: en la fila del grupo, el botón de editar abre un panel con todas sus tallas para cambiar el precio de cada una, quitar una talla del grupo o agregar tallas nuevas (crea el producto hermano, con cantidad inicial opcional).",
+      "Convertir un producto normal en tallado: al editar un producto ya creado puedes marcarlo como tallado y repartir su stock actual entre las tallas (la suma debe cuadrar con el stock). El producto original queda como una talla más; costo y precio se mantienen.",
       "Carga masiva desde Excel: descarga una plantilla, complétala con tus productos (código, nombre, categoría, marca, precio, costo y cantidad inicial) y súbela eligiendo el almacén y la bodega; el sistema crea todos los productos y genera su inventario inicial de una sola vez.",
       "Elimina productos: si solo tiene movimientos de inventario, se borran en cascada junto con el producto (te avisa cuántos); si tiene ventas o compras registradas, no se borra para proteger el historial.",
     ],
@@ -195,6 +196,16 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "Ahí puedes cambiar el precio de cada talla (edita y presiona Guardar en esa fila), quitar una talla del grupo, o Agregar una talla nueva.",
           "Al agregar una talla escribe su nombre (ej. XL, 42) y, si quieres, una cantidad inicial con su almacén y localización; se crea el producto hermano y queda dentro del grupo.",
           "El mismo agrupamiento se ve en Inventario → Valoración: la prenda aparece una vez con el stock y el valor sumados, y al desplegar muestra cada talla.",
+        ],
+      },
+      {
+        titulo: "Convertir un producto existente en tallado (repartir su stock)",
+        pasos: [
+          "Si un producto ya creado en realidad tiene tallas, edítalo (ícono de lápiz) y presiona 'Convertir' en la tarjeta '¿Este producto tiene tallas?'.",
+          "Agrega una línea por talla. La PRIMERA talla se le asigna a este mismo producto (conserva su historial y ventas); las demás se crean como tallas nuevas.",
+          "Escribe la cantidad de cada talla. La suma debe coincidir EXACTO con el stock actual del producto (es un reparto: ni crea ni pierde inventario). El costo y el precio se mantienen iguales para todas.",
+          "Al confirmar, el sistema da salida al stock del producto y lo reingresa repartido por talla en su misma localización (queda trazable en el kardex), y agrupa todas las tallas como una sola prenda.",
+          "Si el stock del producto está repartido en varias localizaciones, primero consolídalo en una sola (con un traslado); el sistema lo pide antes de convertir.",
         ],
       },
       {
@@ -244,7 +255,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "No, si tu empresa tiene activado el sistema de tallas (se habilita por empresa desde el panel de administración). Al crear el producto marca 'Este producto tiene tallas', elige las tallas y guarda una sola vez: el sistema crea un producto por cada talla (con su propio stock, código y precio) y los deja agrupados. En la lista de Productos y en Inventario → Valoración la prenda aparece una sola vez y se despliega para ver cada talla; el botón de editar del grupo permite cambiar precios, quitar tallas o agregar nuevas. En Nueva Venta cada talla se ve por separado con su etiqueta. Si tu empresa no maneja tallas, no verás nada de esto.",
       },
     ],
-    keywords: ["producto", "codigo de barras", "sku", "precio", "marca", "categoria", "talla", "tallas", "variantes", "grupo", "agrupar", "desplegar", "foto", "catalogo", "eliminar", "borrar", "cascada", "comprimir fotos", "imagen pesada", "resolucion", "carga lenta", "carga masiva", "importar productos", "plantilla", "excel", "masivo", "inventario inicial"],
+    keywords: ["producto", "codigo de barras", "sku", "precio", "marca", "categoria", "talla", "tallas", "variantes", "grupo", "agrupar", "desplegar", "convertir en tallado", "repartir stock", "dividir unidades", "foto", "catalogo", "eliminar", "borrar", "cascada", "comprimir fotos", "imagen pesada", "resolucion", "carga lenta", "carga masiva", "importar productos", "plantilla", "excel", "masivo", "inventario inicial"],
   },
   {
     modulo: "Almacenes",
