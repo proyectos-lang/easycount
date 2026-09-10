@@ -1151,18 +1151,31 @@ export default function ProductosConfigPage() {
                     fila.precioMin === fila.precioMax
                       ? `L ${fila.precioMin.toFixed(2)}`
                       : `L ${fila.precioMin.toFixed(2)} - ${fila.precioMax.toFixed(2)}`
+                  // Foto del grupo: la primera talla que tenga foto.
+                  const fotoGrupo = fila.tallas.find((t) => t.foto_url)?.foto_url
                   return (
                     <div key={`g-${fila.grupoId}`} className="border border-amber-200 rounded-xl bg-amber-50/40">
                       <div className="p-3 flex items-center gap-3">
-                        <div className="h-14 w-14 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
-                          <Layers3 className="h-6 w-6 text-amber-700" />
+                        <div className="relative h-14 w-14 shrink-0">
+                          {fotoGrupo ? (
+                            <img src={fotoGrupo} alt={fila.nombre} className="h-14 w-14 rounded-lg object-cover" />
+                          ) : (
+                            <div className="h-14 w-14 rounded-lg bg-stone-100 flex items-center justify-center">
+                              <ImageIcon className="h-5 w-5 text-stone-400" />
+                            </div>
+                          )}
+                          {/* Marca de "varias tallas" sobre la foto */}
+                          <span className="absolute -bottom-1 -right-1 rounded-full bg-amber-600 text-white h-5 w-5 flex items-center justify-center shadow" title="Producto con varias tallas">
+                            <Layers3 className="h-3 w-3" />
+                          </span>
                         </div>
                         <button type="button" onClick={() => toggleGrupo(fila.grupoId)} className="flex-1 min-w-0 text-left">
                           <p className="font-medium truncate text-sm flex items-center gap-1">
                             {expandido ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
                             {fila.nombre}
+                            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">{fila.tallas.length} tallas</span>
                           </p>
-                          <p className="text-xs text-amber-800">{fila.tallas.length} tallas · Stock: {fila.stockTotal}</p>
+                          <p className="text-xs text-amber-800">Stock: {fila.stockTotal}</p>
                           <p className="text-xs text-emerald-700 font-medium">{rangoPrecio}</p>
                         </button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setGrupoEditando(fila.grupoId)} title="Editar grupo">
@@ -1209,12 +1222,24 @@ export default function ProductosConfigPage() {
                         fila.precioMin === fila.precioMax
                           ? `L ${fila.precioMin.toFixed(2)}`
                           : `L ${fila.precioMin.toFixed(2)} - ${fila.precioMax.toFixed(2)}`
+                      // Foto del grupo: la primera talla que tenga foto.
+                      const fotoGrupo = fila.tallas.find((t) => t.foto_url)?.foto_url
                       return (
                         <Fragment key={`g-${fila.grupoId}`}>
                           <TableRow className="bg-amber-50/40 hover:bg-amber-50/70">
                             <TableCell>
-                              <div className="h-10 w-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                                <Layers3 className="h-5 w-5 text-amber-700" />
+                              <div className="relative h-10 w-10">
+                                {fotoGrupo ? (
+                                  <img src={fotoGrupo} alt={fila.nombre} className="h-10 w-10 rounded-lg object-cover" />
+                                ) : (
+                                  <div className="h-10 w-10 rounded-lg bg-stone-100 flex items-center justify-center">
+                                    <ImageIcon className="h-5 w-5 text-stone-400" />
+                                  </div>
+                                )}
+                                {/* Marca de "varias tallas" sobre la foto */}
+                                <span className="absolute -bottom-1 -right-1 rounded-full bg-amber-600 text-white h-4 w-4 flex items-center justify-center shadow" title="Producto con varias tallas">
+                                  <Layers3 className="h-2.5 w-2.5" />
+                                </span>
                               </div>
                             </TableCell>
                             <TableCell className="font-medium">
