@@ -2,8 +2,9 @@ import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from "@/lib/services/tenant-stamp"
 import { ajustarStock } from "@/lib/services/stock"
 import { registrarMovimientoCaja } from "@/lib/services/caja-chica"
-import { registrarMovimientoCuenta } from "@/lib/services/cuentas"
+import { registrarMovimientoCuenta, recalcCadenaSaldoCuenta } from "@/lib/services/cuentas"
 import { getHondurasNowISO } from "@/lib/utils/honduras-time"
+import type { SupabaseClient } from "@supabase/supabase-js"
 
 // ==================== TIPOS ====================
 
@@ -372,4 +373,112 @@ export async function crearDevolucion(
   }
 
   return { data: { id: devolucionId, numero_devolucion: numeroDevolucion }, error: null }
+}
+
+// ==================== REVERTIR DEVOLUCIONES DE UNA VENTA ====================
+
+/**
+ * Cuenta cuántas devoluciones tiene una venta (para la UI de confirmación).
+ */
+export async function contarDevolucionesDeVenta(
+  ventaId: number
+): Promise<{ count: number; error: string | null }> {
+  if (!isSupabaseConfigured()) return { count: 0, error: null }
+  const supabase = createClient()
+  if (!supabase) return { count: 0, error: "Cliente no disponible" }
+  const { count, error } = await supabase
+    .from("devoluciones_encabezado")
+    .select("id", { count: "exact", head: true })
+    .eq("venta_id", ventaId)
+  if (error) {
+    if (isMissingTable(error)) return { count: 0, error: null }
+    return { count: 0, error: error.message }
+  }
+  return { count: count || 0, error: null }
+}
+
+/**
+ * Deshace TODAS las devoluciones de una venta y las borra. Es el inverso exacto
+ * de `crearDevolucion`, por cada devolución de la venta:
+ *   1) Inventario: resta de vuelta el stock que la devolución habia repuesto
+ *      (`ajustarStock(-cantidad_devuelta)`) y borra sus filas de kardex
+ *      (`referencia_id = devolucionId`, tipos de devolución).
+ *   2) Tesorería: borra el movimiento de caja/cuenta del reembolso
+ *      (`ref_tipo='devolucion'`, `ref_id=devolucionId`) y recalcula las cuentas.
+ *   3) Borra `devoluciones_detalle` + `devoluciones_encabezado`.
+ *
+ * Se usa al ELIMINAR una venta que tiene devoluciones, para que el inventario y
+ * el dinero queden cuadrados (sin doble reposición ni movimientos huérfanos).
+ * Recibe el `supabase` y el `stamp` del caller (misma transacción lógica).
+ */
+export async function revertirDevolucionesDeVenta(
+  supabase: SupabaseClient,
+  ventaId: number,
+  razonSocialId: number
+): Promise<{ error: string | null }> {
+  // Devoluciones de la venta.
+  const { data: devs, error: devErr } = await supabase
+    .from("devoluciones_encabezado")
+    .select("id")
+    .eq("venta_id", ventaId)
+    .eq("razon_social_id", razonSocialId)
+  if (devErr) {
+    if (isMissingTable(devErr)) return { error: null } // sin feature = sin devoluciones
+    return { error: devErr.message }
+  }
+  if (!devs || devs.length === 0) return { error: null }
+
+  const cuentasAfectadas = new Set<number>()
+
+  for (const dev of devs) {
+    const devolucionId = Number(dev.id)
+
+    // 1) Inventario: restar de vuelta lo que la devolución habia sumado.
+    const { data: detalles } = await supabase
+      .from("devoluciones_detalle")
+      .select("producto_id, cantidad_devuelta")
+      .eq("devolucion_id", devolucionId)
+      .eq("razon_social_id", razonSocialId)
+    for (const d of detalles || []) {
+      const cant = Number(d.cantidad_devuelta || 0)
+      if (cant > 0) await ajustarStock(supabase, d.producto_id, -cant, razonSocialId)
+    }
+    // Borrar las filas de kardex de esta devolución.
+    await supabase
+      .from("transacciones_inventario")
+      .delete()
+      .eq("referencia_id", devolucionId)
+      .in("tipo_movimiento", [TIPO_MOV_DEVOLUCION, TIPO_MOV_FALLBACK])
+      .eq("razon_social_id", razonSocialId)
+
+    // 2) Tesorería: revertir el reembolso (caja + cuenta).
+    const { data: movsCuenta } = await supabase
+      .from("cuenta_movimientos")
+      .select("cuenta_id")
+      .eq("ref_tipo", "devolucion")
+      .eq("ref_id", devolucionId)
+      .eq("razon_social_id", razonSocialId)
+    for (const m of movsCuenta || []) cuentasAfectadas.add(Number(m.cuenta_id))
+    await supabase
+      .from("cuenta_movimientos")
+      .delete()
+      .eq("ref_tipo", "devolucion")
+      .eq("ref_id", devolucionId)
+      .eq("razon_social_id", razonSocialId)
+    await supabase
+      .from("caja_chica_movimientos")
+      .delete()
+      .eq("ref_tipo", "devolucion")
+      .eq("ref_id", devolucionId)
+      .eq("razon_social_id", razonSocialId)
+
+    // 3) Borrar la devolución (detalle + encabezado).
+    await supabase.from("devoluciones_detalle").delete().eq("devolucion_id", devolucionId).eq("razon_social_id", razonSocialId)
+    await supabase.from("devoluciones_encabezado").delete().eq("id", devolucionId).eq("razon_social_id", razonSocialId)
+  }
+
+  // Recalcular el saldo de las cuentas bancarias afectadas.
+  for (const cId of cuentasAfectadas) await recalcCadenaSaldoCuenta(cId)
+
+  return { error: null }
 }

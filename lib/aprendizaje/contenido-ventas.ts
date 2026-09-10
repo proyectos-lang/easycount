@@ -170,7 +170,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Registra abonos (parciales o totales) a facturas con saldo pendiente: el botón verde de pago aparece directo en la fila. El efectivo entra a la caja chica y los pagos por banco a la cuenta que elijas.",
       "Pestaña 'Detalle por Producto': todas las líneas vendidas con costo y utilidad, exportable a Excel.",
       "Importar ventas desde Excel: sube una plantilla (una línea por producto), el sistema agrupa por factura y crea cada venta con sus mismas transacciones (inventario, caja/banco).",
-      "Elimina una venta por completo: devuelve el stock, borra los movimientos de caja/banco asociados y elimina la factura (pide confirmación).",
+      "Elimina una venta por completo: devuelve el stock, borra los movimientos de caja/banco asociados y elimina la factura (pide confirmación). Si la factura tiene devoluciones, también se anulan automáticamente (se revierte su stock y su reembolso), avisándote antes.",
       "Edita una venta (botón lápiz): cambia cantidades, productos, cliente o método de pago; el cambio se propaga a inventario, caja chica, cuentas bancarias y cuentas por cobrar, conservando el número de factura.",
     ],
     queNoHace: [
@@ -242,6 +242,11 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
         pregunta: "¿Cuándo eliminar una venta y cuándo hacer una devolución?",
         respuesta:
           "Eliminar es para errores de captura (la venta nunca debió existir): borra todo el rastro. Devolución es para cuando el cliente regresa productos de una venta real: la factura original queda intacta y se genera una nota de crédito.",
+      },
+      {
+        pregunta: "¿Puedo eliminar una factura que ya tiene una devolución?",
+        respuesta:
+          "Sí. Al eliminar la factura, el sistema primero anula la(s) devolución(es) asociada(s) —revierte el stock que habían repuesto y el reembolso de caja/banco, y borra la devolución— y luego revierte la venta. La confirmación te avisa cuántas devoluciones se anularán. Todo queda cuadrado, sin movimientos huérfanos.",
       },
       {
         pregunta: "No veo facturas viejas en la lista, ¿dónde están?",

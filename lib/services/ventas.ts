@@ -4,6 +4,7 @@ import { registrarMovimientoCaja, getSesionAbierta } from '@/lib/services/caja-c
 import { registrarMovimientoCuenta, recalcCadenaSaldoCuenta } from '@/lib/services/cuentas'
 import { ajustarStock } from '@/lib/services/stock'
 import { getHondurasNowISO } from '@/lib/utils/honduras-time'
+import { revertirDevolucionesDeVenta } from '@/lib/services/devoluciones'
 
 /**
  * True SOLO si el error es "la relacion/tabla no existe" (migracion pendiente):
@@ -2061,20 +2062,13 @@ export async function eliminarVentaCompletamente(
       return { error: 'La venta no pertenece a la empresa activa' }
     }
 
-    // ----- 0.b Bloqueo: no eliminar si tiene devoluciones ------------------
-    // La devolucion ya devolvio stock (+cantidad) y dinero de ESTA venta; al
-    // borrar la venta, revertirEfectosVenta re-suma la cantidad ORIGINAL al
-    // stock -> quedaria inflado por lo devuelto (y el kardex de la devolucion
-    // huerfano). Igual que editarVenta, exigimos anular la devolucion primero.
-    const { count: devCount, error: devErr } = await supabase
-      .from('devoluciones_encabezado')
-      .select('id', { count: 'exact', head: true })
-      .eq('venta_id', ventaId)
-    if (!devErr && (devCount || 0) > 0) {
-      return {
-        error: 'Esta factura tiene devoluciones asociadas. Anula la devolución antes de eliminar la venta.',
-      }
-    }
+    // ----- 0.b Deshacer las devoluciones asociadas (si las hay) -------------
+    // La devolucion ya devolvio stock (+cantidad) y dinero de ESTA venta. Antes
+    // de revertir la venta hay que DESHACER cada devolucion (restar de vuelta el
+    // stock que repuso, revertir su reembolso de caja/banco y borrarla). Asi al
+    // revertir la venta no queda el stock inflado ni movimientos huerfanos.
+    const revDev = await revertirDevolucionesDeVenta(supabase, ventaId, stamp.razon_social_id!)
+    if (revDev.error) return { error: `No se pudieron revertir las devoluciones: ${revDev.error}` }
 
     // ----- 1-3. Revertir inventario, tesoreria y pagos ---------------------
     const rev = await revertirEfectosVenta(supabase, ventaId, stamp)

@@ -69,6 +69,7 @@ import {
   type VentaDetalleAnalitico,
 } from "@/lib/services/ventas"
 import { getMetodosPagoPorVenta, getComisionesPorVenta, type ComisionVenta } from "@/lib/services/ventas-analytics"
+import { contarDevolucionesDeVenta } from "@/lib/services/devoluciones"
 import { useAuth } from "@/lib/contexts/auth-context"
 import { printTirilla } from "@/lib/print-tirilla"
 import { tirillaLogoUrl } from "@/lib/utils/tirilla-logos"
@@ -145,6 +146,8 @@ export default function HistorialVentasPage() {
 
   // --- Eliminar venta (alert dialog) ---
   const [ventaAEliminar, setVentaAEliminar] = React.useState<VentaEncabezado | null>(null)
+  // Nº de devoluciones de la venta a eliminar (para avisar que se anularán).
+  const [devsDeVentaAEliminar, setDevsDeVentaAEliminar] = React.useState(0)
   const [deletingVenta, setDeletingVenta] = React.useState(false)
 
   React.useEffect(() => {
@@ -439,6 +442,17 @@ export default function HistorialVentasPage() {
       setDeletingVenta(false)
     }
   }
+
+  // Al abrir el diálogo de eliminar, cuenta las devoluciones para avisar que
+  // se anularán junto con la venta.
+  React.useEffect(() => {
+    if (ventaAEliminar?.id == null) { setDevsDeVentaAEliminar(0); return }
+    let cancel = false
+    contarDevolucionesDeVenta(ventaAEliminar.id).then(({ count }) => {
+      if (!cancel) setDevsDeVentaAEliminar(count)
+    })
+    return () => { cancel = true }
+  }, [ventaAEliminar?.id])
 
   function exportToExcel() {
     if (detalleFiltrado.length === 0) {
@@ -1522,10 +1536,20 @@ export default function HistorialVentasPage() {
                 ? `Eliminar venta ${ventaAEliminar.numero_factura}`
                 : "Eliminar venta"}
             </AlertDialogTitle>
-            <AlertDialogDescription>
-              ¿Estás seguro de eliminar esta venta? Esta acción devolverá los
-              productos al inventario y eliminará los registros de caja y
-              bancos. Es irreversible.
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  ¿Estás seguro de eliminar esta venta? Esta acción devolverá los
+                  productos al inventario y eliminará los registros de caja y
+                  bancos. Es irreversible.
+                </p>
+                {devsDeVentaAEliminar > 0 && (
+                  <p className="rounded-md bg-amber-50 border border-amber-200 p-2 text-amber-800 text-sm">
+                    ⚠ Esta factura tiene <strong>{devsDeVentaAEliminar}</strong> devolución(es) asociada(s):
+                    también se anularán (se revierte su stock y su reembolso) al eliminar la venta.
+                  </p>
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
