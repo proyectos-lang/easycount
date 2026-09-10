@@ -1,5 +1,5 @@
 /**
- * Fuente unica de verdad para los 32 modulos granulares del sistema.
+ * Fuente unica de verdad para los modulos granulares del sistema.
  *
  * El campo `nombre` DEBE coincidir exactamente (case-sensitive) con la columna
  * `modulos.nombre` en la base de datos, ya que se usa como clave de los
@@ -40,6 +40,9 @@ import {
   LineChart,
   Banknote,
   Tags,
+  Boxes,
+  Factory,
+  Gauge,
   type LucideIcon,
 } from "lucide-react"
 
@@ -48,6 +51,7 @@ export type Categoria =
   | "Ventas"
   | "Compras"
   | "Inventario"
+  | "Produccion"
   | "Finanzas"
   | "Configuracion"
 
@@ -125,6 +129,16 @@ export const MODULOS: ReadonlyArray<ModuloGranular> = [
   { nombre: "Ajustes de Inventario", href: "/inventario/ajustes", categoria: "Inventario", icon: Scale },
   { nombre: "Ajuste de Costo", href: "/inventario/ajuste-costo", categoria: "Inventario", icon: Coins },
   { nombre: "Valoracion", href: "/inventario/valoracion", categoria: "Inventario", icon: DollarSign },
+
+  // ── Produccion (modulos NUEVOS, nacen deshabilitados: no estan en MODULOS_BASE) ──
+  { nombre: "Materiales", href: "/produccion/materiales", categoria: "Produccion", icon: Boxes },
+  { nombre: "Compra de Materiales", href: "/produccion/compras-materiales", categoria: "Produccion", icon: Truck },
+  { nombre: "Inventario de Materiales", href: "/produccion/inventario-materiales", categoria: "Produccion", icon: Warehouse },
+  { nombre: "Recetas", href: "/produccion/recetas", categoria: "Produccion", icon: ClipboardList },
+  { nombre: "Ordenes de Produccion", href: "/produccion/ordenes", categoria: "Produccion", icon: FileText },
+  { nombre: "Control de Piso", href: "/produccion/control-piso", categoria: "Produccion", icon: Gauge },
+  { nombre: "Dashboard Produccion", href: "/produccion/dashboard", categoria: "Produccion", icon: BarChart3 },
+  { nombre: "Recepcion de Produccion", href: "/produccion/recepcion", categoria: "Produccion", icon: PackageCheck },
 
   // ── Finanzas ───────────────────────────────────────────────────────────
   { nombre: "Dashboard Finanzas", href: "/finanzas/dashboard", categoria: "Finanzas", icon: PieChart },
@@ -217,6 +231,7 @@ export const CATEGORIAS_ORDEN: ReadonlyArray<Categoria> = [
   "Ventas",
   "Compras",
   "Inventario",
+  "Produccion",
   "Finanzas",
   "Configuracion",
 ]

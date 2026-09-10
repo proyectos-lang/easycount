@@ -1,0 +1,271 @@
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
+import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from "@/lib/services/tenant-stamp"
+import { getHondurasNowISO } from "@/lib/utils/honduras-time"
+import type { SupabaseClient, PostgrestError } from "@supabase/supabase-js"
+
+// ==================== PRODUCCIÓN · MATERIALES ====================
+//
+// Sistema PROPIO de materia prima (tablas del script 046), separado de
+// `productos`. El stock global y el costo promedio del material se mueven SOLO
+// por las RPCs `mat_ajustar_stock` / `mat_aplicar_entrada` (con fallback
+// lee-modifica-escribe, patrón de lib/services/stock.ts). El stock por
+// almacén/localización se deriva sumando `materiales_movimientos.cantidad`.
+//
+// Todo degrada con gracia si el script 046 no se aplicó (isMissingTable).
+
+export interface Material {
+  id?: number
+  nombre: string
+  codigo?: string | null
+  unidad_medida: string
+  costo_promedio: number
+  stock_total: number
+  activo?: boolean
+}
+
+export interface MovimientoMaterial {
+  id: number
+  material_id: number
+  almacen_id: number | null
+  localizacion_id: number | null
+  tipo_movimiento: string
+  cantidad: number
+  costo_unitario: number
+  referencia_id: number | null
+  fecha: string | null
+  material_nombre?: string
+  almacen_nombre?: string
+  localizacion_nombre?: string
+}
+
+export interface ValoracionMaterial {
+  id: number
+  nombre: string
+  codigo: string | null
+  unidad_medida: string
+  stock_total: number
+  costo_promedio: number
+  valor_total: number
+}
+
+/** Marca la ausencia de las tablas (script 046 sin aplicar). */
+export const MATERIALES_FEATURE_PENDING =
+  "Función de materiales pendiente: aplica scripts/046-produccion-materiales.sql en Supabase."
+
+function isMissingTable(err: { message?: string; code?: string } | null): boolean {
+  if (!err) return false
+  const msg = (err.message || "").toLowerCase()
+  return (
+    err.code === "42P01" ||
+    err.code === "PGRST205" ||
+    /relation .*materiales.* does not exist/.test(msg) ||
+    msg.includes("could not find the table")
+  )
+}
+
+function esFuncionInexistente(error: PostgrestError | null): boolean {
+  if (!error) return false
+  return (
+    error.code === "PGRST202" ||
+    /could not find the function|function .* does not exist/i.test(error.message || "")
+  )
+}
+
+// ==================== RPCs de stock de material (con fallback) ====================
+
+/** Suma `delta` (±) al stock del material. Devuelve el nuevo stock o null. */
+export async function matAjustarStock(
+  supabase: SupabaseClient,
+  materialId: number,
+  delta: number,
+): Promise<{ error: string | null }> {
+  const rpc = await supabase.rpc("mat_ajustar_stock", { p_material_id: materialId, p_delta: delta })
+  if (!rpc.error) return { error: null }
+  if (!esFuncionInexistente(rpc.error)) return { error: rpc.error.message }
+
+  // Fallback lee-modifica-escribe (RLS aísla por tenant).
+  const { data, error: readErr } = await supabase.from("materiales").select("stock_total").eq("id", materialId).single()
+  if (readErr) return { error: readErr.message }
+  const nuevo = Number(data?.stock_total || 0) + delta
+  const { error: updErr } = await supabase
+    .from("materiales")
+    .update({ stock_total: nuevo, updated_at: new Date().toISOString() })
+    .eq("id", materialId)
+  return { error: updErr ? updErr.message : null }
+}
+
+/** Entrada de material: suma stock y recalcula costo promedio ponderado. */
+export async function matAplicarEntrada(
+  supabase: SupabaseClient,
+  materialId: number,
+  cantidad: number,
+  costoUnitario: number,
+): Promise<{ error: string | null }> {
+  const rpc = await supabase.rpc("mat_aplicar_entrada", {
+    p_material_id: materialId,
+    p_cantidad: cantidad,
+    p_costo_unitario: costoUnitario,
+  })
+  if (!rpc.error) return { error: null }
+  if (!esFuncionInexistente(rpc.error)) return { error: rpc.error.message }
+
+  // Fallback lee-modifica-escribe.
+  const { data, error: readErr } = await supabase
+    .from("materiales")
+    .select("stock_total, costo_promedio")
+    .eq("id", materialId)
+    .single()
+  if (readErr) return { error: readErr.message }
+  const stockActual = Number(data?.stock_total || 0)
+  const costoActual = Number(data?.costo_promedio || 0)
+  const nuevoStock = stockActual + cantidad
+  const nuevoCosto = nuevoStock > 0 ? (stockActual * costoActual + cantidad * costoUnitario) / nuevoStock : costoUnitario
+  const { error: updErr } = await supabase
+    .from("materiales")
+    .update({ stock_total: nuevoStock, costo_promedio: nuevoCosto, updated_at: new Date().toISOString() })
+    .eq("id", materialId)
+  return { error: updErr ? updErr.message : null }
+}
+
+// ==================== CATÁLOGO ====================
+
+export async function getMateriales(
+  opts?: { soloActivos?: boolean },
+): Promise<{ data: Material[]; error: string | null }> {
+  if (!isSupabaseConfigured()) return { data: [], error: null }
+  const supabase = createClient()
+  if (!supabase) return { data: [], error: "Cliente no disponible" }
+
+  let q = supabase
+    .from("materiales")
+    .select("id, nombre, codigo, unidad_medida, costo_promedio, stock_total, activo")
+    .order("nombre", { ascending: true })
+  if (opts?.soloActivos) q = q.eq("activo", true)
+
+  const { data, error } = await q
+  if (error) {
+    if (isMissingTable(error)) return { data: [], error: null }
+    return { data: [], error: error.message }
+  }
+  return { data: (data || []) as Material[], error: null }
+}
+
+export async function createMaterial(
+  input: { nombre: string; codigo?: string | null; unidad_medida: string },
+): Promise<{ data: { id: number } | null; error: string | null }> {
+  const supabase = createClient()
+  if (!supabase) return { data: null, error: "Cliente no disponible" }
+  const stamp = await getTenantStamp(supabase)
+  if (!isValidStamp(stamp)) return { data: null, error: SESION_INVALIDA_ERROR }
+
+  const { data, error } = await supabase
+    .from("materiales")
+    .insert({
+      nombre: input.nombre.trim(),
+      codigo: (input.codigo || "").trim() || null,
+      unidad_medida: (input.unidad_medida || "unidad").trim(),
+      ...stamp,
+    })
+    .select("id")
+    .single()
+  if (error) {
+    if (isMissingTable(error)) return { data: null, error: MATERIALES_FEATURE_PENDING }
+    return { data: null, error: error.message }
+  }
+  return { data: data as { id: number }, error: null }
+}
+
+export async function updateMaterial(
+  id: number,
+  input: { nombre: string; codigo?: string | null; unidad_medida: string; activo?: boolean },
+): Promise<{ error: string | null }> {
+  const supabase = createClient()
+  if (!supabase) return { error: "Cliente no disponible" }
+  const { error } = await supabase
+    .from("materiales")
+    .update({
+      nombre: input.nombre.trim(),
+      codigo: (input.codigo || "").trim() || null,
+      unidad_medida: (input.unidad_medida || "unidad").trim(),
+      ...(input.activo !== undefined ? { activo: input.activo } : {}),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+  if (error) return { error: error.message }
+  return { error: null }
+}
+
+// ==================== KARDEX / STOCK / VALORACIÓN ====================
+
+export async function getKardexMaterial(
+  materialId: number,
+): Promise<{ data: MovimientoMaterial[]; error: string | null }> {
+  if (!isSupabaseConfigured()) return { data: [], error: null }
+  const supabase = createClient()
+  if (!supabase) return { data: [], error: "Cliente no disponible" }
+
+  const { data, error } = await supabase
+    .from("materiales_movimientos")
+    .select(`
+      id, material_id, almacen_id, localizacion_id, tipo_movimiento, cantidad,
+      costo_unitario, referencia_id, fecha,
+      materiales (nombre), almacenes (nombre), localizaciones (nombre)
+    `)
+    .eq("material_id", materialId)
+    .order("fecha", { ascending: false })
+  if (error) {
+    if (isMissingTable(error)) return { data: [], error: null }
+    return { data: [], error: error.message }
+  }
+  const rows = (data || []).map((m: Record<string, unknown>) => ({
+    id: Number(m.id),
+    material_id: Number(m.material_id),
+    almacen_id: m.almacen_id != null ? Number(m.almacen_id) : null,
+    localizacion_id: m.localizacion_id != null ? Number(m.localizacion_id) : null,
+    tipo_movimiento: String(m.tipo_movimiento || ""),
+    cantidad: Number(m.cantidad || 0),
+    costo_unitario: Number(m.costo_unitario || 0),
+    referencia_id: m.referencia_id != null ? Number(m.referencia_id) : null,
+    fecha: (m.fecha as string) || null,
+    material_nombre: (m.materiales as { nombre?: string } | null)?.nombre || "",
+    almacen_nombre: (m.almacenes as { nombre?: string } | null)?.nombre || "",
+    localizacion_nombre: (m.localizaciones as { nombre?: string } | null)?.nombre || "",
+  }))
+  return { data: rows, error: null }
+}
+
+/** Stock del material por localización (derivado del ledger). */
+export async function getStockMaterialPorLocalizacion(
+  materialId: number,
+): Promise<{ data: { almacen_id: number | null; localizacion_id: number | null; stock: number }[]; error: string | null }> {
+  const { data: kardex, error } = await getKardexMaterial(materialId)
+  if (error) return { data: [], error }
+  const map = new Map<number | null, { almacen_id: number | null; localizacion_id: number | null; stock: number }>()
+  for (const m of kardex) {
+    const key = m.localizacion_id ?? null
+    const cur = map.get(key) ?? { almacen_id: m.almacen_id, localizacion_id: key, stock: 0 }
+    cur.stock += m.cantidad
+    map.set(key, cur)
+  }
+  return { data: Array.from(map.values()).filter((l) => Math.abs(l.stock) > 0.0001), error: null }
+}
+
+export async function getValoracionMateriales(): Promise<{ data: ValoracionMaterial[]; error: string | null }> {
+  const { data, error } = await getMateriales()
+  if (error) return { data: [], error }
+  const val = data.map((m) => ({
+    id: m.id!,
+    nombre: m.nombre,
+    codigo: m.codigo ?? null,
+    unidad_medida: m.unidad_medida,
+    stock_total: m.stock_total || 0,
+    costo_promedio: m.costo_promedio || 0,
+    valor_total: +((m.stock_total || 0) * (m.costo_promedio || 0)).toFixed(2),
+  }))
+  return { data: val, error: null }
+}
+
+/** Fecha HN-as-UTC para las transacciones (día de negocio de Honduras). */
+export function nowHn(): string {
+  return getHondurasNowISO()
+}

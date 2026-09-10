@@ -5,6 +5,7 @@ import { TUTORIALES_DASHBOARD } from "./contenido-dashboard"
 import { TUTORIALES_VENTAS } from "./contenido-ventas"
 import { TUTORIALES_COMPRAS } from "./contenido-compras"
 import { TUTORIALES_INVENTARIO } from "./contenido-inventario"
+import { TUTORIALES_PRODUCCION } from "./contenido-produccion"
 import { TUTORIALES_FINANZAS } from "./contenido-finanzas"
 import { TUTORIALES_CONFIGURACION } from "./contenido-configuracion"
 
@@ -17,6 +18,7 @@ export const TUTORIALES: TutorialModulo[] = [
   ...TUTORIALES_VENTAS,
   ...TUTORIALES_COMPRAS,
   ...TUTORIALES_INVENTARIO,
+  ...TUTORIALES_PRODUCCION,
   ...TUTORIALES_FINANZAS,
   ...TUTORIALES_CONFIGURACION,
 ]

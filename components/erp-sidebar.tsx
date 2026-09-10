@@ -4,7 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/contexts/auth-context"
-import { Home, ChevronRight, LayoutDashboard, ShoppingCart, FileText, ClipboardList, CreditCard, Settings, GraduationCap, Sparkles } from "lucide-react"
+import { Home, ChevronRight, LayoutDashboard, ShoppingCart, FileText, ClipboardList, CreditCard, Settings, GraduationCap, Sparkles, Factory } from "lucide-react"
 
 import {
   Sidebar,
@@ -36,6 +36,7 @@ const CATEGORIA_ICON: Record<Categoria, React.ComponentType<{ className?: string
   Ventas: ShoppingCart,
   Compras: FileText,
   Inventario: ClipboardList,
+  Produccion: Factory,
   Finanzas: CreditCard,
   Configuracion: Settings,
 }

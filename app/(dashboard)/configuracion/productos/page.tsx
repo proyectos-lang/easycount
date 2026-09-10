@@ -87,6 +87,7 @@ import {
   type GrupoTallaRef,
 } from "@/lib/services/grupos-tallas"
 import { getRepartoInfo, convertirProductoATallado } from "@/lib/services/convertir-tallado"
+import { getProductosFabricados, setProductoFabricado } from "@/lib/services/productos-fabricados"
 import { formatCurrency } from "@/lib/utils/format"
 import { useTenant } from "@/lib/hooks/use-tenant"
 import { useAuth } from "@/lib/contexts/auth-context"
@@ -146,11 +147,18 @@ function SortHeader({
 export default function ProductosConfigPage() {
   const { toast } = useToast()
   const { ready, razonSocialId } = useTenant()
-  const { user } = useAuth()
+  const { user, hasModulo } = useAuth()
   // Sistema de productos por talla: solo si la empresa lo tiene activo (flag del
   // super-admin). Si esta apagado, ni el check ni el agrupamiento aparecen.
   const tallasActivo = user?.flags?.productos_por_talla ?? false
-  
+  // Produccion: si la empresa tiene el modulo, se puede marcar "producto fabricado".
+  const produccionActiva = hasModulo("Materiales") || hasModulo("Ordenes de Produccion")
+
+  // Set de producto_id marcados como fabricados (tabla mapa productos_fabricados).
+  const [fabricados, setFabricados] = useState<Set<number>>(new Set())
+  // Estado del check "Es fabricado" en el diálogo de edición.
+  const [esFabricado, setEsFabricado] = useState(false)
+
   const [productos, setProductos] = useState<Producto[]>([])
   const [marcas, setMarcas] = useState<Marca[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
@@ -269,13 +277,14 @@ export default function ProductosConfigPage() {
   async function loadAll() {
     setLoading(true)
     try {
-      const [prodRes, marcaRes, catRes, subRes, almRes, gruposRes] = await Promise.all([
+      const [prodRes, marcaRes, catRes, subRes, almRes, gruposRes, fabRes] = await Promise.all([
         getProductos(),
         getMarcas(),
         getCategorias(),
         getSubcategorias(),
         getAlmacenes(),
         getGruposTallas(),
+        produccionActiva ? getProductosFabricados() : Promise.resolve({ data: new Set<number>(), error: null }),
       ])
       if (prodRes.error) {
         console.log('[Productos] error:', prodRes.error)
@@ -288,6 +297,7 @@ export default function ProductosConfigPage() {
       if (!subRes.error) setSubcategorias(subRes.data)
       if (!almRes.error) setAlmacenes(almRes.data)
       setGruposTallas(gruposRes.data)
+      setFabricados(fabRes.data)
     } catch (err: any) {
       console.log('[Productos] excepcion:', err)
       toast({ title: "No se pudieron cargar los datos", description: err?.message || "Error de conexion", variant: "destructive" })
@@ -709,6 +719,7 @@ export default function ProductosConfigPage() {
     setInvInicial({ cantidad: 0, costo_unitario: 0, almacen_id: 0, localizacion_id: 0 })
     setTieneTallas(false)
     setLineasTalla([])
+    setEsFabricado(false)
     setImagePreview("")
     setImageFile(null)
     setShowCalculator(false)
@@ -724,6 +735,7 @@ export default function ProductosConfigPage() {
     // campo de talla individual del producto existente.
     setTieneTallas(false)
     setLineasTalla([])
+    setEsFabricado(producto.id != null && fabricados.has(producto.id))
     setFormData({
       ...producto,
       costo_promedio: producto.costo_promedio ?? 0,
@@ -945,10 +957,15 @@ export default function ProductosConfigPage() {
     }
 
     // Camino normal: un solo producto (con la talla individual del formulario).
-    const { error: err } = await guardarUnProducto(
+    const { error: err, id: prodId } = await guardarUnProducto(
       (formData.talla ?? "").toString().trim() || null,
       formData.codigo_barras!,
     )
+    // Marca "producto fabricado" (tabla mapa). Solo si Producción está activa.
+    const idParaFabricado = prodId ?? editingProducto?.id ?? null
+    if (produccionActiva && idParaFabricado != null && (!err || err.startsWith("Producto creado sin inventario inicial"))) {
+      await setProductoFabricado(idParaFabricado, esFabricado)
+    }
     setSaving(false)
     if (err) {
       // Si el producto se creó pero falló el inventario inicial, el mensaje ya
@@ -1574,6 +1591,19 @@ export default function ProductosConfigPage() {
                   />
                 )}
               </div>
+            )}
+
+            {/* Es producto fabricado (solo si la empresa tiene Producción) */}
+            {produccionActiva && (
+              <label className="flex items-center gap-3 rounded-lg border border-stone-200 p-3 cursor-pointer">
+                <Checkbox checked={esFabricado} onCheckedChange={(v) => setEsFabricado(!!v)} />
+                <span>
+                  <span className="block text-sm font-medium">Es producto fabricado</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Márcalo si este producto se fabrica (aparecerá en Recetas y Órdenes de Producción).
+                  </span>
+                </span>
+              </label>
             )}
 
             {/* Marca */}

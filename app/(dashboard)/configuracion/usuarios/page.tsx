@@ -578,6 +578,7 @@ export default function UsuariosPage() {
                       Ventas: [],
                       Compras: [],
                       Inventario: [],
+                      Produccion: [],
                       Finanzas: [],
                       Configuracion: [],
                     }
