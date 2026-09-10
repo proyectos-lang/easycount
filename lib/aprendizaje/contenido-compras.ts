@@ -122,10 +122,12 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
       "Permite mapear cada línea extraída con un producto del catálogo (o crear el producto al vuelo).",
       "Ingresa el stock y actualiza el costo promedio, igual que una recepción normal.",
       "Con costos de importación/impuestos/otros, muestra el mismo desglose explícito del prorrateo que la Recepción por OC.",
+      "Detección de tallas (si tu empresa usa tallas): cuando la factura desglosa una referencia por talla (S/M/L… o 6/8/10…), la IA la agrupa en una sola línea y marca las tallas detectadas. Al crear ese producto, el diálogo llega precargado con las tallas y sus cantidades; al guardarlo se crean los productos hermanos agrupados y la línea de factura se reemplaza por una línea por talla (cada una entra a inventario con su cantidad).",
     ],
     queNoHace: [
       "No es infalible: la IA puede leer mal cantidades o precios en facturas borrosas — siempre revisa antes de confirmar.",
       "No asocia productos automáticamente: el mapeo línea → producto del catálogo lo confirmas tú.",
+      "La detección de tallas depende de que la factura las liste legibles; siempre puedes corregir/agregar tallas y cantidades a mano en el diálogo.",
       "No registra el pago de la factura (usa Finanzas → Gastos).",
     ],
     operaciones: [
@@ -138,6 +140,16 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
           "Revisa las líneas extraídas: corrige cantidades o costos si la lectura falló.",
           "Asocia cada línea con su producto del catálogo (o créalo con el botón rápido).",
           "Elige almacén/localización y confirma el ingreso.",
+        ],
+      },
+      {
+        titulo: "Ingresar una referencia con tallas desde la factura",
+        pasos: [
+          "Requiere que tu empresa use tallas (se activa de forma centralizada).",
+          "Tras procesar con IA, la línea con tallas aparece marcada con las tallas detectadas (ej. 'Tallas: S(5) M(8) L(3)').",
+          "Presiona 'Crear producto tallado' en esa línea: el diálogo llega con la casilla 'Este producto tiene tallas' activa y las tallas precargadas.",
+          "Corrige o completa las tallas y cantidades si hace falta; define el costo y el precio (iguales para todas las tallas) y guarda.",
+          "La línea de la factura se reemplaza por una línea por talla, cada una asociada a su producto. Confirma el ingreso: entra el stock de cada talla con el costo prorrateado.",
         ],
       },
     ],
@@ -153,7 +165,7 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
           "En este módulo la imagen solo se usa para la extracción. Si quieres guardar el comprobante, adjúntalo al gasto correspondiente en Finanzas → Gastos.",
       },
     ],
-    keywords: ["ia", "inteligencia artificial", "foto", "escanear", "gemini", "factura proveedor", "ocr"],
+    keywords: ["ia", "inteligencia artificial", "foto", "escanear", "gemini", "factura proveedor", "ocr", "tallas", "talla", "tallado", "detectar tallas"],
   },
   {
     modulo: "Recalcular Recepcion",

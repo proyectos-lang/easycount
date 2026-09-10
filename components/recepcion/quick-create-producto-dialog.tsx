@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus, Loader2, Trash2, Layers3 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -33,6 +33,10 @@ import {
   createMarca,
   createCategoria,
 } from "@/lib/services/catalogos"
+import { crearGrupoConProductos, GRUPOS_TALLAS_FEATURE_PENDING } from "@/lib/services/grupos-tallas"
+
+/** Tallas frecuentes para el selector rápido. */
+const TALLAS_PRESET = ["S", "M", "L", "XL", "6", "8", "10", "12", "14", "16"] as const
 
 /**
  * Dialogo "Crear Producto Rapido" enfocado al flujo de Recepcion por
@@ -55,6 +59,15 @@ export interface QuickCreateProductoDialogProps {
   defaultCosto?: number
   /** Callback con el producto recien guardado en BD. */
   onCreated: (producto: Producto) => void
+  /** La empresa usa tallas: habilita el modo "producto tallado". */
+  tallasActivo?: boolean
+  /** Tallas detectadas por la IA para precargar el modo tallado. */
+  defaultTallas?: { talla: string; cantidad: number }[]
+  /**
+   * Callback cuando se crea un PRODUCTO TALLADO: devuelve un producto por talla
+   * con su cantidad. El llamador reemplaza la línea de factura por una por talla.
+   */
+  onCreatedTallas?: (items: { producto: Producto; cantidad: number }[]) => void
 }
 
 export function QuickCreateProductoDialog({
@@ -63,6 +76,9 @@ export function QuickCreateProductoDialog({
   defaultNombre = "",
   defaultCosto = 0,
   onCreated,
+  tallasActivo = false,
+  defaultTallas,
+  onCreatedTallas,
 }: QuickCreateProductoDialogProps) {
   const { toast } = useToast()
 
@@ -76,6 +92,9 @@ export function QuickCreateProductoDialog({
   const [nombre, setNombre] = useState(defaultNombre)
   const [codigoBarras, setCodigoBarras] = useState("")
   const [talla, setTalla] = useState("")
+  // Modo tallado: crea un producto por talla (comparten costo y precio).
+  const [tieneTallas, setTieneTallas] = useState(false)
+  const [lineasTalla, setLineasTalla] = useState<{ talla: string; cantidad: string }[]>([])
   // Precio de venta y % utilidad estan sincronizados bidireccionalmente:
   // - Si el usuario ingresa precio: recalcula utilidad.
   // - Si el usuario ingresa utilidad: recalcula precio.
@@ -134,6 +153,12 @@ export function QuickCreateProductoDialog({
       setNombre(defaultNombre)
       setCodigoBarras("")
       setTalla("")
+      // Precarga el modo tallado si la IA detectó tallas y la empresa las usa.
+      const preTallas = (tallasActivo && defaultTallas && defaultTallas.length >= 2)
+        ? defaultTallas.map((t) => ({ talla: t.talla, cantidad: String(t.cantidad || "") }))
+        : []
+      setTieneTallas(preTallas.length > 0)
+      setLineasTalla(preTallas.length > 0 ? preTallas : [{ talla: "", cantidad: "" }])
       setPrecioVenta(0)
       setUtilidadPct(0)
       setLastEdited(null)
@@ -193,6 +218,13 @@ export function QuickCreateProductoDialog({
     }
   }
 
+  // Helpers del modo tallado.
+  function agregarLineaTalla() { setLineasTalla((p) => [...p, { talla: "", cantidad: "" }]) }
+  function quitarLineaTalla(idx: number) { setLineasTalla((p) => p.filter((_, i) => i !== idx)) }
+  function setLineaTalla(idx: number, campo: "talla" | "cantidad", valor: string) {
+    setLineasTalla((p) => p.map((l, i) => (i === idx ? { ...l, [campo]: valor } : l)))
+  }
+
   async function handleQuickMarca() {
     const trimmed = nuevaMarca.trim()
     if (!trimmed) return
@@ -248,14 +280,75 @@ export function QuickCreateProductoDialog({
       return
     }
 
-    setSaving(true)
-
     // Si no se ingreso codigo de barras generamos uno tipo AUTO-<timestamp>
     // para satisfacer el campo (que el modulo de productos requiere) sin
     // bloquear el flujo de recepcion. El usuario puede editarlo despues.
     const codigoFinal =
       codigoBarras.trim() ||
       `AUTO-${Date.now().toString(36).toUpperCase()}`
+
+    // ── Camino TALLADO: crea un producto por talla (mismo costo/precio) y los
+    // agrupa. Devuelve la lista {producto, cantidad} para que la factura arme
+    // una línea por talla. NO genera stock aquí (entra al procesar la recepción).
+    if (tallasActivo && tieneTallas && onCreatedTallas) {
+      const lineasValidas = lineasTalla
+        .map((l) => ({ talla: l.talla.trim(), cantidad: Math.max(0, Number(l.cantidad) || 0) }))
+        .filter((l) => l.talla !== "")
+      if (lineasValidas.length < 2) {
+        toast({ title: "Faltan tallas", description: "Agrega al menos dos tallas.", variant: "destructive" })
+        return
+      }
+      if (new Set(lineasValidas.map((l) => l.talla.toLowerCase())).size !== lineasValidas.length) {
+        toast({ title: "Tallas repetidas", description: "Cada talla debe ser única.", variant: "destructive" })
+        return
+      }
+      setSaving(true)
+      const creados: { producto: Producto; cantidad: number }[] = []
+      const errores: string[] = []
+      const ids: number[] = []
+      for (const l of lineasValidas) {
+        const payloadTalla: Producto = {
+          nombre: nombreTrim,
+          codigo_barras: `${codigoFinal}-${l.talla}`,
+          precio_venta_sugerido: Number(precioVenta) || 0,
+          costo_promedio: Number(costo) || 0,
+          stock_total: 0,
+          foto_url: "",
+          marca_id: marcaId,
+          categoria_id: categoriaId,
+          subcategoria_id: categoriaId ? subcategoriaId : null,
+          talla: l.talla,
+        }
+        const { data, error } = await saveProducto(payloadTalla, true)
+        if (error || !data?.id) { errores.push(`${l.talla}: ${error || "no se pudo crear"}`); continue }
+        const enriched: Producto = {
+          ...data,
+          marca_nombre: marcas.find((m) => m.id === marcaId)?.nombre ?? data.marca_nombre,
+          categoria_nombre: categorias.find((c) => c.id === categoriaId)?.nombre ?? data.categoria_nombre,
+        }
+        creados.push({ producto: enriched, cantidad: l.cantidad })
+        ids.push(data.id)
+      }
+      if (ids.length > 1) {
+        const g = await crearGrupoConProductos(nombreTrim, ids)
+        if (g.error && g.error !== GRUPOS_TALLAS_FEATURE_PENDING) errores.push(`Agrupado: ${g.error}`)
+      }
+      setSaving(false)
+      if (creados.length === 0) {
+        toast({ title: "Error", description: errores.join(" · ") || "No se crearon productos", variant: "destructive" })
+        return
+      }
+      toast({
+        title: `${creados.length} tallas creadas`,
+        description: errores.length > 0 ? `Con avisos: ${errores.join(" · ")}` : `Se asociaron a la factura por talla.`,
+        variant: errores.length > 0 ? "destructive" : undefined,
+      })
+      onCreatedTallas(creados)
+      onOpenChange(false)
+      return
+    }
+
+    setSaving(true)
 
     const payload: Producto = {
       nombre: nombreTrim,
@@ -346,19 +439,90 @@ export function QuickCreateProductoDialog({
             />
           </div>
 
-          {/* Talla (opcional) */}
-          <div className="grid gap-1.5">
-            <Label htmlFor="qc-talla">
-              Talla <span className="text-stone-400 text-xs font-normal">(opcional)</span>
-            </Label>
-            <Input
-              id="qc-talla"
-              value={talla}
-              onChange={(e) => setTalla(e.target.value)}
-              placeholder="Ej: S, M, L, 38"
-              className="border-stone-200"
-            />
-          </div>
+          {/* Tallas: modo tallado (si la empresa lo usa) o talla individual */}
+          {tallasActivo ? (
+            <div className="grid gap-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={tieneTallas}
+                  onChange={(e) => setTieneTallas(e.target.checked)}
+                  className="h-4 w-4 accent-amber-600"
+                />
+                <span className="text-sm font-medium flex items-center gap-1.5">
+                  <Layers3 className="h-4 w-4 text-amber-700" /> Este producto tiene tallas
+                </span>
+              </label>
+
+              {tieneTallas ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Una línea por talla con su cantidad. El costo y el precio son iguales para todas.
+                    {defaultTallas && defaultTallas.length >= 2 && " (Precargadas por la IA — corrígelas si hace falta.)"}
+                  </p>
+                  <datalist id="qc-tallas-preset">
+                    {TALLAS_PRESET.map((t) => <option key={t} value={t} />)}
+                  </datalist>
+                  {lineasTalla.map((l, idx) => (
+                    <div key={idx} className="flex items-end gap-2">
+                      <div className="grid gap-1 flex-1 min-w-0">
+                        {idx === 0 && <Label className="text-[11px] text-stone-500">Talla</Label>}
+                        <Input
+                          list="qc-tallas-preset"
+                          value={l.talla}
+                          onChange={(e) => setLineaTalla(idx, "talla", e.target.value)}
+                          placeholder="Ej: S, M, 40"
+                          className="h-9 border-stone-200 bg-white"
+                        />
+                      </div>
+                      <div className="grid gap-1 w-24 shrink-0">
+                        {idx === 0 && <Label className="text-[11px] text-stone-500">Cantidad</Label>}
+                        <Input
+                          type="number" min="0" step="1"
+                          value={l.cantidad}
+                          onChange={(e) => setLineaTalla(idx, "cantidad", e.target.value)}
+                          placeholder="0"
+                          className="h-9 border-stone-200 bg-white"
+                        />
+                      </div>
+                      <Button
+                        type="button" variant="ghost" size="icon"
+                        className="h-9 w-8 shrink-0 text-stone-500 hover:text-destructive disabled:opacity-30"
+                        disabled={lineasTalla.length <= 2}
+                        onClick={() => quitarLineaTalla(idx)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={agregarLineaTalla}>
+                    <Plus className="h-4 w-4" /> Agregar talla
+                  </Button>
+                </div>
+              ) : (
+                <Input
+                  id="qc-talla"
+                  value={talla}
+                  onChange={(e) => setTalla(e.target.value)}
+                  placeholder="Talla individual (opcional): S, M, L, 38"
+                  className="border-stone-200"
+                />
+              )}
+            </div>
+          ) : (
+            <div className="grid gap-1.5">
+              <Label htmlFor="qc-talla">
+                Talla <span className="text-stone-400 text-xs font-normal">(opcional)</span>
+              </Label>
+              <Input
+                id="qc-talla"
+                value={talla}
+                onChange={(e) => setTalla(e.target.value)}
+                placeholder="Ej: S, M, L, 38"
+                className="border-stone-200"
+              />
+            </div>
+          )}
 
           {/*
             ─── Bloque destacado: Costo + Utilidad + Precio ─────────
@@ -633,7 +797,7 @@ export function QuickCreateProductoDialog({
             className="bg-amber-600 hover:bg-amber-700"
           >
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Crear y Asociar
+            {tallasActivo && tieneTallas ? "Crear tallas y asociar" : "Crear y Asociar"}
           </Button>
         </DialogFooter>
       </DialogContent>

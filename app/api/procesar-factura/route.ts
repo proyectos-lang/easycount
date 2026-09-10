@@ -21,7 +21,7 @@ INSTRUCCIONES ESTRICTAS:
 
 FORMATO DE RESPUESTA REQUERIDO:
 [
-  {"nombre_extraido": "nombre exacto del producto como aparece", "cantidad": numero, "costo_unitario_original": numero}
+  {"nombre_extraido": "nombre exacto del producto como aparece", "cantidad": numero, "costo_unitario_original": numero, "tallas": [{"talla": "S", "cantidad": numero}]}
 ]
 
 REGLAS DE EXTRACCION:
@@ -30,7 +30,13 @@ REGLAS DE EXTRACCION:
 - costo_unitario_original: Precio unitario como numero decimal (sin simbolos de moneda)
 - Si hay codigos de producto, incluyelos en el nombre
 - Si no puedes leer un valor numerico claramente, usa 0
-- Extrae TODOS los items de la factura, no omitas ninguno`
+- Extrae TODOS los items de la factura, no omitas ninguno
+
+DETECCION DE TALLAS (importante):
+- Si una MISMA referencia aparece desglosada por TALLA (ej. una tabla con columnas S/M/L/XL o numeros 6/8/10..., o varias filas del mismo producto que solo cambian en la talla), AGRUPALA en UN SOLO item y pon el detalle en el campo "tallas": una entrada {"talla": "...", "cantidad": numero} por cada talla, con su cantidad respectiva.
+- En ese caso, "cantidad" del item = la SUMA de las cantidades de todas sus tallas, y "nombre_extraido" = el nombre SIN la talla (el nombre base comun).
+- Usa la etiqueta de talla TAL COMO aparece (S, M, L, XL, 38, 40, etc.).
+- Si el producto NO tiene tallas, OMITE el campo "tallas" (o dejalo como arreglo vacio). No inventes tallas.`
 
 const PROMPT_GASTO = `Eres un experto en contabilidad. Analiza esta imagen de factura o recibo de gasto y extrae la informacion.
 

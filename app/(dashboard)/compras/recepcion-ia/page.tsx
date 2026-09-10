@@ -16,7 +16,8 @@ import {
   FileText,
   X,
   PackagePlus,
-  Plus
+  Plus,
+  Layers3
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -64,12 +65,19 @@ import { DesgloseProrrateo } from "@/components/recepcion/desglose-prorrateo"
 import { type Proveedor, type Producto, getProveedores, getProductos } from "@/lib/services/catalogos"
 import { type Almacen, type Localizacion, getAlmacenes, getLocalizaciones } from "@/lib/services/catalogos"
 import { QuickCreateProductoDialog } from "@/components/recepcion/quick-create-producto-dialog"
+import { useAuth } from "@/lib/contexts/auth-context"
 
 // Interface for AI extracted data
+interface TallaExtraida {
+  talla: string
+  cantidad: number
+}
 interface ExtractedItem {
   nombre_extraido: string
   cantidad: number
   costo_unitario_original: number
+  /** Solo si la IA detectó que la referencia viene desglosada por talla. */
+  tallas?: TallaExtraida[]
 }
 
 // Interface for mapped line item
@@ -83,9 +91,18 @@ interface LineaFactura {
   costoOriginal: number
   costoFinalLocal: number
   comboboxOpen: boolean
+  /**
+   * Tallas detectadas por la IA para esta referencia (si aplica y la empresa
+   * usa tallas). Precarga el diálogo "Crear producto tallado"; al crearlo, la
+   * línea se reemplaza por una línea por talla.
+   */
+  tallasDetectadas?: TallaExtraida[]
 }
 
 export default function RecepcionIAPage() {
+  const { user } = useAuth()
+  // La empresa usa tallas: habilita la detección/creación tallada desde factura.
+  const tallasActivo = user?.flags?.productos_por_talla ?? false
   const [productos, setProductos] = useState<Producto[]>([])
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [almacenes, setAlmacenes] = useState<Almacen[]>([])
@@ -288,23 +305,41 @@ export default function RecepcionIAPage() {
       }
       
       // Convert to LineaFactura format
-      const newLineas: LineaFactura[] = extractedData.map((item, idx) => ({
-        id: Date.now() + idx,
-        nombreExtraido: item.nombre_extraido,
-        productoId: null,
-        productoNombre: "",
-        productoCodigo: "",
-        cantidad: item.cantidad || 1,
-        costoOriginal: item.costo_unitario_original || 0,
-        costoFinalLocal: 0,
-        comboboxOpen: false
-      }))
-      
+      let conTallas = 0
+      const newLineas: LineaFactura[] = extractedData.map((item, idx) => {
+        // Tallas válidas solo si la empresa usa tallas y la IA devolvió >=2.
+        const tallas = (tallasActivo && Array.isArray(item.tallas))
+          ? item.tallas
+              .map((t) => ({ talla: String(t.talla ?? "").trim(), cantidad: Number(t.cantidad) || 0 }))
+              .filter((t) => t.talla !== "")
+          : []
+        const tieneTallas = tallas.length >= 2
+        if (tieneTallas) conTallas++
+        // Si vino con tallas, la cantidad de la línea = suma de las tallas.
+        const cantidad = tieneTallas
+          ? tallas.reduce((a, t) => a + t.cantidad, 0)
+          : (item.cantidad || 1)
+        return {
+          id: Date.now() + idx,
+          nombreExtraido: item.nombre_extraido,
+          productoId: null,
+          productoNombre: "",
+          productoCodigo: "",
+          cantidad,
+          costoOriginal: item.costo_unitario_original || 0,
+          costoFinalLocal: 0,
+          comboboxOpen: false,
+          tallasDetectadas: tieneTallas ? tallas : undefined,
+        }
+      })
+
       setLineas(newLineas)
-      
-      toast({ 
-        title: "Factura procesada", 
-        description: `Se extrajeron ${extractedData.length} productos. Mapee cada uno con su producto correspondiente.` 
+
+      toast({
+        title: "Factura procesada",
+        description:
+          `Se extrajeron ${extractedData.length} productos. Mapee cada uno con su producto correspondiente.` +
+          (conTallas > 0 ? ` ${conTallas} con tallas detectadas.` : ""),
       })
       
     } catch (err) {
@@ -333,6 +368,41 @@ export default function RecepcionIAPage() {
     })
     if (quickCreateLineaId != null) {
       mapProducto(quickCreateLineaId, producto)
+    }
+    setQuickCreateLineaId(null)
+  }
+
+  /**
+   * Cuando el diálogo crea un PRODUCTO TALLADO, reemplaza la línea activa por
+   * UNA línea por talla (cada una mapeada a su producto hermano con su cantidad
+   * y el mismo costo de la línea original). Así al procesar la recepción entra
+   * el stock correcto por talla.
+   */
+  const handleProductoTalladoCreated = (items: { producto: Producto; cantidad: number }[]) => {
+    // Agrega los productos nuevos al catálogo local.
+    setProductos((prev) => {
+      const nuevos = items.map((i) => i.producto).filter((p) => p.id != null && !prev.some((x) => x.id === p.id))
+      return nuevos.length > 0 ? [...prev, ...nuevos] : prev
+    })
+    const lineaId = quickCreateLineaId
+    if (lineaId != null) {
+      setLineas((prev) => {
+        const orig = prev.find((l) => l.id === lineaId)
+        if (!orig) return prev
+        const nuevasLineas: LineaFactura[] = items.map((it, i) => ({
+          id: Date.now() + i,
+          nombreExtraido: orig.nombreExtraido,
+          productoId: it.producto.id!,
+          productoNombre: it.producto.nombre,
+          productoCodigo: it.producto.codigo_barras || "",
+          cantidad: it.cantidad,
+          costoOriginal: orig.costoOriginal,
+          costoFinalLocal: 0,
+          comboboxOpen: false,
+        }))
+        // Reemplaza la línea original por las N líneas de talla, en su lugar.
+        return prev.flatMap((l) => (l.id === lineaId ? nuevasLineas : [l]))
+      })
     }
     setQuickCreateLineaId(null)
   }
@@ -641,6 +711,12 @@ export default function RecepcionIAPage() {
                         <TableRow key={linea.id} className={!linea.productoId ? "bg-amber-50/50" : ""}>
                           <TableCell>
                             <p className="text-sm font-medium truncate">{linea.nombreExtraido}</p>
+                            {linea.tallasDetectadas && linea.tallasDetectadas.length >= 2 && (
+                              <p className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
+                                <Layers3 className="h-3 w-3" />
+                                Tallas: {linea.tallasDetectadas.map((t) => `${t.talla}(${t.cantidad})`).join(" ")}
+                              </p>
+                            )}
                             {/*
                               Atajo visible solo mientras la linea NO esta
                               mapeada: deja crear el producto con un solo
@@ -654,7 +730,7 @@ export default function RecepcionIAPage() {
                                 className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 hover:text-amber-900 hover:underline"
                               >
                                 <PackagePlus className="h-3 w-3" />
-                                Crear producto
+                                {linea.tallasDetectadas && linea.tallasDetectadas.length >= 2 ? "Crear producto tallado" : "Crear producto"}
                               </button>
                             )}
                           </TableCell>
@@ -951,7 +1027,10 @@ export default function RecepcionIAPage() {
               : quickCreateLinea.costoOriginal
             : 0
         }
+        tallasActivo={tallasActivo}
+        defaultTallas={quickCreateLinea?.tallasDetectadas}
         onCreated={handleProductoCreated}
+        onCreatedTallas={handleProductoTalladoCreated}
       />
     </div>
   )
