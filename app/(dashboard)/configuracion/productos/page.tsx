@@ -2226,11 +2226,15 @@ function EditarGrupoDialog({
   const base = tallas[0]
 
   // ── Datos COMUNES del grupo (se aplican a TODAS las tallas al guardar) ──────
+  // Precio de venta y costo son ÚNICOS para todo el grupo; lo único distinto
+  // entre tallas es la cantidad (stock, que gobierna el inventario).
   const [comunNombre, setComunNombre] = useState(base?.nombre || "")
   const [comunMarcaId, setComunMarcaId] = useState<number | null>(base?.marca_id ?? null)
   const [comunCategoriaId, setComunCategoriaId] = useState<number | null>(base?.categoria_id ?? null)
   const [comunSubcategoriaId, setComunSubcategoriaId] = useState<number | null>(base?.subcategoria_id ?? null)
   const [comunFotoUrl, setComunFotoUrl] = useState<string>(base?.foto_url || "")
+  const [comunPrecio, setComunPrecio] = useState<string>(String(base?.precio_venta_sugerido ?? 0))
+  const [comunCosto, setComunCosto] = useState<string>(String(base?.costo_promedio ?? 0))
   const [subiendoFoto, setSubiendoFoto] = useState(false)
   const [guardandoComun, setGuardandoComun] = useState(false)
 
@@ -2253,13 +2257,20 @@ function EditarGrupoDialog({
     setComunFotoUrl(url)
   }
 
-  // Aplica los datos comunes a TODAS las tallas del grupo (foto, nombre, marca,
-  // categoría, subcategoría). No toca el código, precio ni stock de cada talla.
+  // Aplica los datos comunes a TODAS las tallas del grupo: foto, nombre, marca,
+  // categoría, subcategoría, PRECIO de venta y COSTO (únicos para todo el grupo).
+  // No toca el código ni el stock (cantidad) de cada talla.
   async function guardarComunes() {
     if (!comunNombre.trim()) {
       toast({ title: "Falta el nombre", variant: "destructive" })
       return
     }
+    const precio = Number(comunPrecio)
+    if (!Number.isFinite(precio) || precio <= 0) {
+      toast({ title: "Precio inválido", description: "El precio de venta debe ser mayor a 0", variant: "destructive" })
+      return
+    }
+    const costo = Number(comunCosto) || 0
     setGuardandoComun(true)
     const errores: string[] = []
     for (const t of tallas) {
@@ -2270,6 +2281,8 @@ function EditarGrupoDialog({
         marca_id: comunMarcaId,
         categoria_id: comunCategoriaId,
         subcategoria_id: comunCategoriaId ? comunSubcategoriaId : null,
+        precio_venta_sugerido: precio,
+        costo_promedio: costo,
       }, false)
       if (error) errores.push(`Talla ${t.talla}: ${error}`)
     }
@@ -2278,14 +2291,9 @@ function EditarGrupoDialog({
       toast({ title: "Error al guardar", description: errores.join(" · "), variant: "destructive" })
       return
     }
-    toast({ title: "Datos actualizados", description: "Se aplicaron a todas las tallas del grupo." })
+    toast({ title: "Guardado", description: "Se aplicó a todas las tallas del grupo." })
     onDone()
   }
-  // Precio editable por talla (producto_id -> texto del input).
-  const [precios, setPrecios] = useState<Record<number, string>>(() =>
-    Object.fromEntries(tallas.map((t) => [t.id!, String(t.precio_venta_sugerido ?? 0)])),
-  )
-  const [guardandoPrecio, setGuardandoPrecio] = useState<number | null>(null)
 
   // Agregar talla nueva.
   const [nuevaTalla, setNuevaTalla] = useState("")
@@ -2304,23 +2312,6 @@ function EditarGrupoDialog({
   }, [nuevoAlmacen])
 
   const tallasExistentes = new Set(tallas.map((t) => (t.talla || "").toLowerCase()))
-
-  async function guardarPrecio(t: Producto) {
-    const nuevo = Number(precios[t.id!])
-    if (!Number.isFinite(nuevo) || nuevo <= 0) {
-      toast({ title: "Precio inválido", description: "Debe ser mayor a 0", variant: "destructive" })
-      return
-    }
-    setGuardandoPrecio(t.id!)
-    const { error } = await saveProducto({ ...t, precio_venta_sugerido: nuevo }, false)
-    setGuardandoPrecio(null)
-    if (error) {
-      toast({ title: "Error", description: error, variant: "destructive" })
-      return
-    }
-    toast({ title: "Precio actualizado", description: `Talla ${t.talla}: L ${nuevo.toFixed(2)}` })
-    onDone()
-  }
 
   async function quitarTalla(t: Producto) {
     if (!t.id) return
@@ -2351,18 +2342,20 @@ function EditarGrupoDialog({
       return
     }
     setAgregando(true)
-    // Crea el producto hermano con el mismo nombre/marca/categoria/precio del
-    // grupo y su codigo base + talla.
+    // Crea el producto hermano con el nombre/marca/categoria/foto y el PRECIO y
+    // COSTO COMUNES del grupo, y su codigo base + talla.
     const codigoBase = (base.codigo_barras || "").replace(/-[^-]*$/, "") || base.codigo_barras || ""
+    const precioComun = Number(comunPrecio) || base.precio_venta_sugerido || 0
+    const costoComun = Number(comunCosto) || 0
     const nuevoProducto: Producto = {
-      nombre: base.nombre,
+      nombre: comunNombre.trim() || base.nombre,
       codigo_barras: `${codigoBase}-${talla}`,
-      precio_venta_sugerido: base.precio_venta_sugerido ?? 0,
-      costo_promedio: 0,
-      foto_url: base.foto_url || "",
-      marca_id: base.marca_id ?? null,
-      categoria_id: base.categoria_id ?? null,
-      subcategoria_id: base.subcategoria_id ?? null,
+      precio_venta_sugerido: precioComun,
+      costo_promedio: costoComun,
+      foto_url: comunFotoUrl || base.foto_url || "",
+      marca_id: comunMarcaId,
+      categoria_id: comunCategoriaId,
+      subcategoria_id: comunCategoriaId ? comunSubcategoriaId : null,
       talla,
     }
     const { data: creado, error } = await saveProducto(nuevoProducto, true)
@@ -2373,19 +2366,19 @@ function EditarGrupoDialog({
     }
     // Vincula la nueva talla al grupo.
     await agregarProductoAGrupo(grupoId, creado.id, nombreGrupo || base.nombre)
-    // Inventario inicial opcional.
+    // Inventario inicial opcional (con el costo común del grupo).
     if (cantidad > 0) {
       await procesarIngresoManual({
         producto_id: creado.id,
         almacen_id: nuevoAlmacen,
         localizacion_id: nuevaLocalizacion,
         cantidad,
-        costo_unitario: 0,
+        costo_unitario: costoComun,
         observaciones: "Inventario inicial (talla nueva)",
         stock_anterior: 0,
         costo_anterior: 0,
         nuevo_stock: cantidad,
-        nuevo_costo: 0,
+        nuevo_costo: costoComun,
       })
     }
     setAgregando(false)
@@ -2468,22 +2461,34 @@ function EditarGrupoDialog({
               )}
             </div>
           </div>
+          {/* Precio y costo: únicos para todo el grupo */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="grid gap-1">
+              <Label className="text-xs text-stone-500">Precio de venta (L) · todas las tallas</Label>
+              <Input type="number" step="0.01" min="0" value={comunPrecio} onChange={(e) => setComunPrecio(e.target.value)} className="h-10 text-base" />
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs text-stone-500">Costo (L) · todas las tallas</Label>
+              <Input type="number" step="0.01" min="0" value={comunCosto} onChange={(e) => setComunCosto(e.target.value)} className="h-10 text-base" />
+            </div>
+          </div>
           <Button
             size="sm"
-            variant="outline"
-            className="w-full"
+            className="w-full bg-amber-600 hover:bg-amber-700 text-white"
             disabled={guardandoComun || subiendoFoto}
             onClick={guardarComunes}
           >
             {guardandoComun ? <Spinner className="mr-2 h-4 w-4" /> : null}
-            Guardar datos comunes (aplica a todas)
+            Guardar
           </Button>
         </div>
 
         <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Tallas del grupo · la cantidad (stock) de cada una la controla el inventario.
+          </p>
           {tallas.map((t) => (
-            <div key={t.id} className="rounded-lg border border-stone-200 p-3 space-y-2">
-              {/* Datos de la talla */}
+            <div key={t.id} className="rounded-lg border border-stone-200 p-3">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="rounded-full bg-amber-100 px-2.5 py-1 text-center text-xs font-semibold text-amber-900">
                   Talla {t.talla || "—"}
@@ -2510,28 +2515,6 @@ function EditarGrupoDialog({
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
-              </div>
-              {/* Precio: input amplio para que el valor completo sea visible */}
-              <div className="flex items-end gap-2">
-                <div className="grid gap-1 flex-1 min-w-0">
-                  <Label className="text-xs text-stone-500">Precio de venta (L)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={precios[t.id!] ?? ""}
-                    onChange={(e) => setPrecios((prev) => ({ ...prev, [t.id!]: e.target.value }))}
-                    className="h-10 text-base w-full"
-                  />
-                </div>
-                <Button
-                  variant="outline"
-                  className="h-10 shrink-0"
-                  disabled={guardandoPrecio === t.id || Number(precios[t.id!]) === (t.precio_venta_sugerido ?? 0)}
-                  onClick={() => guardarPrecio(t)}
-                >
-                  {guardandoPrecio === t.id ? <Spinner className="h-4 w-4" /> : "Guardar"}
-                </Button>
               </div>
             </div>
           ))}

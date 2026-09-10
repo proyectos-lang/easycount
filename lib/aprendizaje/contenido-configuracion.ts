@@ -193,8 +193,8 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
         pasos: [
           "En la lista de Productos, la prenda tallada aparece una sola vez con el conteo de tallas; toca el nombre (o la flecha) para desplegar y ver cada talla con su stock y precio.",
           "Presiona el botón de editar del grupo para abrir el panel de tallas.",
-          "Arriba edita los DATOS COMUNES (foto, nombre, marca, categoría) y presiona 'Guardar datos comunes': se aplican a TODAS las tallas del grupo de una vez.",
-          "Para cada talla puedes cambiar su precio (edita y presiona Guardar en esa fila), o presionar 'Editar' para abrir el formulario completo de esa talla (código de barras, foto propia, etc.).",
+          "Arriba edita los DATOS COMUNES (foto, nombre, marca, categoría, precio de venta y costo) y presiona 'Guardar': se aplican a TODAS las tallas del grupo. El precio y el costo son únicos para todas; lo único distinto entre tallas es la cantidad (stock).",
+          "Cada talla se lista con su código y stock; presiona 'Editar' para abrir el formulario completo de esa talla si necesitas algo específico (código de barras, foto propia).",
           "También puedes quitar una talla del grupo o Agregar una talla nueva (escribe su nombre y, si quieres, una cantidad inicial con su almacén y localización).",
           "El mismo agrupamiento se ve en Inventario → Valoración: la prenda aparece una vez con el stock y el valor sumados, y al desplegar muestra cada talla.",
         ],
