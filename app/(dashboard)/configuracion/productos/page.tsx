@@ -1153,6 +1153,10 @@ export default function ProductosConfigPage() {
                       : `L ${fila.precioMin.toFixed(2)} - ${fila.precioMax.toFixed(2)}`
                   // Foto del grupo: la primera talla que tenga foto.
                   const fotoGrupo = fila.tallas.find((t) => t.foto_url)?.foto_url
+                  const precioG = fila.tallas[0]?.precio_venta_sugerido || 0
+                  const costoG = fila.tallas[0]?.costo_promedio || 0
+                  const gananciaG = precioG - costoG
+                  const margenG = precioG > 0 ? (gananciaG / precioG) * 100 : 0
                   return (
                     <div key={`g-${fila.grupoId}`} className="border border-amber-200 rounded-xl bg-amber-50/40">
                       <div className="p-3 flex items-center gap-3">
@@ -1177,6 +1181,9 @@ export default function ProductosConfigPage() {
                           </p>
                           <p className="text-xs text-amber-800">Stock: {fila.stockTotal}</p>
                           <p className="text-xs text-emerald-700 font-medium">{rangoPrecio}</p>
+                          <p className={`text-xs ${gananciaG >= 0 ? "text-emerald-700" : "text-red-600"}`}>
+                            Ganancia: {formatCurrency(gananciaG)} · {margenG.toFixed(1)}%
+                          </p>
                         </button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setGrupoEditando(fila.grupoId)} title="Editar grupo">
                           <Pencil className="h-4 w-4" />
@@ -1224,6 +1231,13 @@ export default function ProductosConfigPage() {
                           : `L ${fila.precioMin.toFixed(2)} - ${fila.precioMax.toFixed(2)}`
                       // Foto del grupo: la primera talla que tenga foto.
                       const fotoGrupo = fila.tallas.find((t) => t.foto_url)?.foto_url
+                      // Precio y costo son únicos para el grupo (los tomamos de
+                      // la primera talla). Ganancia y margen se derivan de ellos.
+                      const precioGrupo = fila.tallas[0]?.precio_venta_sugerido || 0
+                      const costoGrupo = fila.tallas[0]?.costo_promedio || 0
+                      const gananciaGrupo = precioGrupo - costoGrupo
+                      const margenGrupo = precioGrupo > 0 ? (gananciaGrupo / precioGrupo) * 100 : 0
+                      const colorGrupo = gananciaGrupo >= 0 ? "text-emerald-700" : "text-red-600"
                       return (
                         <Fragment key={`g-${fila.grupoId}`}>
                           <TableRow className="bg-amber-50/40 hover:bg-amber-50/70">
@@ -1276,9 +1290,9 @@ export default function ProductosConfigPage() {
                             </TableCell>
                             <TableCell className="text-stone-400 text-xs">—</TableCell>
                             <TableCell className="text-right font-medium text-emerald-700">{rangoPrecio}</TableCell>
-                            <TableCell className="text-stone-400 text-xs text-right">—</TableCell>
-                            <TableCell className="text-stone-400 text-xs text-right">—</TableCell>
-                            <TableCell className="text-stone-400 text-xs text-right">—</TableCell>
+                            <TableCell className="text-right text-stone-600">L {costoGrupo.toFixed(2)}</TableCell>
+                            <TableCell className={`text-right font-medium ${colorGrupo}`}>{formatCurrency(gananciaGrupo)}</TableCell>
+                            <TableCell className={`text-right ${colorGrupo}`}>{margenGrupo.toFixed(1)}%</TableCell>
                             <TableCell className="text-right font-medium">{fila.stockTotal}</TableCell>
                             <TableCell>
                               <Button
