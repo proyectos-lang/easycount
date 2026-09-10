@@ -2013,6 +2013,10 @@ export default function ProductosConfigPage() {
           tallas={tallasDeGrupo(grupoEditando)}
           nombreGrupo={gruposTallas.get(tallasDeGrupo(grupoEditando)[0]?.id ?? -1)?.nombre_grupo || tallasDeGrupo(grupoEditando)[0]?.nombre || ""}
           almacenes={almacenes}
+          marcas={marcas}
+          categorias={categorias}
+          subcategorias={subcategorias}
+          onEditarProducto={(p) => { setGrupoEditando(null); openEditDialog(p) }}
           onClose={() => setGrupoEditando(null)}
           onDone={() => { setGrupoEditando(null); loadProductos() }}
         />
@@ -2200,6 +2204,10 @@ function EditarGrupoDialog({
   tallas,
   nombreGrupo,
   almacenes,
+  marcas,
+  categorias,
+  subcategorias,
+  onEditarProducto,
   onClose,
   onDone,
 }: {
@@ -2207,11 +2215,72 @@ function EditarGrupoDialog({
   tallas: Producto[]
   nombreGrupo: string
   almacenes: Almacen[]
+  marcas: Marca[]
+  categorias: Categoria[]
+  subcategorias: Subcategoria[]
+  onEditarProducto: (p: Producto) => void
   onClose: () => void
   onDone: () => void
 }) {
   const { toast } = useToast()
   const base = tallas[0]
+
+  // ── Datos COMUNES del grupo (se aplican a TODAS las tallas al guardar) ──────
+  const [comunNombre, setComunNombre] = useState(base?.nombre || "")
+  const [comunMarcaId, setComunMarcaId] = useState<number | null>(base?.marca_id ?? null)
+  const [comunCategoriaId, setComunCategoriaId] = useState<number | null>(base?.categoria_id ?? null)
+  const [comunSubcategoriaId, setComunSubcategoriaId] = useState<number | null>(base?.subcategoria_id ?? null)
+  const [comunFotoUrl, setComunFotoUrl] = useState<string>(base?.foto_url || "")
+  const [subiendoFoto, setSubiendoFoto] = useState(false)
+  const [guardandoComun, setGuardandoComun] = useState(false)
+
+  const subcatsComunFiltradas = subcategorias.filter((s) => s.categoria_id === comunCategoriaId)
+
+  async function handleFotoComun(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Error", description: "Solo se permiten imágenes", variant: "destructive" })
+      return
+    }
+    setSubiendoFoto(true)
+    const { url, error } = await uploadProductoImage(file)
+    setSubiendoFoto(false)
+    if (error || !url) {
+      toast({ title: "Error al subir imagen", description: error || "", variant: "destructive" })
+      return
+    }
+    setComunFotoUrl(url)
+  }
+
+  // Aplica los datos comunes a TODAS las tallas del grupo (foto, nombre, marca,
+  // categoría, subcategoría). No toca el código, precio ni stock de cada talla.
+  async function guardarComunes() {
+    if (!comunNombre.trim()) {
+      toast({ title: "Falta el nombre", variant: "destructive" })
+      return
+    }
+    setGuardandoComun(true)
+    const errores: string[] = []
+    for (const t of tallas) {
+      const { error } = await saveProducto({
+        ...t,
+        nombre: comunNombre.trim(),
+        foto_url: comunFotoUrl || "",
+        marca_id: comunMarcaId,
+        categoria_id: comunCategoriaId,
+        subcategoria_id: comunCategoriaId ? comunSubcategoriaId : null,
+      }, false)
+      if (error) errores.push(`Talla ${t.talla}: ${error}`)
+    }
+    setGuardandoComun(false)
+    if (errores.length > 0) {
+      toast({ title: "Error al guardar", description: errores.join(" · "), variant: "destructive" })
+      return
+    }
+    toast({ title: "Datos actualizados", description: "Se aplicaron a todas las tallas del grupo." })
+    onDone()
+  }
   // Precio editable por talla (producto_id -> texto del input).
   const [precios, setPrecios] = useState<Record<number, string>>(() =>
     Object.fromEntries(tallas.map((t) => [t.id!, String(t.precio_venta_sugerido ?? 0)])),
@@ -2334,10 +2403,82 @@ function EditarGrupoDialog({
             {nombreGrupo || base?.nombre || "Grupo de tallas"}
           </DialogTitle>
           <DialogDescription>
-            {tallas.length} talla(s). Edita el precio de cada una o agrega tallas nuevas.
-            El stock lo gobierna el inventario.
+            {tallas.length} talla(s). Edita los datos comunes (foto, marca, categoría) que
+            aplican a todas, el precio de cada una, o edita una talla individual.
           </DialogDescription>
         </DialogHeader>
+
+        {/* ── Datos COMUNES del grupo (foto/nombre/marca/categoría) ─────────── */}
+        <div className="rounded-lg border border-stone-200 bg-stone-50/50 p-3 space-y-3">
+          <p className="text-sm font-medium text-stone-700">Datos comunes (todas las tallas)</p>
+          <div className="flex gap-3">
+            {/* Foto */}
+            <div className="shrink-0">
+              <label className="cursor-pointer block">
+                <input type="file" accept="image/*" className="hidden" onChange={handleFotoComun} disabled={subiendoFoto} />
+                {comunFotoUrl ? (
+                  <img src={comunFotoUrl} alt="" className="h-20 w-20 rounded-lg object-cover border" />
+                ) : (
+                  <div className="h-20 w-20 rounded-lg border-2 border-dashed border-stone-300 flex items-center justify-center bg-white">
+                    {subiendoFoto ? <Spinner className="h-5 w-5" /> : <ImageIcon className="h-6 w-6 text-stone-400" />}
+                  </div>
+                )}
+                <span className="mt-1 block text-center text-[10px] text-amber-700">{subiendoFoto ? "Subiendo…" : "Cambiar foto"}</span>
+              </label>
+            </div>
+            {/* Nombre + selects */}
+            <div className="flex-1 min-w-0 grid gap-2">
+              <div className="grid gap-1">
+                <Label className="text-xs text-stone-500">Nombre</Label>
+                <Input value={comunNombre} onChange={(e) => setComunNombre(e.target.value)} className="h-9" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="grid gap-1">
+                  <Label className="text-xs text-stone-500">Marca</Label>
+                  <Select value={comunMarcaId?.toString() || "none"} onValueChange={(v) => setComunMarcaId(v === "none" ? null : parseInt(v))}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Sin marca" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin marca</SelectItem>
+                      {marcas.map((m) => (<SelectItem key={m.id} value={m.id!.toString()}>{m.nombre}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs text-stone-500">Categoría</Label>
+                  <Select value={comunCategoriaId?.toString() || "none"} onValueChange={(v) => { setComunCategoriaId(v === "none" ? null : parseInt(v)); setComunSubcategoriaId(null) }}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Sin categoría" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin categoría</SelectItem>
+                      {categorias.map((c) => (<SelectItem key={c.id} value={c.id!.toString()}>{c.nombre}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {comunCategoriaId != null && subcatsComunFiltradas.length > 0 && (
+                <div className="grid gap-1">
+                  <Label className="text-xs text-stone-500">Subcategoría</Label>
+                  <Select value={comunSubcategoriaId?.toString() || "none"} onValueChange={(v) => setComunSubcategoriaId(v === "none" ? null : parseInt(v))}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Sin subcategoría" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin subcategoría</SelectItem>
+                      {subcatsComunFiltradas.map((s) => (<SelectItem key={s.id} value={s.id!.toString()}>{s.nombre}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full"
+            disabled={guardandoComun || subiendoFoto}
+            onClick={guardarComunes}
+          >
+            {guardandoComun ? <Spinner className="mr-2 h-4 w-4" /> : null}
+            Guardar datos comunes (aplica a todas)
+          </Button>
+        </div>
 
         <div className="space-y-2">
           {tallas.map((t) => (
@@ -2349,15 +2490,26 @@ function EditarGrupoDialog({
                 </span>
                 <span className="font-mono text-xs text-stone-500 truncate">{t.codigo_barras}</span>
                 <span className="text-xs text-stone-500">Stock: {t.stock_total || 0}</span>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 ml-auto shrink-0 text-stone-500 hover:text-destructive"
-                  title="Quitar del grupo"
-                  onClick={() => quitarTalla(t)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="ml-auto flex items-center gap-1 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1"
+                    title="Editar esta talla (foto, código, datos)"
+                    onClick={() => onEditarProducto(t)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Editar
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 text-stone-500 hover:text-destructive"
+                    title="Quitar del grupo"
+                    onClick={() => quitarTalla(t)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               {/* Precio: input amplio para que el valor completo sea visible */}
               <div className="flex items-end gap-2">
