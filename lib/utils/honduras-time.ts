@@ -107,3 +107,23 @@ export function formatHondurasDate(iso?: string | null): string {
 export function getHondurasTodayISODate(): string {
   return getHondurasNowISO().slice(0, 10)
 }
+
+/**
+ * Timestamp HN-as-UTC que representa un MOMENTO dentro del dia operativo
+ * `fechaISO` (YYYY-MM-DD).
+ *
+ * - Si `fechaISO` es HOY (fecha de Honduras), devuelve la hora actual exacta
+ *   (`getHondurasNowISO()`), para no falsear la hora real del cierre.
+ * - Si `fechaISO` es un dia PASADO, devuelve el fin de ese dia
+ *   (`{fechaISO}T23:59:00.000Z`) para que el movimiento quede DENTRO del
+ *   rango [start, end) de ese dia (ver `getHondurasDayRange`) y ordene
+ *   despues de los movimientos reales de la jornada.
+ *
+ * Se usa para fechar el movimiento sintetico de "Cierre" de caja cuando el
+ * cuadre se hace al dia siguiente pero corresponde a la jornada anterior.
+ */
+export function getHondurasCierreISO(fechaISO: string): string {
+  const hoy = getHondurasTodayISODate()
+  if (!fechaISO || fechaISO >= hoy) return getHondurasNowISO()
+  return `${fechaISO}T23:59:00.000Z`
+}

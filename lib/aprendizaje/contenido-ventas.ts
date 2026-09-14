@@ -165,6 +165,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Consultar todas las facturas emitidas, ver su detalle, reimprimir PDF, registrar abonos y eliminar ventas erróneas.",
     queHace: [
       "Lista todas las facturas con filtros por fecha, cliente y método de pago.",
+      "En la pestaña 'Resumen de Facturas', la columna 'Método' muestra cómo se cobró cada venta y, cuando fue por Banco (o Mixto), debajo indica a qué cuenta destino entró el dinero (ej. 'POS BP'). También sale en el Excel exportado, en la columna 'Cuenta Destino'.",
       "Detalle de cada factura: productos, cantidades, pagos registrados y saldo pendiente.",
       "Reimprime cualquier factura en dos formatos: factura A4 en PDF (ícono de descarga) o tirilla térmica de 80 mm (ícono de impresora), con el mismo formato que se imprime al momento de la venta.",
       "Registra abonos (parciales o totales) a facturas con saldo pendiente: el botón verde de pago aparece directo en la fila. El efectivo entra a la caja chica y los pagos por banco a la cuenta que elijas.",

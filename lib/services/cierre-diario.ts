@@ -175,6 +175,36 @@ export interface DevolucionDelDia {
   numero_factura: string | null
 }
 
+/**
+ * Desglose del dinero del dia por METODO de cobro, reconstruido desde
+ * `ventas_pagos_detalle` de las ventas del dia. Sirve para dejar claro que
+ * el total vendido = efectivo + banco (bruto) + credito, y cuanto de banco
+ * se fue en comisiones (banco neto = bruto - comisiones). Evita la confusion
+ * de comparar "Total Ventas" (bruto) contra "Ingresos en Bancos" (neto).
+ */
+export interface DesgloseVentasMetodo {
+  /** Total vendido del dia (suma de total_venta de los tickets). */
+  totalVentas: number
+  /** Cobrado en efectivo (bruto = neto, no hay comision en efectivo). */
+  efectivo: number
+  /** Cobrado por banco/tarjeta/link, antes de comisiones. */
+  bancoBruto: number
+  /** Comisiones bancarias del dia (bancoBruto - bancoNeto). */
+  comisiones: number
+  /** Neto que entra al banco (bancoBruto - comisiones). */
+  bancoNeto: number
+  /** Otorgado al credito (no entra dinero hoy). */
+  credito: number
+  /** Otros metodos no clasificados. */
+  otros: number
+  /**
+   * Ventas del dia SIN ningun renglon en `ventas_pagos_detalle` (no se
+   * pudo clasificar su metodo). Su monto se reporta aparte para que el
+   * desglose siga cuadrando contra `totalVentas`.
+   */
+  sinDesglose: number
+}
+
 export interface CierreDiarioData {
   resumen: CierreResumen
   bancos: DesgloseBanco[]
@@ -197,6 +227,11 @@ export interface CierreDiarioData {
   devoluciones: DevolucionDelDia[]
   /** Suma de las devoluciones del dia. */
   totalDevoluciones: number
+  /**
+   * Desglose del total vendido por metodo de cobro (efectivo / banco bruto /
+   * comisiones / neto / credito). Deja claro que nada se "pierde" al cerrar.
+   */
+  desgloseMetodos: DesgloseVentasMetodo
   /** True si alguna parte del feature esta pendiente de migracion. */
   featurePending: boolean
 }
@@ -269,6 +304,16 @@ export async function getCierreDiario(fechaISO: string): Promise<{
     detalleEfectivo: [],
     devoluciones: [],
     totalDevoluciones: 0,
+    desgloseMetodos: {
+      totalVentas: 0,
+      efectivo: 0,
+      bancoBruto: 0,
+      comisiones: 0,
+      bancoNeto: 0,
+      credito: 0,
+      otros: 0,
+      sinDesglose: 0,
+    },
     featurePending: false,
   }
 
@@ -971,6 +1016,67 @@ export async function getCierreDiario(fechaISO: string): Promise<{
     }
   }
 
+  // ---- Desglose del total vendido por metodo de cobro -------------------
+  // Reconstruye, desde `ventas_pagos_detalle` de las ventas del dia, cuanto
+  // se cobro por efectivo / banco / credito y cuanto se fue en comisiones.
+  // Objetivo UX: dejar EXPLICITO que el total vendido no se "pierde" al
+  // cerrar — solo se reparte entre metodos, y el banco entra neto.
+  // `sinDesglose` captura ventas sin renglon de pago para que cuadre.
+  const desgloseMetodos: DesgloseVentasMetodo = {
+    totalVentas: +Number(resumen.total_ventas || 0).toFixed(2),
+    efectivo: 0,
+    bancoBruto: 0,
+    comisiones: 0,
+    bancoNeto: 0,
+    credito: 0,
+    otros: 0,
+    sinDesglose: 0,
+  }
+  if (ventaIdsDelDia.length > 0) {
+    const { data: pagosDia, error: pagosDiaErr } = await supabase
+      .from("ventas_pagos_detalle")
+      .select("venta_id, metodo_pago, monto_bruto, monto_neto")
+      .in("venta_id", ventaIdsDelDia)
+
+    if (pagosDiaErr && isMissingRelation(pagosDiaErr)) {
+      featurePending = true
+    } else if (pagosDiaErr) {
+      console.warn("[cierre-diario] error desglose metodos:", pagosDiaErr.message)
+    } else {
+      let brutoCubierto = 0
+      for (const p of pagosDia || []) {
+        const bruto = Number(p.monto_bruto || 0)
+        const neto = Number(p.monto_neto ?? p.monto_bruto ?? 0)
+        brutoCubierto += bruto
+        if (p.metodo_pago === "Efectivo") {
+          desgloseMetodos.efectivo += bruto
+        } else if (p.metodo_pago === "Banco" || p.metodo_pago === "Link_Pago") {
+          desgloseMetodos.bancoBruto += bruto
+          desgloseMetodos.comisiones += bruto - neto
+        } else if (p.metodo_pago === "Credito") {
+          desgloseMetodos.credito += bruto
+        } else {
+          desgloseMetodos.otros += bruto
+        }
+      }
+      // Ventas del dia sin ningun renglon de pago: la diferencia entra en
+      // `sinDesglose` para que efectivo+banco+credito+otros+sinDesglose
+      // cuadre contra totalVentas. Nunca negativo (por redondeos/abonos).
+      desgloseMetodos.sinDesglose = Math.max(
+        0,
+        +(desgloseMetodos.totalVentas - brutoCubierto).toFixed(2)
+      )
+      desgloseMetodos.efectivo = +desgloseMetodos.efectivo.toFixed(2)
+      desgloseMetodos.bancoBruto = +desgloseMetodos.bancoBruto.toFixed(2)
+      desgloseMetodos.comisiones = +desgloseMetodos.comisiones.toFixed(2)
+      desgloseMetodos.bancoNeto = +(
+        desgloseMetodos.bancoBruto - desgloseMetodos.comisiones
+      ).toFixed(2)
+      desgloseMetodos.credito = +desgloseMetodos.credito.toFixed(2)
+      desgloseMetodos.otros = +desgloseMetodos.otros.toFixed(2)
+    }
+  }
+
   return {
     data: {
       resumen,
@@ -982,6 +1088,7 @@ export async function getCierreDiario(fechaISO: string): Promise<{
       detalleEfectivo,
       devoluciones,
       totalDevoluciones,
+      desgloseMetodos,
       featurePending,
     },
     error: null,

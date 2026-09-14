@@ -77,6 +77,7 @@ import {
   type GastoDelDia,
   type IngresoEfectivoDetalle,
   type DevolucionDelDia,
+  type DesgloseVentasMetodo,
 } from "@/lib/services/cierre-diario"
 import { getRazonSocialForPdf } from "@/lib/services/ventas"
 import { printTirilla } from "@/lib/print-tirilla"
@@ -693,6 +694,13 @@ export default function CierreDiarioPage() {
         </Card>
       </div>
 
+      {/* ----- Desglose del total vendido por metodo de cobro -----
+          Deja EXPLICITO que el total vendido del dia no se "pierde" al
+          cerrar: se reparte entre efectivo, banco (que entra neto tras
+          comisiones) y credito. Resuelve la confusion de comparar el total
+          de ventas (bruto) contra el KPI de banco (neto). */}
+      <DesgloseMetodosCard loading={loading} d={data?.desgloseMetodos} />
+
       {/* ----- 3 Tabs ----- */}
       <Tabs defaultValue="bancos" className="space-y-4">
         <TabsList className="bg-stone-100">
@@ -845,6 +853,93 @@ function DevolucionesDelDiaCard({
             </Table>
           </div>
         )}
+      </CardContent>
+    </Card>
+  )
+}
+
+/**
+ * Desglose del total vendido del dia por metodo de cobro. Su razon de ser es
+ * evitar la confusion clasica del cierre: "vendi 51,906 pero el banco muestra
+ * 49,830 y la caja casi 0, se perdio dinero?". Aqui se ve que
+ *   Total Ventas = Efectivo + Banco (bruto) + Credito (+ sin clasificar)
+ * y que el banco entra NETO (bruto - comisiones de tarjeta). Nada se pierde.
+ */
+function DesgloseMetodosCard({
+  loading,
+  d,
+}: {
+  loading: boolean
+  d: DesgloseVentasMetodo | undefined
+}) {
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="p-4">
+          <Skeleton className="h-24 w-full" />
+        </CardContent>
+      </Card>
+    )
+  }
+  if (!d || d.totalVentas <= 0) return null
+
+  // Filas del desglose. El banco se muestra en bruto y, si hubo comision,
+  // se resta explicitamente para llegar al neto que realmente entro.
+  const filas: { label: string; monto: number; clase?: string; nota?: string }[] = []
+  if (d.efectivo > 0) filas.push({ label: "Efectivo", monto: d.efectivo, clase: "text-emerald-700" })
+  if (d.bancoBruto > 0) {
+    filas.push({ label: "Banco / tarjeta (bruto)", monto: d.bancoBruto, clase: "text-indigo-700" })
+    if (d.comisiones > 0) {
+      filas.push({
+        label: "− Comisiones de tarjeta",
+        monto: -d.comisiones,
+        clase: "text-rose-600",
+        nota: `Neto al banco: ${formatCurrency(d.bancoNeto)}`,
+      })
+    }
+  }
+  if (d.credito > 0) filas.push({ label: "Crédito otorgado", monto: d.credito, clase: "text-amber-700", nota: "No entra dinero hoy" })
+  if (d.otros > 0) filas.push({ label: "Otros métodos", monto: d.otros })
+  if (d.sinDesglose > 0) filas.push({ label: "Sin método registrado", monto: d.sinDesglose, clase: "text-muted-foreground", nota: "Ventas sin desglose de pago" })
+
+  return (
+    <Card className="border-l-4 border-l-stone-700">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Receipt className="h-4 w-4 text-stone-600" />
+          ¿Cómo se cobró lo vendido hoy?
+        </CardTitle>
+        <CardDescription>
+          El total vendido del día se reparte entre estos métodos. El banco
+          entra neto (ya sin comisiones de tarjeta); el crédito no ingresa
+          dinero hoy. Nada se pierde al cerrar.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-baseline justify-between border-b pb-2 mb-2">
+          <span className="text-sm font-medium">Total vendido</span>
+          <span className="text-xl font-bold tabular-nums">
+            {formatCurrency(d.totalVentas)}
+          </span>
+        </div>
+        <div className="space-y-1.5">
+          {filas.map((f, i) => (
+            <div key={i} className="flex items-baseline justify-between gap-4">
+              <div className="text-sm">
+                {f.label}
+                {f.nota && (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    ({f.nota})
+                  </span>
+                )}
+              </div>
+              <span className={`tabular-nums font-medium ${f.clase ?? ""}`}>
+                {f.monto < 0 ? "−" : ""}
+                {formatCurrency(Math.abs(f.monto))}
+              </span>
+            </div>
+          ))}
+        </div>
       </CardContent>
     </Card>
   )

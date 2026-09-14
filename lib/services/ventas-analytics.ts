@@ -326,6 +326,77 @@ export async function getMetodosPagoPorVenta(
   }
 }
 
+/**
+ * Devuelve un Map<venta_id, string[]> con los nombres de las CUENTAS DESTINO
+ * (bancarias) de cada venta — las cuentas de `cuentas_config` referenciadas
+ * por las lineas de pago Banco/Link_Pago de esa venta. Sirve para que el
+ * Historial muestre, junto al metodo "Banco", a que cuenta entro el dinero.
+ *
+ * - Solo considera lineas Banco/Link_Pago (las de efectivo/credito no tienen
+ *   cuenta destino). Nombres distintos y ordenados; una venta puede tener mas
+ *   de una cuenta si se cobro en varios bancos.
+ * - Ventas sin lineas bancarias (o sin cuenta resuelta) no entran en el Map.
+ * - Resiliente: si la tabla no existe -> Map vacio (la UI muestra solo el
+ *   metodo, sin cuenta).
+ */
+export async function getCuentasDestinoPorVenta(
+  ventaIds: number[]
+): Promise<{ data: Map<number, string[]>; error: string | null }> {
+  const empty = new Map<number, string[]>()
+  if (ventaIds.length === 0) return { data: empty, error: null }
+
+  if (!isSupabaseConfigured()) return { data: empty, error: null }
+  const supabase = createClient()
+  if (!supabase) return { data: empty, error: null }
+
+  try {
+    type Row = {
+      venta_id: number
+      metodo_pago: string
+      cuenta_id: number | null
+      // La columna real en `cuentas_config` es `nombre` (mismo embed que getPagosResumen).
+      cuentas_config?: { nombre?: string } | null
+    }
+    const resultados = await Promise.all(
+      chunk(ventaIds, IN_CHUNK).map((grupo) =>
+        supabase
+          .from("ventas_pagos_detalle")
+          .select("venta_id, metodo_pago, cuenta_id, cuentas_config(nombre)")
+          .in("venta_id", grupo)
+      )
+    )
+
+    const sets = new Map<number, Set<string>>()
+    for (const r of resultados) {
+      if (r.error) {
+        // Tabla pendiente u otro error: degradamos a Map vacio (sin cuenta).
+        if (/does not exist|ventas_pagos_detalle/i.test(r.error.message)) {
+          return { data: empty, error: null }
+        }
+        return { data: empty, error: r.error.message }
+      }
+      for (const raw of (r.data || []) as Row[]) {
+        // Solo lineas bancarias tienen cuenta destino relevante.
+        if (raw.metodo_pago !== "Banco" && raw.metodo_pago !== "Link_Pago") continue
+        const nombre = raw.cuentas_config?.nombre?.trim()
+        if (!nombre) continue
+        const s = sets.get(raw.venta_id) || new Set<string>()
+        s.add(nombre)
+        sets.set(raw.venta_id, s)
+      }
+    }
+
+    const out = new Map<number, string[]>()
+    for (const [id, set] of sets) {
+      out.set(id, Array.from(set).sort((a, b) => a.localeCompare(b, "es")))
+    }
+    return { data: out, error: null }
+  } catch (err) {
+    console.error("[getCuentasDestinoPorVenta] error:", err)
+    return { data: empty, error: "Error de conexion" }
+  }
+}
+
 /** Comision bancaria agregada de UNA venta (suma de sus lineas de pago). */
 export interface ComisionVenta {
   /** Suma de monto_bruto de la venta. */

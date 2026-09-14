@@ -213,6 +213,7 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
       "Registra ingresos manuales y salidas de efectivo con su concepto.",
       "Transfiere efectivo de la caja a una cuenta bancaria (depósito), reflejándose en ambos lados.",
       "Al cerrar, cuentas el efectivo en una cuadrícula por denominación (billetes y monedas): escribes cuántos hay de cada una y el saldo real se calcula solo, luego se compara con el calculado y registra la diferencia (faltante/sobrante).",
+      "Elige la fecha del cierre: por defecto es hoy, pero puedes retroceder a un día anterior para cuadrar la jornada de ayer con SU fecha (útil cuando cierras a la mañana siguiente).",
       "Historial de sesiones anteriores con sus movimientos.",
     ],
     queNoHace: [
@@ -249,6 +250,7 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
         titulo: "Cerrar la caja",
         pasos: [
           "Presiona 'Cerrar Caja'.",
+          "Revisa la 'Fecha del cierre': por defecto es hoy. Si estás cuadrando la jornada de ayer, retrocédela al día que corresponde (no puede ser futura); el cierre se registrará con esa fecha.",
           "En la cuadrícula de denominaciones escribe cuántos billetes/monedas hay de cada una (500, 100, 50…); el 'Total contado' se calcula solo.",
           "El sistema compara ese total contra el saldo calculado y muestra la diferencia.",
           "Confirma con 'Cerrar Caja' y revisa el cierre en el Historial de Sesiones.",
@@ -266,8 +268,13 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
         respuesta:
           "No: hay una sola sesión de caja abierta por empresa. Todos los cobros en efectivo entran a esa sesión.",
       },
+      {
+        pregunta: "Estoy cerrando hoy la caja de ayer y sale con la fecha de hoy, ¿cómo lo corrijo?",
+        respuesta:
+          "En el diálogo 'Cerrar Caja' cambia la 'Fecha del cierre' al día anterior antes de confirmar. El cierre quedará fechado en esa jornada, así que aparecerá en el reporte de Cierre Diario y en el Historial de Sesiones del día que corresponde, no en el de hoy. Solo cambia la fecha del cierre; los saldos y la diferencia no se alteran.",
+      },
     ],
-    keywords: ["efectivo", "caja", "abrir caja", "cerrar caja", "arqueo", "deposito", "faltante", "sobrante", "denominaciones", "billetes", "monedas", "conteo"],
+    keywords: ["efectivo", "caja", "abrir caja", "cerrar caja", "arqueo", "deposito", "faltante", "sobrante", "denominaciones", "billetes", "monedas", "conteo", "fecha cierre", "dia anterior", "cerrar ayer", "jornada anterior"],
   },
   {
     modulo: "Cierre Diario",
@@ -276,6 +283,7 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
       "El resumen de un día de operación: cuánto se vendió, cuánto entró por cada método de pago, gastos pagados y estado de la caja.",
     queHace: [
       "Resumen del día: cantidad de tickets, total vendido, ingresos en efectivo, por banco (bruto y neto), crédito otorgado y comisiones.",
+      "Desglose '¿Cómo se cobró lo vendido hoy?': reparte el total vendido entre efectivo, banco (bruto menos comisiones = neto) y crédito, para que se vea que nada se pierde aunque el banco entre neto y la caja de efectivo esté en cero.",
       "Desglose por cuenta bancaria con sus movimientos del día.",
       "Productos vendidos en el día.",
       "Gastos del día y pagos a gastos (efectivo y banco).",
@@ -306,8 +314,13 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
         respuesta:
           "Verifica salidas de caja no registradas y ventas cobradas con método incorrecto (ej. marcada Banco cuando fue efectivo). El detalle de ingresos en efectivo del cierre lista cada movimiento con su venta.",
       },
+      {
+        pregunta: "Vendí bastante pero el cierre muestra el efectivo y el banco en cifras distintas al total, ¿se perdió dinero?",
+        respuesta:
+          "No. El total vendido es el bruto; el banco entra NETO (se le restan las comisiones de tarjeta) y el crédito no ingresa dinero el mismo día. Mira el recuadro '¿Cómo se cobró lo vendido hoy?': ahí el total vendido se reparte en efectivo + banco (bruto) − comisiones + crédito, y verás que cuadra. Si todo se cobró por tarjeta, la caja de efectivo queda casi en cero y eso es correcto.",
+      },
     ],
-    keywords: ["corte", "dia", "resumen diario", "cuadre", "reporte dia", "pdf", "tirilla", "termica", "imprimir cierre"],
+    keywords: ["corte", "dia", "resumen diario", "cuadre", "reporte dia", "pdf", "tirilla", "termica", "imprimir cierre", "metodos de pago", "bruto neto", "comisiones tarjeta", "no cuadra", "se perdio"],
   },
   {
     modulo: "Analisis Financiero",

@@ -68,7 +68,7 @@ import {
   type PagoVentaDetalle,
   type VentaDetalleAnalitico,
 } from "@/lib/services/ventas"
-import { getMetodosPagoPorVenta, getComisionesPorVenta, type ComisionVenta } from "@/lib/services/ventas-analytics"
+import { getMetodosPagoPorVenta, getComisionesPorVenta, getCuentasDestinoPorVenta, type ComisionVenta } from "@/lib/services/ventas-analytics"
 import { contarDevolucionesDeVenta } from "@/lib/services/devoluciones"
 import { useAuth } from "@/lib/contexts/auth-context"
 import { printTirilla } from "@/lib/print-tirilla"
@@ -98,6 +98,13 @@ export default function HistorialVentasPage() {
    * no entran en el Map (la columna muestra "—").
    */
   const [comisionesPorVenta, setComisionesPorVenta] = React.useState<Map<number, ComisionVenta>>(new Map())
+  /**
+   * Map<venta_id, string[]>. Cuentas bancarias destino de cada venta (nombres
+   * de `cuentas_config` de sus lineas Banco/Link_Pago). Se puebla en batch
+   * junto a `metodosPago`. Se usa para mostrar, junto al metodo "Banco", a
+   * que cuenta entro el dinero. Ventas sin cobro bancario no entran en el Map.
+   */
+  const [cuentasDestinoPorVenta, setCuentasDestinoPorVenta] = React.useState<Map<number, string[]>>(new Map())
   /** Id de la venta cuya tirilla se esta preparando para reimprimir (spinner). */
   const [tirillaVentaId, setTirillaVentaId] = React.useState<number | null>(null)
 
@@ -174,15 +181,18 @@ export default function HistorialVentasPage() {
       // TODAS las ventas.
       const ids = ventasRes.data.map(v => v.id!).filter((id): id is number => id != null)
       if (ids.length > 0) {
-        const [{ data: mapaMet }, { data: mapaCom }] = await Promise.all([
+        const [{ data: mapaMet }, { data: mapaCom }, { data: mapaCta }] = await Promise.all([
           getMetodosPagoPorVenta(ids),
           getComisionesPorVenta(ids),
+          getCuentasDestinoPorVenta(ids),
         ])
         setMetodosPago(mapaMet)
         setComisionesPorVenta(mapaCom)
+        setCuentasDestinoPorVenta(mapaCta)
       } else {
         setMetodosPago(new Map())
         setComisionesPorVenta(new Map())
+        setCuentasDestinoPorVenta(new Map())
       }
     } catch {
       toast({ title: "Error", description: "No se pudieron cargar las ventas", variant: "destructive" })
@@ -210,12 +220,14 @@ export default function HistorialVentasPage() {
       // ya cargo la pestana Resumen.
       const idsDetalle = Array.from(new Set(data.map(d => d.venta_id).filter(Boolean)))
       if (idsDetalle.length > 0) {
-        const [{ data: mapaMet }, { data: mapaCom }] = await Promise.all([
+        const [{ data: mapaMet }, { data: mapaCom }, { data: mapaCta }] = await Promise.all([
           getMetodosPagoPorVenta(idsDetalle),
           getComisionesPorVenta(idsDetalle),
+          getCuentasDestinoPorVenta(idsDetalle),
         ])
         setMetodosPago(prev => new Map([...prev, ...mapaMet]))
         setComisionesPorVenta(prev => new Map([...prev, ...mapaCom]))
+        setCuentasDestinoPorVenta(prev => new Map([...prev, ...mapaCta]))
       }
     } catch {
       toast({ title: "Error", description: "No se pudieron cargar los detalles", variant: "destructive" })
@@ -513,12 +525,13 @@ export default function HistorialVentasPage() {
         "Saldo Pendiente (L)": saldo,
         "Estado Pago": v.estado_pago,
         "Metodo": v.id != null ? (metodosPago.get(v.id) ?? "—") : "—",
+        "Cuenta Destino": v.id != null ? ((cuentasDestinoPorVenta.get(v.id) ?? []).join(" · ") || "—") : "—",
       }
     })
     exportToXlsx(rows, {
       sheetName: "Resumen de Facturas",
       filename: "Resumen_Ventas",
-      colWidths: [14, 12, 24, 16, 14, 10, 14, 14, 16, 12, 12],
+      colWidths: [14, 12, 24, 16, 14, 10, 14, 14, 16, 12, 12, 18],
     })
     toast({ title: "Exportado", description: "Archivo Excel generado correctamente" })
   }
@@ -713,6 +726,11 @@ export default function HistorialVentasPage() {
     const tipo = metodosPago.get(ventaId)
     if (!tipo) return <span className="text-stone-400">&mdash;</span>
 
+    // Cuenta(s) destino de las lineas bancarias de esta venta. Se muestra
+    // junto a "Banco"/"Mixto" para saber a que cuenta entro el dinero.
+    const cuentas = cuentasDestinoPorVenta.get(ventaId) ?? []
+    const cuentasTexto = cuentas.join(" · ")
+
     switch (tipo) {
       case "Efectivo":
         return (
@@ -722,15 +740,29 @@ export default function HistorialVentasPage() {
         )
       case "Banco":
         return (
-          <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border border-blue-200 gap-1 font-normal">
-            <Banknote className="h-3 w-3" /> Banco
-          </Badge>
+          <div className="flex flex-col items-start gap-0.5">
+            <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border border-blue-200 gap-1 font-normal">
+              <Banknote className="h-3 w-3" /> Banco
+            </Badge>
+            {cuentasTexto && (
+              <span className="text-xs text-stone-500 whitespace-nowrap" title={cuentasTexto}>
+                {cuentasTexto}
+              </span>
+            )}
+          </div>
         )
       case "Mixto":
         return (
-          <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100 border border-purple-200 gap-1 font-normal">
-            <Shuffle className="h-3 w-3" /> Mixto
-          </Badge>
+          <div className="flex flex-col items-start gap-0.5">
+            <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100 border border-purple-200 gap-1 font-normal">
+              <Shuffle className="h-3 w-3" /> Mixto
+            </Badge>
+            {cuentasTexto && (
+              <span className="text-xs text-stone-500 whitespace-nowrap" title={cuentasTexto}>
+                Banco: {cuentasTexto}
+              </span>
+            )}
+          </div>
         )
       case "Credito":
         return (

@@ -65,6 +65,7 @@ import {
 } from "@/lib/services/caja-chica"
 import { useCajaSesion } from "@/lib/hooks/use-caja-sesion"
 import { getCuentas, type CuentaConfig } from "@/lib/services/cuentas"
+import { getHondurasTodayISODate } from "@/lib/utils/honduras-time"
 import { ConteoEfectivo, conteoTotal } from "./conteo-efectivo"
 
 const ALERTA_SALDO = 5000
@@ -176,6 +177,11 @@ export default function CajaChicaPage() {
   // Conteo de efectivo por denominacion (Lempiras): denominacion -> cantidad.
   // El total alimenta `cierreSaldoReal` (saldo real de cierre).
   const [cierreConteo, setCierreConteo] = useState<Record<number, string>>({})
+  // Dia operativo al que corresponde el cierre. Por defecto HOY; el cajero
+  // puede retroceder para cerrar la jornada del dia anterior con su fecha.
+  const [cierreFecha, setCierreFecha] = useState<string>(() =>
+    getHondurasTodayISODate()
+  )
 
   const reload = useCallback(async () => {
     // 1) Refrescamos la sesion para tener el saldo y estado al dia.
@@ -389,6 +395,7 @@ export default function CajaChicaPage() {
   function resetCierre() {
     setCierreConteo({})
     setCierreSaldoReal("")
+    setCierreFecha(getHondurasTodayISODate())
   }
 
   async function handleCierre() {
@@ -406,6 +413,7 @@ export default function CajaChicaPage() {
     const { error } = await cerrarSesion({
       sesion_id: sesion.id,
       saldo_final_real: real,
+      fecha_cierre: cierreFecha,
     })
     setSubmitting(false)
     if (error) {
@@ -434,6 +442,8 @@ export default function CajaChicaPage() {
   const cierreCalculado = saldoActual
   const cierreReal = Number(cierreSaldoReal || 0)
   const cierreDiferencia = +(cierreReal - cierreCalculado).toFixed(2)
+  // El cierre corresponde a un dia anterior (se cuadra hoy la jornada de ayer).
+  const cierreEsDiaAnterior = cierreFecha < getHondurasTodayISODate()
 
   // ----- Render -----------------------------------------------------------
 
@@ -1234,6 +1244,27 @@ export default function CajaChicaPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label htmlFor="cierre-fecha">Fecha del cierre (dia operativo)</Label>
+              <Input
+                id="cierre-fecha"
+                type="date"
+                value={cierreFecha}
+                max={getHondurasTodayISODate()}
+                onChange={(e) =>
+                  setCierreFecha(e.target.value || getHondurasTodayISODate())
+                }
+              />
+              {cierreEsDiaAnterior && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+                  Este cierre se registrara con la fecha{" "}
+                  <span className="font-semibold">{formatDate(cierreFecha)}</span>{" "}
+                  (jornada anterior), no con la de hoy. Asi aparecera en el
+                  reporte y el historial del dia que corresponde.
+                </div>
+              )}
+            </div>
+
             <div className="rounded-lg border p-3 bg-muted/30">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">

@@ -5,7 +5,7 @@ import {
   SESION_INVALIDA_ERROR,
 } from "@/lib/services/tenant-stamp"
 import { registrarMovimientoCuenta } from "@/lib/services/cuentas"
-import { getHondurasNowISO } from "@/lib/utils/honduras-time"
+import { getHondurasNowISO, getHondurasCierreISO } from "@/lib/utils/honduras-time"
 
 // ==================== INTERFACES ====================
 
@@ -211,6 +211,14 @@ export async function abrirSesion(
 export async function cerrarSesion(input: {
   sesion_id: number
   saldo_final_real: number
+  /**
+   * Dia operativo al que corresponde el cierre (YYYY-MM-DD). Se usa cuando el
+   * cuadre se hace al dia siguiente pero pertenece a la jornada anterior: el
+   * movimiento sintetico de "Cierre" se fecha al fin de ese dia para que caiga
+   * dentro del rango de ese dia en el reporte y en el historial. Si se omite
+   * (o es hoy), se usa la hora actual de Honduras. No puede ser futuro.
+   */
+  fecha_cierre?: string
 }): Promise<{ data: CajaSesion | null; error: string | null }> {
   const supabase = createClient()
   if (!supabase) return { data: null, error: "Cliente no disponible" }
@@ -224,8 +232,11 @@ export async function cerrarSesion(input: {
   const saldoCalculado = await getSaldoActual(input.sesion_id)
   const diferencia = +(input.saldo_final_real - saldoCalculado).toFixed(2)
 
-  // Movimiento de cierre. Forzamos fecha/created_at en hora Honduras.
-  const nowHN = getHondurasNowISO()
+  // Fecha del movimiento de cierre. Si el usuario eligio un dia anterior,
+  // `getHondurasCierreISO` lo ancla al fin de ese dia (HN-as-UTC); si es hoy,
+  // usa la hora actual real. El "Cierre" tiene monto 0, asi que backdatearlo
+  // no altera ningun saldo — solo la fecha con la que se lista la jornada.
+  const nowHN = getHondurasCierreISO(input.fecha_cierre ?? "")
   const { error: cierreErr } = await supabase
     .from("caja_chica_movimientos")
     .insert({
