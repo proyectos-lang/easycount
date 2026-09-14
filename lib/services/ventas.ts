@@ -126,6 +126,16 @@ export interface PagoVentaDetalle extends PagoVentaDetalleInput {
 
 // ==================== CORRELATIVO ====================
 
+/**
+ * Numero que se emitiria a continuacion, SOLO para PREVIEW en pantalla (no
+ * consume correlativo). El numero definitivo lo asigna `emitirCorrelativoVenta`
+ * de forma atomica al guardar la venta, asi que este valor es indicativo y
+ * puede cambiar si otra venta se guarda antes.
+ *
+ * Usa el RPC `peek_correlativo_venta` (contador global, script 052). Si el RPC
+ * aun no esta desplegado, cae al legacy COUNT(*)+1 (que tiene condicion de
+ * carrera, pero es solo el preview).
+ */
 export async function getNextCorrelativo(): Promise<string> {
   if (!isSupabaseConfigured()) {
     const saved = localStorage.getItem('ventas_encabezado')
@@ -138,15 +148,47 @@ export async function getNextCorrelativo(): Promise<string> {
   if (!supabase) return 'FC-0001'
 
   try {
-    const { count, error } = await supabase
+    const { data, error } = await supabase.rpc('peek_correlativo_venta')
+    if (!error && typeof data === 'string' && data) return data
+    // Fallback legacy (script 052 no aplicado): COUNT(*)+1.
+    const { count, error: cErr } = await supabase
       .from('ventas_encabezado')
       .select('*', { count: 'exact', head: true })
-
-    if (error) return 'FC-0001'
+    if (cErr) return 'FC-0001'
     const nextNum = (count || 0) + 1
     return `FC-${nextNum.toString().padStart(4, '0')}`
   } catch {
     return 'FC-0001'
+  }
+}
+
+/**
+ * Emite (CONSUME) el siguiente correlativo de venta de forma ATOMICA via el
+ * RPC `siguiente_correlativo_venta` (script 052). Es la fuente de verdad del
+ * numero de factura: se llama server-side al momento de crear la venta, NO en
+ * el navegador, para eliminar la condicion de carrera que producia numeros
+ * duplicados.
+ *
+ * Devuelve `null` si el RPC no esta disponible (script 052 no aplicado), para
+ * que el llamador pueda degradar al numero calculado en el cliente.
+ */
+async function emitirCorrelativoVenta(
+  supabase: NonNullable<ReturnType<typeof createClient>>
+): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.rpc('siguiente_correlativo_venta')
+    if (error) {
+      console.warn(
+        '[emitirCorrelativoVenta] RPC no disponible; usando numero del cliente. ' +
+          'Aplica scripts/052-correlativo-venta-atomico.sql para numeracion atomica.',
+        error.message
+      )
+      return null
+    }
+    return typeof data === 'string' && data ? data : null
+  } catch (e) {
+    console.warn('[emitirCorrelativoVenta] excepcion:', e)
+    return null
   }
 }
 
@@ -515,6 +557,14 @@ interface CrearVentaData {
    * venta se considera 100% credito (Pendiente).
    */
   pagos_detalle?: PagoVentaDetalleInput[]
+  /**
+   * Cuando es `true`, se RESPETA el `numero_factura` que trae el encabezado
+   * (p. ej. importacion de ventas desde Excel, donde el numero viene del
+   * documento origen). Cuando es falso/ausente (Nueva Venta, aprobar pedido),
+   * el numero lo asigna el correlativo ATOMICO server-side y se ignora el que
+   * haya calculado el cliente.
+   */
+  conservarNumeroFactura?: boolean
 }
 
 /**
@@ -662,6 +712,16 @@ export async function crearVenta(
       }
     }
 
+    // Numero de factura ATOMICO server-side (fuente de verdad). Reemplaza el
+    // numero calculado en el cliente (COUNT(*)+1), que sufria condicion de
+    // carrera y producia duplicados. Si el RPC (script 052) no esta desplegado,
+    // `emitirCorrelativoVenta` devuelve null y conservamos el numero del cliente
+    // (modo degradado, mismo comportamiento que antes). En importaciones
+    // (`conservarNumeroFactura`) se respeta el numero del documento origen.
+    const numeroAtomico = data.conservarNumeroFactura
+      ? null
+      : await emitirCorrelativoVenta(supabase)
+
     // 1. Insert venta encabezado with almacen_id (sello completo: empresa + usuario)
     // fecha_venta HN-as-UTC por defecto si el caller no la envia (p.ej. aprobar
     // pedido): sin esto caia al DEFAULT now() de la BD (UTC real) y de noche
@@ -671,6 +731,7 @@ export async function crearVenta(
     const encabezadoConAlmacen = {
       fecha_venta: getHondurasNowISO(),
       ...data.encabezado,
+      ...(numeroAtomico ? { numero_factura: numeroAtomico } : {}),
       valorpago: valorpagoCalculado,
       estado_pago: estadoPagoCalculado,
       almacen_id: data.almacen_id,

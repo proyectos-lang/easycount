@@ -330,6 +330,9 @@ export async function importarVentas(
       almacen_id: opciones.almacen_id,
       localizacion_id: opciones.localizacion_id,
       pagos_detalle,
+      // Importacion: el numero de factura viene del documento origen (Excel),
+      // NO se reasigna con el correlativo atomico.
+      conservarNumeroFactura: true,
     })
 
     if (res.error || !res.data) {
