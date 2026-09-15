@@ -269,10 +269,12 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
     modulo: "Control de Piso",
     titulo: "Control de Piso",
     descripcion:
-      "Registra las corridas de producción de cada orden (unidades, horas, paros, defectos) y, al ejecutarlas, descuenta automáticamente los materiales según la receta.",
+      "Registra las corridas de producción de cada orden y monitorea lo procesado por día y por rango. Al ejecutar una corrida, descuenta automáticamente los materiales según la receta.",
     queHace: [
-      "Elige una orden abierta o en proceso y registra una o varias corridas (turnos/lotes).",
-      "Captura por corrida: hora de inicio y fin, unidades buenas y defectuosas (con motivos), paros en minutos, tiempo planificado y novedades.",
+      "Tres pestañas: 'Registro' (por orden), 'En vivo' (por día) y 'Consolidado' (por rango de fechas).",
+      "Registro: elige una orden abierta o en proceso y registra una o varias corridas (turnos/lotes), con hora de inicio/fin, unidades buenas y defectuosas (con motivos), paros en minutos, tiempo planificado y novedades.",
+      "En vivo: muestra lo procesado en un día (por defecto hoy) — corridas, paros/defectos con su motivo e indicadores del día (buenas, defectuosas, calidad, paros). Puedes moverte a días anteriores.",
+      "Consolidado: al filtrar un rango de fechas, una tabla con una fila por día y sus indicadores (corridas, órdenes, buenas, defectuosas, calidad, paros, tiempo planificado y los productos trabajados).",
       "Al 'Ejecutar' la corrida, descuenta los materiales = receta × unidades PROCESADAS (buenas + defectuosas) y calcula el costo real (materiales + factores) por unidad buena.",
       "Bloquea la ejecución si algún material no alcanza (nunca deja el stock de material en negativo).",
     ],
@@ -286,10 +288,25 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
       {
         titulo: "Registrar y ejecutar una corrida",
         pasos: [
-          "Abre Producción → Control de Piso y elige la orden.",
+          "En la pestaña 'Registro', elige la orden.",
           "Presiona 'Registrar corrida' y captura las unidades buenas/defectuosas, horas, paros y novedades. Si hubo defectos, agrega sus motivos.",
           "Guarda: la corrida queda 'Registrada' (aún no descuenta material).",
           "Presiona 'Ejecutar' en la fila: se descuentan los materiales de la receta según las unidades procesadas y se calcula el costo real. Si falta material, te avisa y no ejecuta.",
+        ],
+      },
+      {
+        titulo: "Ver la producción del día (en vivo)",
+        pasos: [
+          "Abre la pestaña 'En vivo': por defecto muestra el día de hoy.",
+          "Revisa los indicadores del día y la lista de corridas con su hora, y los paros/defectos con su motivo.",
+          "Usa las flechas o el selector de fecha para revisar días anteriores; 'Actualizar' refresca los datos.",
+        ],
+      },
+      {
+        titulo: "Consolidar varios días",
+        pasos: [
+          "Abre la pestaña 'Consolidado' y elige el rango de fechas (Desde / Hasta).",
+          "Presiona 'Consultar': verás los totales del rango y una fila por día con sus indicadores y los productos trabajados.",
         ],
       },
     ],
