@@ -47,6 +47,55 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
     keywords: ["operaciones", "etapas", "secuencia", "flujo", "proceso", "produccion", "estaciones", "workflow", "ruteo", "diseno", "impresion", "confeccion", "empaque"],
   },
   {
+    modulo: "Flujo de Produccion",
+    titulo: "Flujo de Producción",
+    descripcion:
+      "El tablero donde cada orden recorre tus operaciones etapa por etapa: recibir → trabajar → entregar a la siguiente, hasta completar el proceso.",
+    queHace: [
+      "Inicia el flujo de una orden: genera sus etapas con tu secuencia de operaciones vigente (se CONGELA en ese momento; cambios posteriores no afectan órdenes ya iniciadas).",
+      "Muestra en qué etapa va cada orden y el avance (etapas entregadas / total).",
+      "En cada etapa registras: responsable, fecha de recepción, cantidad procesada y notas.",
+      "'Recibir' marca que el trabajo llegó a esa etapa; 'Entregar' la cierra y deja la siguiente lista para recibir automáticamente.",
+      "La primera etapa queda lista para trabajar apenas inicias el flujo.",
+    ],
+    queNoHace: [
+      "No descuenta materiales ni calcula costos: eso lo hace el Control de Piso con las corridas. El flujo controla el AVANCE por etapas.",
+      "No inicia el flujo solo: debes presionar 'Iniciar flujo' en la orden (y tener operaciones definidas).",
+    ],
+    operaciones: [
+      {
+        titulo: "Iniciar el flujo de una orden",
+        pasos: [
+          "Abre Producción → Flujo de Producción.",
+          "En 'Iniciar flujo', busca la orden y presiona 'Iniciar flujo': se generan sus etapas según tu secuencia de operaciones.",
+          "La orden aparece en 'Órdenes en flujo' con su primera etapa lista.",
+        ],
+      },
+      {
+        titulo: "Avanzar una orden por sus etapas",
+        pasos: [
+          "Despliega la orden en 'Órdenes en flujo'.",
+          "En la etapa actual, presiona 'Entregar' cuando termines: registra responsable, cantidad y notas.",
+          "Al entregar, la siguiente etapa queda 'Recibida' (lista para trabajar) automáticamente.",
+          "Cuando entregues la última etapa, la orden queda 'Completado'.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        pregunta: "Cambié mis operaciones, ¿se actualizan las órdenes que ya están en flujo?",
+        respuesta:
+          "No. Cada orden congela su secuencia al iniciar el flujo. Los cambios en Operaciones de Producción solo aplican a las órdenes cuyo flujo inicies después.",
+      },
+      {
+        pregunta: "No puedo iniciar el flujo de una orden.",
+        respuesta:
+          "Necesitas tener operaciones definidas en Producción → Operaciones de Producción, y que la orden esté Abierta o En Proceso.",
+      },
+    ],
+    keywords: ["flujo", "etapas", "recepcion", "entrega", "avance", "tablero", "operaciones", "produccion", "recorrido", "estaciones", "wip", "proceso"],
+  },
+  {
     modulo: "Materiales",
     titulo: "Materiales de fabricación",
     descripcion:
