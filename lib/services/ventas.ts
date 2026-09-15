@@ -2098,7 +2098,8 @@ async function revertirEfectosVenta(
 }
 
 export async function eliminarVentaCompletamente(
-  ventaId: number
+  ventaId: number,
+  motivo?: string
 ): Promise<{ error: string | null }> {
   const supabase = createClient()
   if (!supabase) return { error: 'Cliente no disponible' }
@@ -2109,10 +2110,17 @@ export async function eliminarVentaCompletamente(
       return { error: SESION_INVALIDA_ERROR }
     }
 
+    // Motivo obligatorio: la eliminacion queda registrada en ventas_eliminadas.
+    const motivoLimpio = (motivo || '').trim()
+    if (!motivoLimpio) {
+      return { error: 'Indica el motivo de la eliminación.' }
+    }
+
     // ----- 0. Verificar que la venta exista y pertenezca al tenant ---------
+    // Traemos el encabezado COMPLETO para el snapshot de trazabilidad.
     const { data: venta, error: ventaErr } = await supabase
       .from('ventas_encabezado')
-      .select('id, razon_social_id')
+      .select('*')
       .eq('id', ventaId)
       .single()
 
@@ -2121,6 +2129,27 @@ export async function eliminarVentaCompletamente(
     }
     if (venta.razon_social_id !== stamp.razon_social_id) {
       return { error: 'La venta no pertenece a la empresa activa' }
+    }
+
+    // ----- 0.a Snapshot ANTES de borrar (encabezado + lineas + pagos) ------
+    // Se guarda en ventas_eliminadas al final. Best-effort: si la tabla 059 no
+    // existe, no bloquea la eliminacion (solo se pierde la trazabilidad).
+    const [detSnap, pagosSnap, abonosSnap] = await Promise.all([
+      supabase.from('ventas_detalle').select('*').eq('venta_id', ventaId),
+      supabase.from('ventas_pagos_detalle').select('*').eq('venta_id', ventaId),
+      supabase.from('pagos_ventas').select('*').eq('venta_id', ventaId),
+    ])
+    // Nombre del cliente para mostrar en la lista sin abrir el JSON.
+    let clienteNombre: string | null = null
+    if (venta.cliente_id != null) {
+      const { data: cli } = await supabase.from('clientes').select('nombre').eq('id', venta.cliente_id).maybeSingle()
+      clienteNombre = (cli?.nombre as string) ?? null
+    }
+    const snapshot = {
+      encabezado: venta,
+      detalle: detSnap.data ?? [],
+      pagos: pagosSnap.data ?? [],
+      abonos: abonosSnap.data ?? [],
     }
 
     // ----- 0.b Deshacer las devoluciones asociadas (si las hay) -------------
@@ -2156,11 +2185,74 @@ export async function eliminarVentaCompletamente(
       return { error: delEncErr.message }
     }
 
+    // ----- 5. Registrar la factura eliminada (trazabilidad) ----------------
+    // Best-effort: si la tabla 059 no existe todavia, no rompe la eliminacion.
+    const { error: elimErr } = await supabase.from('ventas_eliminadas').insert({
+      venta_id: ventaId,
+      numero_factura: venta.numero_factura ?? null,
+      cliente_id: venta.cliente_id ?? null,
+      cliente_nombre: clienteNombre,
+      fecha_venta: venta.fecha_venta ?? null,
+      total_venta: venta.total_venta ?? null,
+      estado_pago: venta.estado_pago ?? null,
+      snapshot,
+      motivo: motivoLimpio,
+      eliminado_at: getHondurasNowISO(),
+      ...stamp,
+    })
+    if (elimErr && !esTablaInexistente(elimErr)) {
+      // La venta ya se borro; solo avisamos que no se guardo el registro.
+      console.warn('[eliminarVentaCompletamente] no se registro en ventas_eliminadas:', elimErr.message)
+    }
+
     return { error: null }
   } catch (err) {
     console.error('[eliminarVentaCompletamente] Exception:', err)
     return { error: 'No se pudo eliminar la venta' }
   }
+}
+
+// ==================== FACTURAS ELIMINADAS (trazabilidad) ====================
+
+/** Una factura eliminada (registro de auditoria). */
+export interface VentaEliminada {
+  id: number
+  venta_id: number | null
+  numero_factura: string | null
+  cliente_nombre: string | null
+  fecha_venta: string | null
+  total_venta: number | null
+  estado_pago: string | null
+  motivo: string
+  usuario: string | null
+  eliminado_at: string
+  snapshot: {
+    encabezado?: Record<string, unknown>
+    detalle?: Record<string, unknown>[]
+    pagos?: Record<string, unknown>[]
+    abonos?: Record<string, unknown>[]
+  }
+}
+
+/** Lista las facturas eliminadas del tenant (más reciente arriba). */
+export async function getVentasEliminadas(
+  opts: { limit?: number } = {}
+): Promise<{ data: VentaEliminada[]; error: string | null }> {
+  if (!isSupabaseConfigured()) return { data: [], error: null }
+  const supabase = createClient()
+  if (!supabase) return { data: [], error: 'Cliente no disponible' }
+
+  const { data, error } = await supabase
+    .from('ventas_eliminadas')
+    .select('id, venta_id, numero_factura, cliente_nombre, fecha_venta, total_venta, estado_pago, motivo, usuario, eliminado_at, snapshot')
+    .order('eliminado_at', { ascending: false })
+    .limit(opts.limit ?? 300)
+  if (error) {
+    // Tabla 059 pendiente: degradamos a lista vacia (sin error).
+    if (esTablaInexistente(error)) return { data: [], error: null }
+    return { data: [], error: error.message }
+  }
+  return { data: (data || []) as VentaEliminada[], error: null }
 }
 
 // ==================== EDITAR VENTA ====================

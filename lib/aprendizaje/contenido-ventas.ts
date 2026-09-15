@@ -171,7 +171,8 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Registra abonos (parciales o totales) a facturas con saldo pendiente: el botón verde de pago aparece directo en la fila. El efectivo entra a la caja chica y los pagos por banco a la cuenta que elijas.",
       "Pestaña 'Detalle por Producto': todas las líneas vendidas con costo y utilidad, exportable a Excel.",
       "Importar ventas desde Excel: sube una plantilla (una línea por producto), el sistema agrupa por factura y crea cada venta con sus mismas transacciones (inventario, caja/banco).",
-      "Elimina una venta por completo: devuelve el stock, borra los movimientos de caja/banco asociados y elimina la factura (pide confirmación). Si la factura tiene devoluciones, también se anulan automáticamente (se revierte su stock y su reembolso), avisándote antes.",
+      "Elimina una venta por completo: devuelve el stock, borra los movimientos de caja/banco asociados y elimina la factura. Pide un MOTIVO obligatorio y guarda una copia de la factura (con su detalle) en la pestaña 'Eliminadas' para trazabilidad. Si la factura tiene devoluciones, también se anulan automáticamente (se revierte su stock y su reembolso), avisándote antes.",
+      "Pestaña 'Eliminadas': lista las facturas borradas con su número, cliente, total, quién y cuándo las eliminó y el motivo; puedes abrir el detalle (productos) de cada una.",
       "Edita una venta (botón lápiz): cambia cantidades, productos, cliente o método de pago; el cambio se propaga a inventario, caja chica, cuentas bancarias y cuentas por cobrar, conservando el número de factura.",
     ],
     queNoHace: [
@@ -215,8 +216,17 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
         titulo: "Eliminar una venta errónea",
         pasos: [
           "Ubica la factura en la lista y presiona el ícono de basurero.",
-          "Lee el resumen de lo que se revertirá (stock, caja, banco) y confirma.",
+          "Lee el resumen de lo que se revertirá (stock, caja, banco), escribe el MOTIVO (obligatorio) y confirma.",
+          "La factura queda registrada en la pestaña 'Eliminadas' (con su detalle y motivo) por si necesitas consultarla después.",
           "Verifica en Inventario y Caja/Banco que los saldos volvieron a su estado anterior.",
+        ],
+      },
+      {
+        titulo: "Consultar una factura eliminada",
+        pasos: [
+          "Abre la pestaña 'Eliminadas' en el Historial de Ventas.",
+          "Busca la factura por su número o cliente; verás quién la eliminó, cuándo y el motivo.",
+          "Presiona el ojo para ver su detalle (productos y montos) tal como estaba al eliminarla.",
         ],
       },
       {
@@ -253,6 +263,11 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
         pregunta: "No veo facturas viejas en la lista, ¿dónde están?",
         respuesta:
           "El listado carga las 100 facturas más recientes; usa el botón 'Cargar más facturas' al final de la tabla para traer las anteriores, o el buscador para ubicar una específica.",
+      },
+      {
+        pregunta: "Falta un número de factura (ej. salta del 1827 al 1829), ¿es un error?",
+        respuesta:
+          "No. Los números de factura no se reutilizan: si una factura se elimina (o su creación se interrumpe), su número queda 'usado' y la numeración continúa, dejando un salto. Es normal y evita duplicados. Si esa factura se eliminó, la encuentras en la pestaña 'Eliminadas' con su motivo.",
       },
       {
         pregunta: "Registré un abono y no bajó el saldo, ¿qué reviso?",

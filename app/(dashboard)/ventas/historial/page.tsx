@@ -35,6 +35,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
 import {
@@ -62,11 +63,13 @@ import {
   eliminarVentaCompletamente,
   getRazonSocialForPdf,
   getDetalleAnalitico,
+  getVentasEliminadas,
   type VentaEncabezado,
   type VentaDetalle,
   type PagoVenta,
   type PagoVentaDetalle,
   type VentaDetalleAnalitico,
+  type VentaEliminada,
 } from "@/lib/services/ventas"
 import { getMetodosPagoPorVenta, getComisionesPorVenta, getCuentasDestinoPorVenta, type ComisionVenta } from "@/lib/services/ventas-analytics"
 import { contarDevolucionesDeVenta } from "@/lib/services/devoluciones"
@@ -127,6 +130,12 @@ export default function HistorialVentasPage() {
   const [filtroAlmacenId, setFiltroAlmacenId] = React.useState("")
   const [analiticoLoaded, setAnaliticoLoaded] = React.useState(false)
 
+  // --- Facturas eliminadas (pestaña de trazabilidad) ---
+  const [eliminadas, setEliminadas] = React.useState<VentaEliminada[]>([])
+  const [loadingEliminadas, setLoadingEliminadas] = React.useState(false)
+  const [eliminadasLoaded, setEliminadasLoaded] = React.useState(false)
+  const [eliminadaDetalle, setEliminadaDetalle] = React.useState<VentaEliminada | null>(null)
+
   // --- Factura detail dialog ---
   const [selectedVenta, setSelectedVenta] = React.useState<VentaEncabezado | null>(null)
   const [detalles, setDetalles] = React.useState<VentaDetalle[]>([])
@@ -155,6 +164,8 @@ export default function HistorialVentasPage() {
   const [ventaAEliminar, setVentaAEliminar] = React.useState<VentaEncabezado | null>(null)
   // Nº de devoluciones de la venta a eliminar (para avisar que se anularán).
   const [devsDeVentaAEliminar, setDevsDeVentaAEliminar] = React.useState(0)
+  // Motivo de la eliminación (obligatorio; se guarda en ventas_eliminadas).
+  const [motivoEliminar, setMotivoEliminar] = React.useState("")
   const [deletingVenta, setDeletingVenta] = React.useState(false)
 
   React.useEffect(() => {
@@ -236,9 +247,21 @@ export default function HistorialVentasPage() {
     }
   }
 
+  const loadEliminadas = React.useCallback(async () => {
+    setLoadingEliminadas(true)
+    const { data, error } = await getVentasEliminadas()
+    if (error) toast({ title: "Error", description: error, variant: "destructive" })
+    setEliminadas(data)
+    setEliminadasLoaded(true)
+    setLoadingEliminadas(false)
+  }, [toast])
+
   function handleTabChange(value: string) {
     if (value === "detalle" && !analiticoLoaded) {
       loadAnalitico()
+    }
+    if (value === "eliminadas" && !eliminadasLoaded) {
+      loadEliminadas()
     }
   }
 
@@ -432,21 +455,29 @@ export default function HistorialVentasPage() {
 
   async function handleEliminarVenta() {
     if (!ventaAEliminar?.id) return
+    if (!motivoEliminar.trim()) {
+      toast({ title: "Falta el motivo", description: "Indica por qué eliminas esta factura.", variant: "destructive" })
+      return
+    }
+    const idEliminada = ventaAEliminar.id
     setDeletingVenta(true)
     try {
-      const { error } = await eliminarVentaCompletamente(ventaAEliminar.id)
+      const { error } = await eliminarVentaCompletamente(idEliminada, motivoEliminar.trim())
       if (error) {
         toast({ title: "Error", description: error, variant: "destructive" })
         return
       }
       toast({
         title: "Venta eliminada",
-        description: "Venta y movimientos asociados eliminados correctamente",
+        description: "Venta y movimientos asociados eliminados. Queda registrada en 'Eliminadas'.",
       })
       // Actualizacion optimista de la tabla: removemos la fila al instante
       // y disparamos un refetch para resincronizar metodos de pago/saldos.
-      setVentas(prev => prev.filter(v => v.id !== ventaAEliminar.id))
+      setVentas(prev => prev.filter(v => v.id !== idEliminada))
       setVentaAEliminar(null)
+      setMotivoEliminar("")
+      // La lista de eliminadas quedó desactualizada: recárgala si ya se abrió.
+      if (eliminadasLoaded) loadEliminadas()
       loadData()
     } catch {
       toast({ title: "Error", description: "No se pudo eliminar la venta", variant: "destructive" })
@@ -459,6 +490,7 @@ export default function HistorialVentasPage() {
   // se anularán junto con la venta.
   React.useEffect(() => {
     if (ventaAEliminar?.id == null) { setDevsDeVentaAEliminar(0); return }
+    setMotivoEliminar("") // limpia el motivo al abrir el diálogo para otra factura
     let cancel = false
     contarDevolucionesDeVenta(ventaAEliminar.id).then(({ count }) => {
       if (!cancel) setDevsDeVentaAEliminar(count)
@@ -837,6 +869,12 @@ export default function HistorialVentasPage() {
             className="rounded-lg px-5 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-stone-900 text-stone-500"
           >
             Detalle por Producto
+          </TabsTrigger>
+          <TabsTrigger
+            value="eliminadas"
+            className="rounded-lg px-5 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-stone-900 text-stone-500"
+          >
+            Eliminadas
           </TabsTrigger>
         </TabsList>
 
@@ -1342,7 +1380,113 @@ export default function HistorialVentasPage() {
           </Card>
 
         </TabsContent>
+
+        {/* ── Tab 3: Facturas eliminadas (trazabilidad) ── */}
+        <TabsContent value="eliminadas" className="mt-4 space-y-4">
+          <Card className="rounded-2xl shadow-sm border border-stone-200">
+            <CardContent className="p-0 overflow-x-auto">
+              {loadingEliminadas ? (
+                <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-stone-400" /></div>
+              ) : eliminadas.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground text-sm">
+                  No hay facturas eliminadas registradas.
+                  <div className="text-xs mt-1 text-stone-400">Las facturas que elimines aquí quedarán guardadas con su detalle y motivo.</div>
+                </div>
+              ) : (
+                <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                  <TableHeader sticky>
+                    <TableRow className="bg-stone-50 border-b border-stone-200">
+                      <TableHead className="font-semibold text-stone-700 whitespace-nowrap">N° Factura</TableHead>
+                      <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Cliente</TableHead>
+                      <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">Total</TableHead>
+                      <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Fecha factura</TableHead>
+                      <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Eliminada</TableHead>
+                      <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Por</TableHead>
+                      <TableHead className="font-semibold text-stone-700 whitespace-nowrap">Motivo</TableHead>
+                      <TableHead className="font-semibold text-stone-700 text-right whitespace-nowrap">Detalle</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {eliminadas.map((e) => (
+                      <TableRow key={e.id} className="hover:bg-stone-50/50">
+                        <TableCell className="font-mono font-medium whitespace-nowrap">{e.numero_factura || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap">{e.cliente_nombre || "—"}</TableCell>
+                        <TableCell className="text-right font-medium whitespace-nowrap">{formatCurrency(e.total_venta ?? 0)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-muted-foreground">{(e.fecha_venta || "").slice(0, 10) || "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{(e.eliminado_at || "").slice(0, 10)} {(e.eliminado_at || "").slice(11, 16)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">{e.usuario || "—"}</TableCell>
+                        <TableCell className="max-w-[240px] truncate text-sm" title={e.motivo}>{e.motivo}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="icon" onClick={() => setEliminadaDetalle(e)} title="Ver detalle de la factura eliminada">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      {/* Detalle de una factura eliminada (snapshot) */}
+      <Dialog open={eliminadaDetalle !== null} onOpenChange={(o) => { if (!o) setEliminadaDetalle(null) }}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Factura eliminada · {eliminadaDetalle?.numero_factura || "—"}</DialogTitle>
+            <DialogDescription>
+              {eliminadaDetalle?.cliente_nombre || "Sin cliente"} · eliminada el {(eliminadaDetalle?.eliminado_at || "").slice(0, 10)} por {eliminadaDetalle?.usuario || "—"}
+            </DialogDescription>
+          </DialogHeader>
+          {eliminadaDetalle && (
+            <div className="space-y-3 text-sm">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs text-amber-700 font-medium">Motivo</p>
+                <p className="text-amber-900">{eliminadaDetalle.motivo}</p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div><p className="text-[11px] text-stone-500">Total</p><p className="font-semibold">{formatCurrency(eliminadaDetalle.total_venta ?? 0)}</p></div>
+                <div><p className="text-[11px] text-stone-500">Estado pago</p><p className="font-medium">{eliminadaDetalle.estado_pago || "—"}</p></div>
+                <div><p className="text-[11px] text-stone-500">Fecha factura</p><p className="font-medium">{(eliminadaDetalle.fecha_venta || "").slice(0, 10) || "—"}</p></div>
+                <div><p className="text-[11px] text-stone-500">Venta id</p><p className="font-mono text-xs">{eliminadaDetalle.venta_id ?? "—"}</p></div>
+              </div>
+              {/* Productos */}
+              <div>
+                <p className="text-xs font-medium text-stone-600 mb-1">Productos ({eliminadaDetalle.snapshot?.detalle?.length ?? 0})</p>
+                {(eliminadaDetalle.snapshot?.detalle?.length ?? 0) === 0 ? (
+                  <p className="text-xs text-stone-400">Sin líneas registradas.</p>
+                ) : (
+                  <div className="rounded-lg border border-stone-200 overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Producto</TableHead>
+                          <TableHead className="text-right">Cantidad</TableHead>
+                          <TableHead className="text-right">Precio</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(eliminadaDetalle.snapshot?.detalle ?? []).map((d, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="text-sm">{String((d as Record<string, unknown>).producto_nombre ?? (d as Record<string, unknown>).producto_id ?? "—")}</TableCell>
+                            <TableCell className="text-right tabular-nums">{String((d as Record<string, unknown>).cantidad ?? "")}</TableCell>
+                            <TableCell className="text-right tabular-nums">{formatCurrency(Number((d as Record<string, unknown>).precio_unitario ?? 0))}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEliminadaDetalle(null)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Detalle Dialog */}
       <Dialog open={showDetalleDialog} onOpenChange={setShowDetalleDialog}>
@@ -1584,6 +1728,21 @@ export default function HistorialVentasPage() {
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          {/* Motivo obligatorio: se guarda en el registro de facturas eliminadas. */}
+          <div className="grid gap-1.5">
+            <Label htmlFor="motivo-eliminar" className="text-xs">Motivo de la eliminación <span className="text-red-600">*</span></Label>
+            <Input
+              id="motivo-eliminar"
+              value={motivoEliminar}
+              onChange={(e) => setMotivoEliminar(e.target.value)}
+              placeholder="Ej: factura duplicada, error de digitación…"
+              disabled={deletingVenta}
+              autoFocus
+            />
+            <p className="text-[11px] text-stone-500">La factura eliminada queda registrada (con su detalle) en la pestaña &quot;Eliminadas&quot; para trazabilidad.</p>
+          </div>
+
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deletingVenta}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
@@ -1594,7 +1753,7 @@ export default function HistorialVentasPage() {
                 e.preventDefault()
                 handleEliminarVenta()
               }}
-              disabled={deletingVenta}
+              disabled={deletingVenta || !motivoEliminar.trim()}
               className="bg-red-600 hover:bg-red-700 focus-visible:ring-red-600"
             >
               {deletingVenta ? (
