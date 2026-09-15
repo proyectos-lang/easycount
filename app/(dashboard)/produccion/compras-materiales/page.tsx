@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Truck, Plus, Trash2, Loader2, PackageCheck, CheckCircle2 } from "lucide-react"
+import { Truck, Plus, Trash2, Loader2, PackageCheck, CheckCircle2, Coins } from "lucide-react"
 // (Trash2 usado en las líneas de material)
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -27,7 +27,8 @@ import { formatCurrency } from "@/lib/utils/format"
 import { getMateriales, type Material } from "@/lib/services/produccion-materiales"
 import {
   getComprasMaterial, createCompraMaterial, recibirCompraMaterial,
-  costearLineasMaterial, type CompraMaterial,
+  costearLineasMaterial, registrarPagoMaterial, getPagosCompraMaterial,
+  type CompraMaterial, type FormaPagoMaterial, type PagoCompraMaterial,
 } from "@/lib/services/produccion-compras"
 import {
   getProveedores, getAlmacenes, getLocalizaciones,
@@ -54,8 +55,18 @@ export default function ComprasMaterialesPage() {
   const [costosImp, setCostosImp] = React.useState("")
   const [impuestos, setImpuestos] = React.useState("")
   const [otros, setOtros] = React.useState("")
+  const [formaPago, setFormaPago] = React.useState<FormaPagoMaterial>("Contado")
+  const [fechaVenc, setFechaVenc] = React.useState("")
   const [lineas, setLineas] = React.useState<LineaForm[]>([{ _id: nid(), material_id: "", cantidad: "", costo: "" }])
   const [saving, setSaving] = React.useState(false)
+
+  // Registrar abono (pago de una compra a credito)
+  const [pagarCompra, setPagarCompra] = React.useState<CompraMaterial | null>(null)
+  const [pagoMonto, setPagoMonto] = React.useState("")
+  const [pagoMetodo, setPagoMetodo] = React.useState("Efectivo")
+  const [pagoNota, setPagoNota] = React.useState("")
+  const [pagosPrevios, setPagosPrevios] = React.useState<PagoCompraMaterial[]>([])
+  const [pagando, setPagando] = React.useState(false)
 
   // Recepción
   const [recibirCompra, setRecibirCompra] = React.useState<CompraMaterial | null>(null)
@@ -79,6 +90,7 @@ export default function ComprasMaterialesPage() {
 
   function abrirNuevo() {
     setProveedorId(""); setMoneda("LPS"); setTasa("1"); setCostosImp(""); setImpuestos(""); setOtros("")
+    setFormaPago("Contado"); setFechaVenc("")
     setLineas([{ _id: nid(), material_id: "", cantidad: "", costo: "" }])
     setNuevoOpen(true)
   }
@@ -108,6 +120,8 @@ export default function ComprasMaterialesPage() {
       costos_importacion: Number(costosImp) || 0,
       impuestos_compra: Number(impuestos) || 0,
       otros_costos: Number(otros) || 0,
+      forma_pago: formaPago,
+      fecha_vencimiento: formaPago === "Credito" ? (fechaVenc || null) : null,
       lineas: lineasValidas,
     })
     setSaving(false)
@@ -135,6 +149,40 @@ export default function ComprasMaterialesPage() {
     }
     toast({ title: "Compra recibida", description: "El stock y el costo de los materiales se actualizaron." })
     setRecibirCompra(null); setRecAlmacen(""); setRecLoc("")
+    cargar()
+  }
+
+  async function abrirPago(c: CompraMaterial) {
+    setPagarCompra(c)
+    setPagoMonto(String(c.saldo > 0 ? c.saldo : ""))
+    setPagoMetodo("Efectivo")
+    setPagoNota("")
+    setPagosPrevios([])
+    const r = await getPagosCompraMaterial(c.id)
+    setPagosPrevios(r.data)
+  }
+
+  async function ejecutarPago() {
+    if (!pagarCompra) return
+    const monto = Number(pagoMonto)
+    if (!(monto > 0)) {
+      toast({ title: "Monto inválido", description: "Ingresa un monto mayor a 0.", variant: "destructive" })
+      return
+    }
+    setPagando(true)
+    const res = await registrarPagoMaterial({
+      compra_id: pagarCompra.id,
+      monto,
+      metodo: pagoMetodo,
+      nota: pagoNota.trim() || null,
+    })
+    setPagando(false)
+    if (!res.success) {
+      toast({ title: "Error", description: res.error || "No se pudo registrar el pago", variant: "destructive" })
+      return
+    }
+    toast({ title: "Pago registrado", description: `Abono de ${formatCurrency(monto)} aplicado.` })
+    setPagarCompra(null)
     cargar()
   }
 
@@ -174,7 +222,8 @@ export default function ComprasMaterialesPage() {
                     <TableHead>Moneda</TableHead>
                     <TableHead className="text-right">Total (L)</TableHead>
                     <TableHead>Estado</TableHead>
-                    <TableHead className="w-28"></TableHead>
+                    <TableHead>Pago</TableHead>
+                    <TableHead className="w-40"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -192,11 +241,37 @@ export default function ComprasMaterialesPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {c.estado !== "Recibida" && (
-                          <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => { setRecibirCompra(c); setRecAlmacen(""); setRecLoc("") }}>
-                            <PackageCheck className="h-3.5 w-3.5" /> Recibir
-                          </Button>
-                        )}
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant="outline" className={c.forma_pago === "Credito" ? "border-sky-200 bg-sky-50 text-sky-700" : "border-stone-200 bg-stone-50 text-stone-600"}>
+                              {c.forma_pago}
+                            </Badge>
+                            {c.estado_pago === "Pagado" ? (
+                              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">Pagado</Badge>
+                            ) : c.estado_pago === "Parcial" ? (
+                              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">Parcial</Badge>
+                            ) : (
+                              <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-700">Pendiente</Badge>
+                            )}
+                          </div>
+                          {c.estado_pago !== "Pagado" && c.saldo > 0 && (
+                            <span className="text-[11px] text-stone-500">Saldo: {formatCurrency(c.saldo)}{c.fecha_vencimiento ? ` · vence ${c.fecha_vencimiento}` : ""}</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          {c.estado !== "Recibida" && (
+                            <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => { setRecibirCompra(c); setRecAlmacen(""); setRecLoc("") }}>
+                              <PackageCheck className="h-3.5 w-3.5" /> Recibir
+                            </Button>
+                          )}
+                          {c.estado_pago !== "Pagado" && c.saldo > 0 && (
+                            <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => abrirPago(c)}>
+                              <Coins className="h-3.5 w-3.5" /> Pagar
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -277,10 +352,35 @@ export default function ComprasMaterialesPage() {
               <div className="grid gap-1"><Label className="text-[11px] text-stone-500">Otros</Label><Input type="number" min="0" step="0.01" value={otros} onChange={(e) => setOtros(e.target.value)} className="h-9" placeholder="0.00" /></div>
             </div>
 
+            {/* Forma de pago */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label className="text-xs">Forma de pago</Label>
+                <Select value={formaPago} onValueChange={(v) => setFormaPago(v as FormaPagoMaterial)}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Contado">Contado (pagada)</SelectItem>
+                    <SelectItem value="Credito">Crédito (queda saldo)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {formaPago === "Credito" && (
+                <div className="grid gap-1.5">
+                  <Label className="text-xs">Vence</Label>
+                  <Input type="date" value={fechaVenc} onChange={(e) => setFechaVenc(e.target.value)} className="h-9" />
+                </div>
+              )}
+            </div>
+
             <div className="rounded-lg bg-stone-50 border border-stone-200 p-3 text-sm flex items-center justify-between">
               <span className="text-stone-500">Total de la compra (L)</span>
               <span className="font-bold text-stone-800">{formatCurrency(totalCompra)}</span>
             </div>
+            {formaPago === "Contado" ? (
+              <p className="text-[11px] text-stone-500">Se registrará como <b>pagada</b> al crearla.</p>
+            ) : (
+              <p className="text-[11px] text-stone-500">Quedará con saldo <b>por pagar</b>; podrás registrar abonos desde la lista.</p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setNuevoOpen(false)} disabled={saving}>Cancelar</Button>
@@ -329,6 +429,64 @@ export default function ComprasMaterialesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Registrar abono (pago de compra a credito) */}
+      <Dialog open={pagarCompra != null} onOpenChange={(o) => { if (!o && !pagando) setPagarCompra(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Registrar pago</DialogTitle>
+            <DialogDescription>
+              {pagarCompra ? `${pagarCompra.proveedor_nombre || "Sin proveedor"} · Total ${formatCurrency(pagarCompra.total_local)} · Saldo ${formatCurrency(pagarCompra.saldo)}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label className="text-xs">Monto (L)</Label>
+                <Input type="number" min="0" step="0.01" value={pagoMonto} onChange={(e) => setPagoMonto(e.target.value)} className="h-9" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label className="text-xs">Método</Label>
+                <Select value={pagoMetodo} onValueChange={setPagoMetodo}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Efectivo">Efectivo</SelectItem>
+                    <SelectItem value="Banco">Banco</SelectItem>
+                    <SelectItem value="Transferencia">Transferencia</SelectItem>
+                    <SelectItem value="Cheque">Cheque</SelectItem>
+                    <SelectItem value="Otro">Otro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label className="text-xs">Nota (opcional)</Label>
+              <Input value={pagoNota} onChange={(e) => setPagoNota(e.target.value)} className="h-9" placeholder="Referencia, # de cheque, etc." />
+            </div>
+            <p className="text-[11px] text-stone-500">El pago se registra como control de saldo; no mueve caja ni banco automáticamente.</p>
+            {pagosPrevios.length > 0 && (
+              <div className="rounded-lg border border-stone-200 bg-stone-50 p-2">
+                <p className="text-[11px] font-medium text-stone-600 mb-1">Abonos registrados</p>
+                <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                  {pagosPrevios.map((p) => (
+                    <div key={p.id} className="flex justify-between text-[11px] text-stone-600">
+                      <span>{p.fecha_pago ? p.fecha_pago.split("T")[0] : ""}{p.metodo ? ` · ${p.metodo}` : ""}</span>
+                      <span className="font-medium">{formatCurrency(p.monto)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPagarCompra(null)} disabled={pagando}>Cancelar</Button>
+            <Button onClick={ejecutarPago} disabled={pagando || !(Number(pagoMonto) > 0)}>
+              {pagando && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Registrar pago
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -13,20 +13,32 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
       "El catálogo de materia prima para fabricar: nombre, unidad de medida, costo promedio y stock. Es la base del módulo de Producción.",
     queHace: [
       "Crea y edita materiales con su unidad de medida (kg, m, unidad, caja… texto libre con sugerencias).",
-      "Muestra el costo promedio y el stock de cada material, que se actualizan con las compras de material.",
+      "Al crear un material puedes ingresar su CARGA INICIAL: stock inicial y costo promedio. Si pones stock, eliges almacén y localización y se registra un movimiento 'Carga Inicial' en el kardex del material.",
+      "Carga masiva por Excel: descarga la plantilla (Nombre, Código, Unidad, Stock Inicial, Costo Promedio), llénala y súbela para crear muchos materiales de una vez (con su stock inicial).",
+      "Muestra el costo promedio y el stock de cada material, que luego se actualizan con las compras de material.",
       "Es un catálogo SEPARADO de los productos que vendes: la materia prima no aparece en el punto de venta.",
     ],
     queNoHace: [
-      "No fija el costo ni el stock a mano: el costo promedio y las existencias las gobierna la Compra de Materiales (y más adelante el consumo en producción).",
+      "Al EDITAR un material no se cambia el stock ni el costo a mano: eso se mueve con la carga inicial (al crear), las compras o el consumo en producción.",
       "No se vende: los materiales no aparecen en Nueva Venta ni en el catálogo de productos.",
     ],
     operaciones: [
       {
-        titulo: "Crear un material",
+        titulo: "Crear un material (con carga inicial opcional)",
         pasos: [
           "Abre Producción → Materiales y presiona 'Nuevo material'.",
-          "Escribe el nombre (ej. 'Tela algodón'), un código opcional y la unidad de medida (elige una sugerencia o escribe la tuya).",
-          "Guarda. El material arranca con stock y costo en 0; se cargan al comprarlo.",
+          "Escribe el nombre (ej. 'Tela algodón'), un código opcional y la unidad de medida.",
+          "Si ya tienes existencias, en 'Carga inicial' pon el stock inicial y el costo promedio, y elige almacén y localización.",
+          "Guarda. Si dejas el stock en 0, el material se crea sin existencias (las cargas después con una compra).",
+        ],
+      },
+      {
+        titulo: "Cargar muchos materiales por Excel",
+        pasos: [
+          "Presiona 'Plantilla' para descargar el Excel de ejemplo.",
+          "Llena una fila por material: Nombre, Código, Unidad, Stock Inicial y Costo Promedio.",
+          "Presiona 'Importar Excel', sube el archivo. Si hay materiales con stock inicial, elige el almacén y la localización (aplican a toda la carga).",
+          "Confirma: se crean los materiales y se registra la carga inicial de los que traigan stock.",
         ],
       },
     ],
@@ -39,10 +51,15 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
       {
         pregunta: "¿Cómo cargo el stock de un material?",
         respuesta:
-          "Con Producción → Compra de Materiales: registras la compra y la recibes; ahí entra el stock y se calcula el costo promedio del material.",
+          "Dos formas: (1) al CREARLO, en 'Carga inicial' pones stock y costo y eliges almacén/localización; o por Excel con la columna Stock Inicial. (2) Después, con Producción → Compra de Materiales: registras la compra y la recibes.",
+      },
+      {
+        pregunta: "En la importación por Excel, ¿por qué me pide almacén y localización?",
+        respuesta:
+          "Solo cuando hay materiales con Stock Inicial mayor a 0: la carga inicial debe entrar a una ubicación para que el kardex y el stock por localización queden bien. Los materiales con stock 0 se crean sin pedir ubicación.",
       },
     ],
-    keywords: ["material", "materia prima", "insumo", "produccion", "fabricacion", "unidad de medida", "kg", "metro"],
+    keywords: ["material", "materia prima", "insumo", "produccion", "fabricacion", "unidad de medida", "kg", "metro", "carga inicial", "stock inicial", "costo promedio", "importar", "excel", "plantilla", "carga masiva"],
   },
   {
     modulo: "Compra de Materiales",
@@ -52,11 +69,12 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
     queHace: [
       "Registra una compra de material: proveedor, moneda (LPS/USD con tasa), líneas de material con cantidad y costo, y costos extra (importación, impuestos, otros).",
       "Prorratea los costos extra entre las líneas en proporción a su valor y calcula el costo final por material.",
+      "Forma de pago: 'Contado' deja la compra como pagada; 'Crédito' deja saldo por pagar (con fecha de vencimiento opcional). Desde la lista registras abonos y el sistema lleva el saldo (Pendiente/Parcial/Pagado).",
       "Al RECIBIR la compra, suma el stock del material en el almacén/localización elegidos y recalcula su costo promedio ponderado.",
     ],
     queNoHace: [
-      "No mueve inventario hasta que recibes la compra: una compra 'Pendiente' aún no cargó stock.",
-      "No registra el pago al proveedor (eso es Finanzas → Gastos).",
+      "No mueve inventario hasta que recibes la compra: una compra 'Pendiente' aún no cargó stock. Crear y recibir son DOS pasos.",
+      "Los abonos son control de saldo: NO descuentan de caja ni banco automáticamente (eso se maneja aparte en Finanzas).",
       "No permite recibir dos veces la misma compra (evita duplicar stock).",
     ],
     operaciones: [
@@ -66,8 +84,18 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
           "Abre Producción → Compra de Materiales y presiona 'Nueva compra'.",
           "Elige el proveedor (opcional) y la moneda; en USD indica la tasa de cambio.",
           "Agrega una línea por material con su cantidad y costo unitario; ingresa los costos extra si aplica (se prorratean solos).",
-          "Guarda: la compra queda 'Pendiente'. Verás el total con el prorrateo aplicado.",
+          "Elige la forma de pago: Contado (queda pagada) o Crédito (indica el vencimiento; quedará saldo).",
+          "Guarda: la compra queda 'Pendiente' de recepción. Verás el total con el prorrateo aplicado.",
           "Presiona 'Recibir', elige almacén y localización y confirma: el material entra al inventario y se actualiza su costo promedio.",
+        ],
+      },
+      {
+        titulo: "Registrar el pago de una compra a crédito",
+        pasos: [
+          "En la lista, la columna 'Pago' muestra la forma de pago, el estado (Pendiente/Parcial/Pagado) y el saldo.",
+          "En una compra con saldo, presiona 'Pagar'.",
+          "Ingresa el monto (puede ser parcial), el método (informativo) y una nota opcional; confirma.",
+          "El saldo baja y el estado cambia a Parcial o Pagado. Puedes ver los abonos registrados en el mismo diálogo.",
         ],
       },
     ],
@@ -78,12 +106,17 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
           "Porque los costos extra (importación, impuestos, otros) se reparten entre los materiales según su valor. El costo final que entra al inventario incluye esa parte prorrateada.",
       },
       {
-        pregunta: "Recibí la compra y no cambió el stock, ¿qué reviso?",
+        pregunta: "Creé la compra pero no aparece como recibida / no cargó el stock.",
         respuesta:
-          "Verifica que la compra tenga líneas con cantidad mayor a 0 y que hayas elegido almacén y localización al recibir. El stock se ve en Producción → Inventario de Materiales.",
+          "Crear y recibir son dos pasos. Al crearla queda 'Pendiente' y todavía NO carga inventario. Para eso presiona el botón 'Recibir' en su fila, elige almacén y localización y confirma. Ahí entra el stock y se actualiza el costo promedio.",
+      },
+      {
+        pregunta: "Marqué la compra a crédito, ¿dónde registro los pagos?",
+        respuesta:
+          "En la lista de compras, en la fila de esa compra, presiona 'Pagar' y registra el abono (total o parcial). El sistema lleva el saldo y el estado. Nota: es control de saldo, no mueve caja/banco automáticamente.",
       },
     ],
-    keywords: ["compra material", "proveedor", "recepcion", "prorrateo", "importacion", "costo material", "produccion"],
+    keywords: ["compra material", "proveedor", "recepcion", "prorrateo", "importacion", "costo material", "produccion", "contado", "credito", "pago", "abono", "saldo", "recibir"],
   },
   {
     modulo: "Inventario de Materiales",

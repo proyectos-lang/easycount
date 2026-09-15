@@ -17,6 +17,8 @@ export interface CompraMaterialLineaInput {
   costo_unitario_moneda_origen: number
 }
 
+export type FormaPagoMaterial = "Contado" | "Credito"
+
 export interface CompraMaterialInput {
   proveedor_id: number | null
   moneda: "LPS" | "USD"
@@ -25,6 +27,10 @@ export interface CompraMaterialInput {
   impuestos_compra: number
   otros_costos: number
   fecha_tentativa?: string | null
+  /** 'Contado' liquida la compra al crearla; 'Credito' deja saldo por pagar. */
+  forma_pago?: FormaPagoMaterial
+  /** Solo para credito: fecha de vencimiento (YYYY-MM-DD). */
+  fecha_vencimiento?: string | null
   lineas: CompraMaterialLineaInput[]
 }
 
@@ -38,6 +44,25 @@ export interface CompraMaterial {
   estado: string
   fecha_orden: string | null
   created_at: string
+  /** 'Contado' | 'Credito'. Si la BD no tiene la columna (script 053), 'Contado'. */
+  forma_pago: FormaPagoMaterial
+  fecha_vencimiento: string | null
+  /** Abonado hasta ahora (gestion de saldo, script 053). */
+  monto_pagado: number
+  /** 'Pendiente' | 'Parcial' | 'Pagado'. */
+  estado_pago: string
+  /** total_local - monto_pagado (>= 0). */
+  saldo: number
+}
+
+/** Un abono/pago registrado contra una compra de material (script 053). */
+export interface PagoCompraMaterial {
+  id: number
+  compra_id: number
+  monto: number
+  metodo: string | null
+  nota: string | null
+  fecha_pago: string
 }
 
 function isMissingTable(err: { message?: string; code?: string } | null): boolean {
@@ -81,31 +106,68 @@ export function costearLineasMaterial(
   })
 }
 
-export async function getComprasMaterial(): Promise<{ data: CompraMaterial[]; error: string | null }> {
-  if (!isSupabaseConfigured()) return { data: [], error: null }
-  const supabase = createClient()
-  if (!supabase) return { data: [], error: "Cliente no disponible" }
+/** true si el error de PostgREST es por columna inexistente (script 053 no aplicado). */
+function isMissingColumn(err: { message?: string; code?: string } | null): boolean {
+  if (!err) return false
+  const msg = (err.message || "").toLowerCase()
+  return (
+    err.code === "42703" ||
+    /column .* does not exist/.test(msg) ||
+    (msg.includes("could not find") && msg.includes("column"))
+  )
+}
 
-  const { data, error } = await supabase
-    .from("materiales_compras_encabezado")
-    .select("id, proveedor_id, moneda, tasa_cambio, total_local, estado, fecha_orden, created_at, proveedores (nombre)")
-    .order("created_at", { ascending: false })
-  if (error) {
-    if (isMissingTable(error)) return { data: [], error: null }
-    return { data: [], error: error.message }
-  }
-  const rows = (data || []).map((c: Record<string, unknown>) => ({
+function mapCompra(c: Record<string, unknown>): CompraMaterial {
+  const total = Number(c.total_local || 0)
+  const pagado = Number(c.monto_pagado || 0)
+  return {
     id: Number(c.id),
     proveedor_id: c.proveedor_id != null ? Number(c.proveedor_id) : null,
     proveedor_nombre: (c.proveedores as { nombre?: string } | null)?.nombre ?? null,
     moneda: String(c.moneda || "LPS"),
     tasa_cambio: Number(c.tasa_cambio || 1),
-    total_local: Number(c.total_local || 0),
+    total_local: total,
     estado: String(c.estado || "Pendiente"),
     fecha_orden: (c.fecha_orden as string) || null,
     created_at: String(c.created_at || ""),
-  }))
-  return { data: rows, error: null }
+    forma_pago: (c.forma_pago as FormaPagoMaterial) || "Contado",
+    fecha_vencimiento: (c.fecha_vencimiento as string) || null,
+    monto_pagado: pagado,
+    estado_pago: String(c.estado_pago || "Pendiente"),
+    saldo: +Math.max(0, total - pagado).toFixed(2),
+  }
+}
+
+export async function getComprasMaterial(): Promise<{ data: CompraMaterial[]; error: string | null }> {
+  if (!isSupabaseConfigured()) return { data: [], error: null }
+  const supabase = createClient()
+  if (!supabase) return { data: [], error: "Cliente no disponible" }
+
+  const COLS_FULL =
+    "id, proveedor_id, moneda, tasa_cambio, total_local, estado, fecha_orden, created_at, forma_pago, fecha_vencimiento, monto_pagado, estado_pago, proveedores (nombre)"
+  const COLS_BASE =
+    "id, proveedor_id, moneda, tasa_cambio, total_local, estado, fecha_orden, created_at, proveedores (nombre)"
+
+  type QueryRes = { data: Record<string, unknown>[] | null; error: { message?: string; code?: string } | null }
+
+  let res: QueryRes = await supabase
+    .from("materiales_compras_encabezado")
+    .select(COLS_FULL)
+    .order("created_at", { ascending: false })
+
+  // Fallback: si el script 053 aun no se aplico, reintentamos sin las columnas
+  // de pago (la UI mostrara 'Contado' por defecto).
+  if (res.error && isMissingColumn(res.error)) {
+    res = await supabase
+      .from("materiales_compras_encabezado")
+      .select(COLS_BASE)
+      .order("created_at", { ascending: false })
+  }
+  if (res.error) {
+    if (isMissingTable(res.error)) return { data: [], error: null }
+    return { data: [], error: res.error.message ?? "Error" }
+  }
+  return { data: (res.data || []).map((c) => mapCompra(c)), error: null }
 }
 
 /**
@@ -127,23 +189,48 @@ export async function createCompraMaterial(
   const costeadas = costearLineasMaterial(input.lineas, costosAdicionales, input.moneda, input.tasa_cambio)
   const totalLocal = +costeadas.reduce((a, l) => a + l.costo_final_local * l.cantidad, 0).toFixed(2)
 
-  const { data: enc, error: encErr } = await supabase
+  // Pago: 'Contado' liquida la compra al crearla (monto_pagado = total, Pagado);
+  // 'Credito' deja el saldo pendiente por pagar.
+  const formaPago: FormaPagoMaterial = input.forma_pago === "Credito" ? "Credito" : "Contado"
+  const camposPago =
+    formaPago === "Contado"
+      ? { forma_pago: "Contado", monto_pagado: totalLocal, estado_pago: "Pagado", fecha_vencimiento: null }
+      : {
+          forma_pago: "Credito",
+          monto_pagado: 0,
+          estado_pago: "Pendiente",
+          fecha_vencimiento: input.fecha_vencimiento || null,
+        }
+
+  const baseInsert = {
+    proveedor_id: input.proveedor_id,
+    fecha_orden: getHondurasNowISO(),
+    fecha_tentativa: input.fecha_tentativa || null,
+    moneda: input.moneda,
+    tasa_cambio: Number(input.tasa_cambio) || 1,
+    costos_importacion: Number(input.costos_importacion) || 0,
+    impuestos_compra: Number(input.impuestos_compra) || 0,
+    otros_costos: Number(input.otros_costos) || 0,
+    total_local: totalLocal,
+    estado: "Pendiente",
+    ...stamp,
+  }
+
+  let { data: enc, error: encErr } = await supabase
     .from("materiales_compras_encabezado")
-    .insert({
-      proveedor_id: input.proveedor_id,
-      fecha_orden: getHondurasNowISO(),
-      fecha_tentativa: input.fecha_tentativa || null,
-      moneda: input.moneda,
-      tasa_cambio: Number(input.tasa_cambio) || 1,
-      costos_importacion: Number(input.costos_importacion) || 0,
-      impuestos_compra: Number(input.impuestos_compra) || 0,
-      otros_costos: Number(input.otros_costos) || 0,
-      total_local: totalLocal,
-      estado: "Pendiente",
-      ...stamp,
-    })
+    .insert({ ...baseInsert, ...camposPago })
     .select("id")
     .single()
+
+  // Fallback: si el script 053 (columnas de pago) no se aplico, insertamos sin
+  // esos campos para no bloquear la creacion de la compra.
+  if (encErr && isMissingColumn(encErr)) {
+    ;({ data: enc, error: encErr } = await supabase
+      .from("materiales_compras_encabezado")
+      .insert(baseInsert)
+      .select("id")
+      .single())
+  }
   if (encErr || !enc?.id) {
     if (isMissingTable(encErr)) return { data: null, error: MATERIALES_FEATURE_PENDING }
     return { data: null, error: encErr?.message || "No se pudo crear la compra" }
@@ -223,5 +310,102 @@ export async function recibirCompraMaterial(
   }
 
   await supabase.from("materiales_compras_encabezado").update({ estado: "Recibida" }).eq("id", compraId)
+  return { success: true, error: null }
+}
+
+// ==================== PAGOS / SALDO (script 053) ====================
+
+/** Lista los abonos registrados de una compra de material (mas reciente arriba). */
+export async function getPagosCompraMaterial(
+  compraId: number,
+): Promise<{ data: PagoCompraMaterial[]; error: string | null }> {
+  if (!isSupabaseConfigured()) return { data: [], error: null }
+  const supabase = createClient()
+  if (!supabase) return { data: [], error: "Cliente no disponible" }
+
+  const { data, error } = await supabase
+    .from("materiales_compras_pagos")
+    .select("id, compra_id, monto, metodo, nota, fecha_pago")
+    .eq("compra_id", compraId)
+    .order("id", { ascending: false })
+  if (error) {
+    // Tabla no creada aun (script 053): degradamos a lista vacia.
+    if (isMissingTable(error)) return { data: [], error: null }
+    return { data: [], error: error.message }
+  }
+  const rows = (data || []).map((p: Record<string, unknown>) => ({
+    id: Number(p.id),
+    compra_id: Number(p.compra_id),
+    monto: Number(p.monto || 0),
+    metodo: (p.metodo as string) ?? null,
+    nota: (p.nota as string) ?? null,
+    fecha_pago: String(p.fecha_pago || ""),
+  }))
+  return { data: rows, error: null }
+}
+
+/**
+ * Registra un abono (parcial o total) contra una compra de material y recalcula
+ * `monto_pagado` + `estado_pago` del encabezado. NO mueve caja/banco (es un
+ * registro de saldo; decision de negocio). Valida que el abono no exceda el
+ * saldo pendiente.
+ */
+export async function registrarPagoMaterial(input: {
+  compra_id: number
+  monto: number
+  metodo?: string | null
+  nota?: string | null
+}): Promise<{ success: boolean; error: string | null }> {
+  if (!(input.monto > 0)) return { success: false, error: "El monto debe ser mayor a 0" }
+  const supabase = createClient()
+  if (!supabase) return { success: false, error: "Cliente no disponible" }
+  const stamp = await getTenantStamp(supabase)
+  if (!isValidStamp(stamp)) return { success: false, error: SESION_INVALIDA_ERROR }
+
+  // Saldo actual de la compra.
+  const { data: enc, error: encErr } = await supabase
+    .from("materiales_compras_encabezado")
+    .select("id, total_local, monto_pagado")
+    .eq("id", input.compra_id)
+    .maybeSingle()
+  if (encErr) {
+    if (isMissingTable(encErr)) return { success: false, error: MATERIALES_FEATURE_PENDING }
+    if (isMissingColumn(encErr)) {
+      return { success: false, error: "Falta aplicar el script 053 (gestion de pago de materiales)." }
+    }
+    return { success: false, error: encErr.message }
+  }
+  if (!enc) return { success: false, error: "Compra no encontrada" }
+
+  const total = Number(enc.total_local || 0)
+  const pagado = Number(enc.monto_pagado || 0)
+  const saldo = +(total - pagado).toFixed(2)
+  if (input.monto > saldo + 0.005) {
+    return { success: false, error: `El monto excede el saldo pendiente (L ${saldo.toFixed(2)})` }
+  }
+
+  // Registrar el abono.
+  const { error: pagoErr } = await supabase.from("materiales_compras_pagos").insert({
+    compra_id: input.compra_id,
+    monto: +input.monto.toFixed(2),
+    metodo: input.metodo || null,
+    nota: input.nota || null,
+    fecha_pago: getHondurasNowISO(),
+    ...stamp,
+  })
+  if (pagoErr) {
+    if (isMissingTable(pagoErr)) return { success: false, error: "Falta aplicar el script 053 (gestion de pago de materiales)." }
+    return { success: false, error: pagoErr.message }
+  }
+
+  // Recalcular monto_pagado + estado_pago del encabezado.
+  const nuevoPagado = +(pagado + input.monto).toFixed(2)
+  const nuevoEstado = nuevoPagado >= total - 0.005 ? "Pagado" : nuevoPagado > 0 ? "Parcial" : "Pendiente"
+  const { error: updErr } = await supabase
+    .from("materiales_compras_encabezado")
+    .update({ monto_pagado: nuevoPagado, estado_pago: nuevoEstado })
+    .eq("id", input.compra_id)
+  if (updErr) return { success: false, error: updErr.message }
+
   return { success: true, error: null }
 }

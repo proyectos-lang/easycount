@@ -1,5 +1,5 @@
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
-import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from "@/lib/services/tenant-stamp"
+import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR, type TenantStamp } from "@/lib/services/tenant-stamp"
 import { getHondurasNowISO } from "@/lib/utils/honduras-time"
 import type { SupabaseClient, PostgrestError } from "@supabase/supabase-js"
 
@@ -151,12 +151,33 @@ export async function getMateriales(
 }
 
 export async function createMaterial(
-  input: { nombre: string; codigo?: string | null; unidad_medida: string },
+  input: {
+    nombre: string
+    codigo?: string | null
+    unidad_medida: string
+    /**
+     * Carga inicial OPCIONAL. Si `stock_inicial > 0`, se registra un movimiento
+     * 'Carga Inicial' en el kardex (requiere `almacen_id` + `localizacion_id`)
+     * y se suma stock + costo promedio con `matAplicarEntrada`, para que el
+     * stock por localizacion, el kardex y la valoracion queden consistentes.
+     */
+    stock_inicial?: number
+    costo_inicial?: number
+    almacen_id?: number | null
+    localizacion_id?: number | null
+  },
 ): Promise<{ data: { id: number } | null; error: string | null }> {
   const supabase = createClient()
   if (!supabase) return { data: null, error: "Cliente no disponible" }
   const stamp = await getTenantStamp(supabase)
   if (!isValidStamp(stamp)) return { data: null, error: SESION_INVALIDA_ERROR }
+
+  const stockInicial = Number(input.stock_inicial || 0)
+  const costoInicial = Number(input.costo_inicial || 0)
+  // Si hay carga inicial, exigimos ubicacion para que el kardex sea consistente.
+  if (stockInicial > 0 && (!input.almacen_id || !input.localizacion_id)) {
+    return { data: null, error: "Para la carga inicial elige almacén y localización." }
+  }
 
   const { data, error } = await supabase
     .from("materiales")
@@ -172,7 +193,57 @@ export async function createMaterial(
     if (isMissingTable(error)) return { data: null, error: MATERIALES_FEATURE_PENDING }
     return { data: null, error: error.message }
   }
-  return { data: data as { id: number }, error: null }
+  const nuevoId = (data as { id: number }).id
+
+  // Carga inicial: movimiento de kardex + entrada de stock/costo.
+  if (stockInicial > 0) {
+    const carga = await cargarStockInicialMaterial(supabase, {
+      material_id: nuevoId,
+      almacen_id: input.almacen_id!,
+      localizacion_id: input.localizacion_id!,
+      cantidad: stockInicial,
+      costo_unitario: costoInicial,
+      stamp,
+    })
+    if (carga.error) {
+      // El material quedo creado; devolvemos el id pero avisamos del fallo de carga.
+      return { data: { id: nuevoId }, error: `Material creado, pero la carga inicial fallo: ${carga.error}` }
+    }
+  }
+
+  return { data: { id: nuevoId }, error: null }
+}
+
+/**
+ * Registra la carga inicial de stock de un material: escribe el movimiento
+ * 'Carga Inicial' en `materiales_movimientos` y suma stock + costo promedio
+ * ponderado con `matAplicarEntrada`. Mismo patron que `recibirCompraMaterial`.
+ */
+async function cargarStockInicialMaterial(
+  supabase: SupabaseClient,
+  args: {
+    material_id: number
+    almacen_id: number
+    localizacion_id: number
+    cantidad: number
+    costo_unitario: number
+    stamp: TenantStamp
+  },
+): Promise<{ error: string | null }> {
+  const { error: movErr } = await supabase.from("materiales_movimientos").insert({
+    material_id: args.material_id,
+    almacen_id: args.almacen_id,
+    localizacion_id: args.localizacion_id,
+    tipo_movimiento: "Carga Inicial",
+    cantidad: args.cantidad,
+    costo_unitario: args.costo_unitario,
+    referencia_id: null,
+    fecha: getHondurasNowISO(),
+    ...args.stamp,
+  })
+  if (movErr) return { error: movErr.message }
+  const ent = await matAplicarEntrada(supabase, args.material_id, args.cantidad, args.costo_unitario)
+  return { error: ent.error }
 }
 
 export async function updateMaterial(
@@ -268,4 +339,59 @@ export async function getValoracionMateriales(): Promise<{ data: ValoracionMater
 /** Fecha HN-as-UTC para las transacciones (día de negocio de Honduras). */
 export function nowHn(): string {
   return getHondurasNowISO()
+}
+
+// ==================== IMPORTAR MATERIALES (Excel) ====================
+
+/** Una fila del Excel de carga masiva de materiales. */
+export interface FilaMaterialImport {
+  fila: number // fila en el Excel (para reportar errores)
+  nombre: string
+  codigo: string
+  unidad_medida: string
+  stock_inicial: number
+  costo_promedio: number
+}
+
+export interface ResultadoImportMateriales {
+  creados: number
+  errores: number
+  detalle: { nombre: string; estado: "creado" | "error"; motivo?: string }[]
+}
+
+/**
+ * Crea en lote los materiales de `filas`. Si una fila trae `stock_inicial > 0`,
+ * la carga inicial va al `almacen_id`/`localizacion_id` elegidos (aplican a todo
+ * el archivo). Continua ante errores por fila y devuelve el detalle.
+ */
+export async function importarMateriales(
+  filas: FilaMaterialImport[],
+  ubicacion: { almacen_id: number; localizacion_id: number },
+): Promise<ResultadoImportMateriales> {
+  const resultado: ResultadoImportMateriales = { creados: 0, errores: 0, detalle: [] }
+  for (const f of filas) {
+    if (!f.nombre.trim()) {
+      resultado.errores++
+      resultado.detalle.push({ nombre: `(fila ${f.fila})`, estado: "error", motivo: "Sin nombre" })
+      continue
+    }
+    const res = await createMaterial({
+      nombre: f.nombre,
+      codigo: f.codigo || null,
+      unidad_medida: f.unidad_medida || "unidad",
+      stock_inicial: f.stock_inicial,
+      costo_inicial: f.costo_promedio,
+      almacen_id: f.stock_inicial > 0 ? ubicacion.almacen_id : null,
+      localizacion_id: f.stock_inicial > 0 ? ubicacion.localizacion_id : null,
+    })
+    if (res.error && !res.data) {
+      resultado.errores++
+      resultado.detalle.push({ nombre: f.nombre, estado: "error", motivo: res.error })
+    } else {
+      resultado.creados++
+      // res.error con data presente = material creado pero carga inicial fallo (aviso).
+      resultado.detalle.push({ nombre: f.nombre, estado: "creado", motivo: res.error || undefined })
+    }
+  }
+  return resultado
 }
