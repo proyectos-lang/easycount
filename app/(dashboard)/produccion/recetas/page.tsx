@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils"
 import { formatCurrency } from "@/lib/utils/format"
 import { getProductos, type Producto } from "@/lib/services/catalogos"
 import { getMateriales, type Material } from "@/lib/services/produccion-materiales"
+import { getProductosFabricados } from "@/lib/services/productos-fabricados"
 import {
   getReceta, upsertReceta, calcularCostoEstimado, listarProductosFabricados,
   type ProductoFabricadoRef,
@@ -32,6 +33,9 @@ export default function RecetasPage() {
   const [productos, setProductos] = React.useState<Producto[]>([])
   const [materiales, setMateriales] = React.useState<Material[]>([])
   const [fabricados, setFabricados] = React.useState<ProductoFabricadoRef[]>([])
+  // Productos MARCADOS como "Es producto fabricado" (Configuración → Productos).
+  // El selector de recetas debe mostrar SOLO estos.
+  const [esFabricadoSet, setEsFabricadoSet] = React.useState<Set<number>>(new Set())
   const [loading, setLoading] = React.useState(true)
 
   const [comboOpen, setComboOpen] = React.useState(false)
@@ -47,10 +51,16 @@ export default function RecetasPage() {
 
   const cargar = React.useCallback(async () => {
     setLoading(true)
-    const [p, m, f] = await Promise.all([getProductos(), getMateriales({ soloActivos: true }), listarProductosFabricados()])
+    const [p, m, f, ef] = await Promise.all([
+      getProductos(),
+      getMateriales({ soloActivos: true }),
+      listarProductosFabricados(),
+      getProductosFabricados(),
+    ])
     setProductos(p.data || [])
     setMateriales(m.data)
     setFabricados(f.data)
+    setEsFabricadoSet(ef.data)
     setLoading(false)
   }, [])
   React.useEffect(() => { cargar() }, [cargar])
@@ -58,6 +68,13 @@ export default function RecetasPage() {
   const materialById = React.useMemo(() => new Map(materiales.map((m) => [m.id!, m])), [materiales])
   const productoSel = productos.find((p) => p.id === productoId)
   const fabricadosSet = React.useMemo(() => new Set(fabricados.map((f) => f.producto_id)), [fabricados])
+  // Solo los productos marcados como fabricados aparecen en el selector. Como
+  // respaldo, incluimos los que ya tienen receta (por si se creo la receta
+  // antes de existir la marca), para no ocultar recetas ya armadas.
+  const productosFabricados = React.useMemo(
+    () => productos.filter((p) => p.id != null && (esFabricadoSet.has(p.id) || fabricadosSet.has(p.id))),
+    [productos, esFabricadoSet, fabricadosSet],
+  )
 
   async function elegirProducto(id: number) {
     setProductoId(id)
@@ -139,7 +156,7 @@ export default function RecetasPage() {
           <CardHeader className="p-4 md:p-6 pb-3">
             <CardTitle className="text-base md:text-lg">Producto a fabricar</CardTitle>
             <CardDescription className="text-xs md:text-sm">
-              Elige un producto del catálogo; tener receta lo marca como fabricado.
+              Solo aparecen los productos marcados como <b>fabricados</b> (en Configuración → Productos, casilla &quot;Es producto fabricado&quot;).
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4 md:p-6 pt-0 space-y-4">
@@ -153,11 +170,15 @@ export default function RecetasPage() {
               </PopoverTrigger>
               <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                 <Command>
-                  <CommandInput placeholder="Buscar producto…" />
+                  <CommandInput placeholder="Buscar producto fabricado…" />
                   <CommandList>
-                    <CommandEmpty>Sin resultados.</CommandEmpty>
+                    <CommandEmpty>
+                      {productosFabricados.length === 0
+                        ? "No hay productos marcados como fabricados. Marca 'Es producto fabricado' en Configuración → Productos."
+                        : "Sin resultados."}
+                    </CommandEmpty>
                     <CommandGroup>
-                      {productos.map((p) => (
+                      {productosFabricados.map((p) => (
                         <CommandItem
                           key={p.id}
                           value={`${p.nombre} ${p.codigo_barras || ""}`}
