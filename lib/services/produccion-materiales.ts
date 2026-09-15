@@ -275,33 +275,58 @@ export async function getKardexMaterial(
   const supabase = createClient()
   if (!supabase) return { data: [], error: "Cliente no disponible" }
 
+  // Sin embeds: `materiales_movimientos` no tiene FKs declaradas hacia
+  // `almacenes`/`localizaciones`/`materiales`, y PostgREST falla la consulta
+  // entera (PGRST200) si se piden como embed -> el kardex salia vacio. Traemos
+  // las columnas planas y resolvemos los nombres con queries aparte por id.
   const { data, error } = await supabase
     .from("materiales_movimientos")
-    .select(`
-      id, material_id, almacen_id, localizacion_id, tipo_movimiento, cantidad,
-      costo_unitario, referencia_id, fecha,
-      materiales (nombre), almacenes (nombre), localizaciones (nombre)
-    `)
+    .select("id, material_id, almacen_id, localizacion_id, tipo_movimiento, cantidad, costo_unitario, referencia_id, fecha")
     .eq("material_id", materialId)
     .order("fecha", { ascending: false })
   if (error) {
     if (isMissingTable(error)) return { data: [], error: null }
     return { data: [], error: error.message }
   }
-  const rows = (data || []).map((m: Record<string, unknown>) => ({
-    id: Number(m.id),
-    material_id: Number(m.material_id),
-    almacen_id: m.almacen_id != null ? Number(m.almacen_id) : null,
-    localizacion_id: m.localizacion_id != null ? Number(m.localizacion_id) : null,
-    tipo_movimiento: String(m.tipo_movimiento || ""),
-    cantidad: Number(m.cantidad || 0),
-    costo_unitario: Number(m.costo_unitario || 0),
-    referencia_id: m.referencia_id != null ? Number(m.referencia_id) : null,
-    fecha: (m.fecha as string) || null,
-    material_nombre: (m.materiales as { nombre?: string } | null)?.nombre || "",
-    almacen_nombre: (m.almacenes as { nombre?: string } | null)?.nombre || "",
-    localizacion_nombre: (m.localizaciones as { nombre?: string } | null)?.nombre || "",
-  }))
+  const filas = data || []
+
+  // Resolver nombres (material, almacenes, localizaciones) en queries por id.
+  const almIds = Array.from(new Set(filas.map((m) => m.almacen_id).filter((v): v is number => v != null)))
+  const locIds = Array.from(new Set(filas.map((m) => m.localizacion_id).filter((v): v is number => v != null)))
+  const nombreMat = new Map<number, string>()
+  const nombreAlm = new Map<number, string>()
+  const nombreLoc = new Map<number, string>()
+  {
+    const mat = await supabase.from("materiales").select("nombre").eq("id", materialId).maybeSingle()
+    if (mat.data?.nombre) nombreMat.set(materialId, String(mat.data.nombre))
+  }
+  if (almIds.length > 0) {
+    const { data: alm } = await supabase.from("almacenes").select("id, nombre").in("id", almIds)
+    for (const a of alm || []) nombreAlm.set(Number(a.id), String(a.nombre || ""))
+  }
+  if (locIds.length > 0) {
+    const { data: loc } = await supabase.from("localizaciones").select("id, nombre").in("id", locIds)
+    for (const l of loc || []) nombreLoc.set(Number(l.id), String(l.nombre || ""))
+  }
+
+  const rows = filas.map((m: Record<string, unknown>) => {
+    const almId = m.almacen_id != null ? Number(m.almacen_id) : null
+    const locId = m.localizacion_id != null ? Number(m.localizacion_id) : null
+    return {
+      id: Number(m.id),
+      material_id: Number(m.material_id),
+      almacen_id: almId,
+      localizacion_id: locId,
+      tipo_movimiento: String(m.tipo_movimiento || ""),
+      cantidad: Number(m.cantidad || 0),
+      costo_unitario: Number(m.costo_unitario || 0),
+      referencia_id: m.referencia_id != null ? Number(m.referencia_id) : null,
+      fecha: (m.fecha as string) || null,
+      material_nombre: nombreMat.get(Number(m.material_id)) || "",
+      almacen_nombre: almId != null ? nombreAlm.get(almId) || "" : "",
+      localizacion_nombre: locId != null ? nombreLoc.get(locId) || "" : "",
+    }
+  })
   return { data: rows, error: null }
 }
 

@@ -123,7 +123,9 @@ function mapCompra(c: Record<string, unknown>): CompraMaterial {
   return {
     id: Number(c.id),
     proveedor_id: c.proveedor_id != null ? Number(c.proveedor_id) : null,
-    proveedor_nombre: (c.proveedores as { nombre?: string } | null)?.nombre ?? null,
+    // El nombre del proveedor lo rellena getComprasMaterial con una query aparte
+    // (no hay FK para embed). Aqui queda null por defecto.
+    proveedor_nombre: null,
     moneda: String(c.moneda || "LPS"),
     tasa_cambio: Number(c.tasa_cambio || 1),
     total_local: total,
@@ -143,10 +145,15 @@ export async function getComprasMaterial(): Promise<{ data: CompraMaterial[]; er
   const supabase = createClient()
   if (!supabase) return { data: [], error: "Cliente no disponible" }
 
+  // NOTA: NO se usa el embed `proveedores (nombre)` porque `proveedor_id` no
+  // tiene una FK declarada hacia `proveedores` en la BD, y PostgREST falla la
+  // consulta ENTERA (PGRST200) al no poder resolver la relacion — eso dejaba el
+  // listado vacio aunque las compras existieran. El nombre del proveedor se
+  // resuelve con una query aparte por los proveedor_id (patron de cierre-diario).
   const COLS_FULL =
-    "id, proveedor_id, moneda, tasa_cambio, total_local, estado, fecha_orden, created_at, forma_pago, fecha_vencimiento, monto_pagado, estado_pago, proveedores (nombre)"
+    "id, proveedor_id, moneda, tasa_cambio, total_local, estado, fecha_orden, created_at, forma_pago, fecha_vencimiento, monto_pagado, estado_pago"
   const COLS_BASE =
-    "id, proveedor_id, moneda, tasa_cambio, total_local, estado, fecha_orden, created_at, proveedores (nombre)"
+    "id, proveedor_id, moneda, tasa_cambio, total_local, estado, fecha_orden, created_at"
 
   type QueryRes = { data: Record<string, unknown>[] | null; error: { message?: string; code?: string } | null }
 
@@ -167,7 +174,27 @@ export async function getComprasMaterial(): Promise<{ data: CompraMaterial[]; er
     if (isMissingTable(res.error)) return { data: [], error: null }
     return { data: [], error: res.error.message ?? "Error" }
   }
-  return { data: (res.data || []).map((c) => mapCompra(c)), error: null }
+
+  const filas = res.data || []
+
+  // Resolver nombres de proveedor en UNA query por los ids referenciados.
+  const provIds = Array.from(
+    new Set(filas.map((c) => c.proveedor_id).filter((v): v is number => v != null).map((v) => Number(v))),
+  )
+  const nombrePorProv = new Map<number, string>()
+  if (provIds.length > 0) {
+    const { data: provs } = await supabase.from("proveedores").select("id, nombre").in("id", provIds)
+    for (const p of provs || []) nombrePorProv.set(Number(p.id), String(p.nombre || ""))
+  }
+
+  return {
+    data: filas.map((c) => {
+      const base = mapCompra(c)
+      const pid = c.proveedor_id != null ? Number(c.proveedor_id) : null
+      return { ...base, proveedor_nombre: pid != null ? nombrePorProv.get(pid) ?? null : null }
+    }),
+    error: null,
+  }
 }
 
 /**

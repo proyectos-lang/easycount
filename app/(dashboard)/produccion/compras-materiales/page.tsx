@@ -78,9 +78,11 @@ export default function ComprasMaterialesPage() {
   const cargar = React.useCallback(async () => {
     setLoading(true)
     const [c, m, p, a] = await Promise.all([getComprasMaterial(), getMateriales({ soloActivos: true }), getProveedores(), getAlmacenes()])
+    // Surface el error en vez de mostrar la lista vacia en silencio.
+    if (c.error) toast({ title: "No se pudieron cargar las compras", description: c.error, variant: "destructive" })
     setCompras(c.data); setMateriales(m.data); setProveedores(p.data); setAlmacenes(a.data)
     setLoading(false)
-  }, [])
+  }, [toast])
   React.useEffect(() => { cargar() }, [cargar])
 
   React.useEffect(() => {
