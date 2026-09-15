@@ -13,8 +13,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select"
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -43,13 +43,25 @@ function estadoCorridaBadge(e: string) {
   return <Badge variant="outline" className={map[e] || ""}>{e}</Badge>
 }
 
+function estadoOrdenBadge(e: string) {
+  const map: Record<string, string> = {
+    "Abierta": "border-sky-200 bg-sky-50 text-sky-700",
+    "En Proceso": "border-amber-200 bg-amber-50 text-amber-800",
+    "Cerrada": "border-emerald-200 bg-emerald-50 text-emerald-700",
+    "Cancelada": "border-stone-300 bg-stone-100 text-stone-500",
+  }
+  return <Badge variant="outline" className={`text-[10px] ${map[e] || ""}`}>{e}</Badge>
+}
+
 export default function ControlPisoPage() {
   const { toast } = useToast()
   const [ordenes, setOrdenes] = React.useState<OrdenProduccion[]>([])
   const [loading, setLoading] = React.useState(true)
-  const [ordenId, setOrdenId] = React.useState<string>("")
-  const [corridas, setCorridas] = React.useState<Corrida[]>([])
-  const [cargandoCorridas, setCargandoCorridas] = React.useState(false)
+  // Corridas cacheadas por orden (se cargan al expandir la fila).
+  const [corridasPorOrden, setCorridasPorOrden] = React.useState<Record<number, Corrida[]>>({})
+  const [cargandoOrden, setCargandoOrden] = React.useState<number | null>(null)
+  // Orden para la que se está registrando una corrida (abre el diálogo).
+  const [ordenParaCorrida, setOrdenParaCorrida] = React.useState<OrdenProduccion | null>(null)
 
   // Nueva corrida
   const [nuevoOpen, setNuevoOpen] = React.useState(false)
@@ -77,33 +89,39 @@ export default function ControlPisoPage() {
     })
   }, [])
 
-  const ordenSel = ordenes.find((o) => String(o.id) === ordenId)
-
   // Órdenes PROGRAMADAS (colocadas en el planeador) primero; luego el resto.
-  const { programadas, sinProgramar } = React.useMemo(() => {
+  const ordenesOrdenadas = React.useMemo(() => {
     const prog = ordenes.filter((o) => o.fecha_programada != null && o.inicio_min_dia != null)
     const rest = ordenes.filter((o) => !(o.fecha_programada != null && o.inicio_min_dia != null))
-    // Programadas: por fecha y hora de inicio.
     prog.sort((a, b) =>
       (a.fecha_programada || "").localeCompare(b.fecha_programada || "") ||
       (a.inicio_min_dia ?? 0) - (b.inicio_min_dia ?? 0),
     )
-    return { programadas: prog, sinProgramar: rest }
+    return [...prog, ...rest]
   }, [ordenes])
+  const estaProgramada = React.useCallback(
+    (o: OrdenProduccion) => o.fecha_programada != null && o.inicio_min_dia != null,
+    [],
+  )
 
+  // Carga (o recarga) las corridas de una orden y las cachea.
   const cargarCorridas = React.useCallback(async (id: number) => {
-    setCargandoCorridas(true)
+    setCargandoOrden(id)
     const { data } = await getCorridas(id)
-    setCorridas(data)
-    setCargandoCorridas(false)
+    setCorridasPorOrden((prev) => ({ ...prev, [id]: data }))
+    setCargandoOrden(null)
   }, [])
 
-  React.useEffect(() => {
-    if (ordenId) cargarCorridas(Number(ordenId))
-    else setCorridas([])
-  }, [ordenId, cargarCorridas])
+  // Al expandir una orden en el acordeón, carga sus corridas si no están.
+  function onExpandirOrden(ids: string[]) {
+    for (const s of ids) {
+      const id = Number(s)
+      if (corridasPorOrden[id] === undefined && cargandoOrden !== id) cargarCorridas(id)
+    }
+  }
 
-  function abrirNueva() {
+  function abrirNueva(o: OrdenProduccion) {
+    setOrdenParaCorrida(o)
     setOperador(""); setHoraInicio(""); setHoraFin(""); setBuenas(""); setDefectuosas(""); setPlanificado(""); setNovedades("")
     setDefectos([]); setParosList([]); setConsumo([]); setTieneReceta(true)
     setNuevoOpen(true)
@@ -113,26 +131,26 @@ export default function ControlPisoPage() {
   // consulta la receta del producto y cuánto material consumiría.
   const procesadasNum = (Number(buenas) || 0) + (Number(defectuosas) || 0)
   React.useEffect(() => {
-    if (!nuevoOpen || !ordenSel) return
+    if (!nuevoOpen || !ordenParaCorrida) return
     if (procesadasNum <= 0) { setConsumo([]); return }
     let cancel = false
     const t = setTimeout(async () => {
-      const { data, tieneReceta } = await getConsumoPreview(ordenSel.producto_id, procesadasNum)
+      const { data, tieneReceta } = await getConsumoPreview(ordenParaCorrida.producto_id, procesadasNum)
       if (!cancel) { setConsumo(data); setTieneReceta(tieneReceta) }
     }, 250)
     return () => { cancel = true; clearTimeout(t) }
-  }, [nuevoOpen, ordenSel, procesadasNum])
+  }, [nuevoOpen, ordenParaCorrida, procesadasNum])
 
   async function guardarCorrida() {
-    if (!ordenSel) return
+    if (!ordenParaCorrida) return
     if (!(Number(buenas) > 0 || Number(defectuosas) > 0)) {
       toast({ title: "Faltan unidades", description: "Indica las unidades buenas y/o defectuosas.", variant: "destructive" })
       return
     }
     setSaving(true)
     const res = await createCorrida({
-      orden_id: ordenSel.id,
-      producto_id: ordenSel.producto_id,
+      orden_id: ordenParaCorrida.id,
+      producto_id: ordenParaCorrida.producto_id,
       operador: operador || null,
       hora_inicio: horaInicio ? new Date(horaInicio).toISOString() : null,
       hora_fin: horaFin ? new Date(horaFin).toISOString() : null,
@@ -150,7 +168,7 @@ export default function ControlPisoPage() {
     }
     toast({ title: "Corrida registrada", description: "Ejecútala para descontar los materiales de la receta." })
     setNuevoOpen(false)
-    cargarCorridas(ordenSel.id)
+    cargarCorridas(ordenParaCorrida.id)
   }
 
   async function ejecutar(c: Corrida) {
@@ -183,104 +201,117 @@ export default function ControlPisoPage() {
           <TabsTrigger value="consolidado" className="gap-1.5"><CalendarRange className="h-4 w-4" /> Consolidado</TabsTrigger>
         </TabsList>
 
-        {/* ── Tab 1: Registro (por orden) ── */}
+        {/* ── Tab 1: Registro (listado de órdenes) ── */}
         <TabsContent value="registro">
-      {loading ? (
-        <div className="flex justify-center py-16"><Spinner className="h-8 w-8" /></div>
-      ) : (
-        <Card className="rounded-xl border-stone-200">
-          <CardHeader className="p-4 md:p-6 pb-3">
-            <CardTitle className="text-base md:text-lg">Orden de producción</CardTitle>
-            <CardDescription className="text-xs md:text-sm">Elige una orden abierta o en proceso para ver y registrar sus corridas.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 md:p-6 pt-0 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-              <div className="grid gap-1.5 flex-1">
-                <Label className="text-xs">Orden</Label>
-                <Select value={ordenId} onValueChange={setOrdenId}>
-                  <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar orden…" /></SelectTrigger>
-                  <SelectContent>
-                    {ordenes.length === 0 && <div className="px-2 py-3 text-sm text-stone-500 text-center">No hay órdenes abiertas.</div>}
-                    {programadas.length > 0 && (
-                      <div className="px-2 pt-1.5 pb-0.5 text-[11px] font-semibold uppercase text-emerald-700">Programadas</div>
-                    )}
-                    {programadas.map((o) => (
-                      <SelectItem key={o.id} value={String(o.id)}>
-                        <span className="font-mono text-xs text-stone-500">{codigoOrden(o.id)}</span> · {o.producto_nombre} · {o.cantidad_objetivo} und
-                        {o.fecha_programada ? ` · ${o.fecha_programada}` : ""}
-                      </SelectItem>
-                    ))}
-                    {sinProgramar.length > 0 && (
-                      <div className="px-2 pt-2 pb-0.5 text-[11px] font-semibold uppercase text-stone-400">Sin programar</div>
-                    )}
-                    {sinProgramar.map((o) => (
-                      <SelectItem key={o.id} value={String(o.id)}>
-                        <span className="font-mono text-xs text-stone-500">{codigoOrden(o.id)}</span> · {o.producto_nombre} · {o.cantidad_objetivo} und · {o.estado}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {ordenSel && (
-                <Button onClick={abrirNueva} disabled={!ordenSel.receta_id}>
-                  <Plus className="h-4 w-4 mr-1" /> Registrar corrida
-                </Button>
-              )}
-            </div>
-
-            {ordenSel && !ordenSel.receta_id && (
-              <div className="rounded-md bg-amber-50 border border-amber-200 p-2 text-xs text-amber-800 flex items-center gap-2">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                Esta orden no tiene receta; define la receta del producto para poder registrar corridas con consumo de material.
-              </div>
-            )}
-
-            {ordenId && (
-              cargandoCorridas ? (
-                <div className="flex justify-center py-8"><Spinner className="h-6 w-6" /></div>
-              ) : corridas.length === 0 ? (
-                <p className="text-center py-8 text-sm text-stone-400">Sin corridas para esta orden.</p>
-              ) : (
-                <div className="rounded-lg border border-stone-200 overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-right">Buenas</TableHead>
-                        <TableHead className="text-right">Defect.</TableHead>
-                        <TableHead className="text-right">Paros (min)</TableHead>
-                        <TableHead className="text-right">Costo unit. real</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead className="w-28"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {corridas.map((c) => (
-                        <TableRow key={c.id}>
-                          <TableCell className="text-right font-medium">{c.unidades_buenas}</TableCell>
-                          <TableCell className="text-right text-red-600">{c.unidades_defectuosas || 0}</TableCell>
-                          <TableCell className="text-right text-stone-600">{c.paros_minutos || 0}</TableCell>
-                          <TableCell className="text-right">{c.estado === "Registrada" ? "-" : formatCurrency(c.costo_unitario_real)}</TableCell>
-                          <TableCell>{estadoCorridaBadge(c.estado)}</TableCell>
-                          <TableCell>
-                            {c.estado === "Registrada" ? (
-                              <Button size="sm" variant="outline" className="h-8 gap-1" disabled={ejecutandoId === c.id} onClick={() => ejecutar(c)}>
-                                {ejecutandoId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />}
-                                Ejecutar
+          {loading ? (
+            <div className="flex justify-center py-16"><Spinner className="h-8 w-8" /></div>
+          ) : (
+            <Card className="rounded-xl border-stone-200">
+              <CardHeader className="p-4 md:p-6 pb-3">
+                <CardTitle className="text-base md:text-lg">Órdenes de producción</CardTitle>
+                <CardDescription className="text-xs md:text-sm">Todas las órdenes abiertas o en proceso (las programadas primero). Despliega una para registrar y ver sus corridas.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 md:p-6 pt-0">
+                {ordenes.length === 0 ? (
+                  <div className="text-center py-10 text-stone-500 text-sm">
+                    <ClipboardList className="h-10 w-10 mx-auto mb-2 opacity-40" /> No hay órdenes abiertas o en proceso.
+                  </div>
+                ) : (
+                  <Accordion type="multiple" className="space-y-2" onValueChange={onExpandirOrden}>
+                    {ordenesOrdenadas.map((o) => {
+                      const cs = corridasPorOrden[o.id]
+                      const fabricado = (cs || []).reduce((a, c) => a + (Number(c.unidades_buenas) || 0), 0)
+                      const pct = o.cantidad_objetivo > 0 ? Math.min(100, Math.round((fabricado / o.cantidad_objetivo) * 100)) : 0
+                      return (
+                        <AccordionItem key={o.id} value={String(o.id)} className="border rounded-lg px-3 data-[state=open]:bg-stone-50/40">
+                          <AccordionTrigger className="hover:no-underline py-3">
+                            <div className="flex flex-1 items-center justify-between gap-3 pr-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="font-mono text-xs text-stone-500 shrink-0">{codigoOrden(o.id)}</span>
+                                <span className="font-medium truncate">{o.producto_nombre || `Producto #${o.producto_id}`}</span>
+                                {estaProgramada(o) && (
+                                  <Badge variant="outline" className="text-[10px] border-emerald-200 bg-emerald-50 text-emerald-700 shrink-0">
+                                    Programada{o.fecha_programada ? ` · ${o.fecha_programada}` : ""}
+                                  </Badge>
+                                )}
+                                {!o.receta_id && (
+                                  <Badge variant="outline" className="text-[10px] border-amber-200 bg-amber-50 text-amber-800 gap-1 shrink-0"><AlertTriangle className="h-3 w-3" /> Sin receta</Badge>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 shrink-0">
+                                <span className="text-xs text-stone-500 tabular-nums hidden sm:inline">{o.cantidad_objetivo} und</span>
+                                {cs !== undefined && (
+                                  <span className="text-xs tabular-nums text-stone-600">{fabricado}/{o.cantidad_objetivo} ({pct}%)</span>
+                                )}
+                                {estadoOrdenBadge(o.estado)}
+                              </div>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="pb-3">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <span className="text-xs text-stone-500">Corridas de esta orden</span>
+                              <Button size="sm" className="h-8 gap-1" onClick={() => abrirNueva(o)} disabled={!o.receta_id} title={!o.receta_id ? "Define la receta del producto primero" : undefined}>
+                                <Plus className="h-3.5 w-3.5" /> Registrar corrida
                               </Button>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> Ejecutada</span>
+                            </div>
+                            {!o.receta_id && (
+                              <div className="rounded-md bg-amber-50 border border-amber-200 p-2 text-xs text-amber-800 flex items-center gap-2 mb-2">
+                                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                Esta orden no tiene receta; define la receta del producto para poder registrar corridas con consumo de material.
+                              </div>
                             )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )
-            )}
-          </CardContent>
-        </Card>
-      )}
+                            {cargandoOrden === o.id || cs === undefined ? (
+                              <div className="flex justify-center py-6"><Spinner className="h-5 w-5" /></div>
+                            ) : cs.length === 0 ? (
+                              <p className="text-center py-4 text-sm text-stone-400">Sin corridas registradas todavía.</p>
+                            ) : (
+                              <div className="rounded-lg border border-stone-200 overflow-x-auto bg-background">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Operador</TableHead>
+                                      <TableHead className="text-right">Buenas</TableHead>
+                                      <TableHead className="text-right">Defect.</TableHead>
+                                      <TableHead className="text-right">Paros (min)</TableHead>
+                                      <TableHead className="text-right">Costo unit. real</TableHead>
+                                      <TableHead>Estado</TableHead>
+                                      <TableHead className="w-28"></TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {cs.map((c) => (
+                                      <TableRow key={c.id}>
+                                        <TableCell className="text-xs text-stone-600">{c.operador || "—"}</TableCell>
+                                        <TableCell className="text-right font-medium">{c.unidades_buenas}</TableCell>
+                                        <TableCell className="text-right text-red-600">{c.unidades_defectuosas || 0}</TableCell>
+                                        <TableCell className="text-right text-stone-600">{c.paros_minutos || 0}</TableCell>
+                                        <TableCell className="text-right">{c.estado === "Registrada" ? "-" : formatCurrency(c.costo_unitario_real)}</TableCell>
+                                        <TableCell>{estadoCorridaBadge(c.estado)}</TableCell>
+                                        <TableCell>
+                                          {c.estado === "Registrada" ? (
+                                            <Button size="sm" variant="outline" className="h-8 gap-1" disabled={ejecutandoId === c.id} onClick={() => ejecutar(c)}>
+                                              {ejecutandoId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />}
+                                              Ejecutar
+                                            </Button>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> {c.estado}</span>
+                                          )}
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            )}
+                          </AccordionContent>
+                        </AccordionItem>
+                      )
+                    })}
+                  </Accordion>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* ── Tab 2: En vivo (por día) ── */}
@@ -298,8 +329,8 @@ export default function ControlPisoPage() {
       <Dialog open={nuevoOpen} onOpenChange={setNuevoOpen}>
         <DialogContent className="max-w-lg max-h-[88vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Registrar corrida{ordenSel ? ` · ${codigoOrden(ordenSel.id)}` : ""}</DialogTitle>
-            <DialogDescription>{ordenSel?.producto_nombre}. El consumo se calcula sobre las unidades procesadas (buenas + defectuosas).</DialogDescription>
+            <DialogTitle>Registrar corrida{ordenParaCorrida ? ` · ${codigoOrden(ordenParaCorrida.id)}` : ""}</DialogTitle>
+            <DialogDescription>{ordenParaCorrida?.producto_nombre}. El consumo se calcula sobre las unidades procesadas (buenas + defectuosas).</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-1">
             <div className="grid gap-1.5">
