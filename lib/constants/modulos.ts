@@ -43,6 +43,7 @@ import {
   Boxes,
   Factory,
   Gauge,
+  Workflow,
   type LucideIcon,
 } from "lucide-react"
 
@@ -74,9 +75,10 @@ export interface ModuloGranular {
 }
 
 /**
- * 33 modulos granulares. Cualquier cambio aqui debe replicarse en la tabla
- * `modulos` (y viceversa). NOTA: "Listas de Precios" NO va en MODULOS_BASE
- * (nace deshabilitado por empresa; el super-admin lo habilita).
+ * 42 modulos granulares. Cualquier cambio aqui debe replicarse en la tabla
+ * `modulos` (y viceversa). NOTA: "Listas de Precios" y TODOS los de la
+ * categoria "Produccion" NO van en MODULOS_BASE (nacen deshabilitados por
+ * empresa; el super-admin los habilita desde /plataforma).
  */
 export const MODULOS: ReadonlyArray<ModuloGranular> = [
   // ── Dashboard ──────────────────────────────────────────────────────────
@@ -131,6 +133,7 @@ export const MODULOS: ReadonlyArray<ModuloGranular> = [
   { nombre: "Valoracion", href: "/inventario/valoracion", categoria: "Inventario", icon: DollarSign },
 
   // ── Produccion (modulos NUEVOS, nacen deshabilitados: no estan en MODULOS_BASE) ──
+  { nombre: "Operaciones de Produccion", href: "/produccion/operaciones", categoria: "Produccion", icon: Workflow },
   { nombre: "Materiales", href: "/produccion/materiales", categoria: "Produccion", icon: Boxes },
   { nombre: "Compra de Materiales", href: "/produccion/compras-materiales", categoria: "Produccion", icon: Truck },
   { nombre: "Inventario de Materiales", href: "/produccion/inventario-materiales", categoria: "Produccion", icon: Warehouse },

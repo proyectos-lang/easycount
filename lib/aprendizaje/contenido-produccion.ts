@@ -7,6 +7,46 @@ import type { TutorialModulo } from "./types"
  */
 export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
   {
+    modulo: "Operaciones de Produccion",
+    titulo: "Operaciones de Producción",
+    descripcion:
+      "Define la secuencia de operaciones (etapas) de tu producción — cada empresa arma su propio flujo (Operación 1 → 2 → 3…) que luego recorrerán las órdenes.",
+    queHace: [
+      "Cada empresa crea su propia lista de operaciones/etapas: diseño, impresión, confección, empaque… las que necesites.",
+      "Las operaciones tienen un ORDEN (secuencia): así se define por dónde empieza y termina el trabajo de cada orden de producción.",
+      "Reordena las etapas con las flechas de cada fila (subir/bajar).",
+      "Puedes desactivar una operación sin borrarla: las inactivas no se usan en las órdenes nuevas.",
+    ],
+    queNoHace: [
+      "No procesa producción por sí solo: aquí solo defines el flujo. El avance de cada orden por sus etapas se hace en la vista de flujo/órdenes.",
+      "Cambiar la secuencia no altera las órdenes ya creadas: cada orden congela su secuencia al crearse (los cambios aplican a órdenes nuevas).",
+    ],
+    operaciones: [
+      {
+        titulo: "Crear tu secuencia de operaciones",
+        pasos: [
+          "Abre Producción → Operaciones de Producción.",
+          "Presiona 'Nueva operación' y escribe su nombre (ej. 'Diseño') y una descripción opcional.",
+          "Repite para cada etapa de tu flujo (Impresión, Confección, Empaque…).",
+          "Usa las flechas de cada fila para dejarlas en el orden en que se trabajan.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        pregunta: "¿No me aparece el módulo?",
+        respuesta:
+          "Producción se habilita por empresa desde el panel de administración (super-admin). Si no lo ves, pídele a tu administrador que active 'Operaciones de Producción' para tu empresa.",
+      },
+      {
+        pregunta: "¿Cada empresa puede tener un número distinto de operaciones?",
+        respuesta:
+          "Sí. Una empresa puede tener 2 operaciones, otra 4, otra 3. Cada quien define su propia secuencia según su proceso.",
+      },
+    ],
+    keywords: ["operaciones", "etapas", "secuencia", "flujo", "proceso", "produccion", "estaciones", "workflow", "ruteo", "diseno", "impresion", "confeccion", "empaque"],
+  },
+  {
     modulo: "Materiales",
     titulo: "Materiales de fabricación",
     descripcion:
