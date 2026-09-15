@@ -239,6 +239,11 @@ export default function ControlPisoPage() {
                                 )}
                               </div>
                               <div className="flex items-center gap-3 shrink-0">
+                                {o.fecha_objetivo && (
+                                  <span className="text-xs text-stone-500 tabular-nums whitespace-nowrap hidden md:inline" title="Fecha de entrega programada">
+                                    Entrega: {o.fecha_objetivo}
+                                  </span>
+                                )}
                                 <span className="text-xs text-stone-500 tabular-nums hidden sm:inline">{o.cantidad_objetivo} und</span>
                                 {cs !== undefined && (
                                   <span className="text-xs tabular-nums text-stone-600">{fabricado}/{o.cantidad_objetivo} ({pct}%)</span>
