@@ -35,15 +35,31 @@ function isMissingTable(err: { message?: string; code?: string } | null): boolea
   )
 }
 
+/** Resuelve nombres por id desde una tabla (sin embed: no hay FK declarada). */
+async function nombresPorId(
+  supabase: NonNullable<ReturnType<typeof createClient>>,
+  tabla: string,
+  ids: number[],
+): Promise<Map<number, string>> {
+  const out = new Map<number, string>()
+  const unicos = Array.from(new Set(ids.filter((v) => v != null)))
+  if (unicos.length === 0) return out
+  const { data } = await supabase.from(tabla).select("id, nombre").in("id", unicos)
+  for (const r of data || []) out.set(Number(r.id), String(r.nombre || ""))
+  return out
+}
+
 /** Corridas ejecutadas listas para recibir (estado 'Ejecutada', con buenas>0). */
 export async function getCorridasPendientesRecepcion(): Promise<{ data: CorridaPendiente[]; error: string | null }> {
   if (!isSupabaseConfigured()) return { data: [], error: null }
   const supabase = createClient()
   if (!supabase) return { data: [], error: "Cliente no disponible" }
 
+  // Sin embed `productos (nombre)`: no hay FK declarada y PostgREST falla la
+  // consulta entera (PGRST200) -> la lista salia vacia. Se resuelve aparte.
   const { data, error } = await supabase
     .from("produccion_corridas")
-    .select("id, orden_id, producto_id, unidades_buenas, costo_unitario_real, created_at, productos (nombre)")
+    .select("id, orden_id, producto_id, unidades_buenas, costo_unitario_real, created_at")
     .eq("estado", "Ejecutada")
     .gt("unidades_buenas", 0)
     .order("created_at", { ascending: false })
@@ -51,15 +67,87 @@ export async function getCorridasPendientesRecepcion(): Promise<{ data: CorridaP
     if (isMissingTable(error)) return { data: [], error: null }
     return { data: [], error: error.message }
   }
-  const rows = (data || []).map((c: Record<string, unknown>) => ({
+  const filas = data || []
+  const nombreProd = await nombresPorId(supabase, "productos", filas.map((c) => Number(c.producto_id)))
+  const rows = filas.map((c: Record<string, unknown>) => ({
     corrida_id: Number(c.id),
     orden_id: Number(c.orden_id),
     producto_id: Number(c.producto_id),
-    producto_nombre: (c.productos as { nombre?: string } | null)?.nombre ?? "",
+    producto_nombre: nombreProd.get(Number(c.producto_id)) ?? "",
     unidades_buenas: Number(c.unidades_buenas || 0),
     costo_unitario_real: Number(c.costo_unitario_real || 0),
     created_at: String(c.created_at || ""),
   }))
+  return { data: rows, error: null }
+}
+
+/** Una recepción del historial (producto terminado que entró al inventario). */
+export interface RecepcionHistorial {
+  id: number
+  corrida_id: number
+  producto_id: number
+  producto_nombre: string
+  almacen_nombre: string
+  localizacion_nombre: string
+  cantidad: number
+  costo_unitario_real: number
+  valor_total: number
+  usuario: string | null
+  fecha: string
+}
+
+/**
+ * Historial de recepciones (produccion_recepciones), más reciente arriba.
+ * Opcionalmente filtra por rango de fechas (por created_at). Resuelve nombres de
+ * producto/almacén/localización con queries aparte (sin embed).
+ */
+export async function getHistorialRecepciones(opts?: {
+  desde?: string
+  hasta?: string
+  limit?: number
+}): Promise<{ data: RecepcionHistorial[]; error: string | null }> {
+  if (!isSupabaseConfigured()) return { data: [], error: null }
+  const supabase = createClient()
+  if (!supabase) return { data: [], error: "Cliente no disponible" }
+
+  let q = supabase
+    .from("produccion_recepciones")
+    .select("id, corrida_id, producto_id, almacen_id, localizacion_id, cantidad, costo_unitario_real, usuario, created_at")
+    .order("created_at", { ascending: false })
+    .limit(opts?.limit ?? 500)
+  if (opts?.desde) q = q.gte("created_at", `${opts.desde}T00:00:00.000Z`)
+  if (opts?.hasta) q = q.lte("created_at", `${opts.hasta}T23:59:59.999Z`)
+
+  const { data, error } = await q
+  if (error) {
+    if (isMissingTable(error)) return { data: [], error: null }
+    return { data: [], error: error.message }
+  }
+  const filas = data || []
+
+  const [nombreProd, nombreAlm, nombreLoc] = await Promise.all([
+    nombresPorId(supabase, "productos", filas.map((r) => Number(r.producto_id))),
+    nombresPorId(supabase, "almacenes", filas.map((r) => Number(r.almacen_id))),
+    nombresPorId(supabase, "localizaciones", filas.map((r) => Number(r.localizacion_id))),
+  ])
+
+  const rows: RecepcionHistorial[] = filas.map((r: Record<string, unknown>) => {
+    const cantidad = Number(r.cantidad || 0)
+    const costo = Number(r.costo_unitario_real || 0)
+    return {
+      id: Number(r.id),
+      corrida_id: Number(r.corrida_id),
+      producto_id: Number(r.producto_id),
+      producto_nombre: nombreProd.get(Number(r.producto_id)) ?? `Producto #${r.producto_id}`,
+      almacen_nombre: nombreAlm.get(Number(r.almacen_id)) ?? "",
+      localizacion_nombre: nombreLoc.get(Number(r.localizacion_id)) ?? "",
+      cantidad,
+      costo_unitario_real: costo,
+      valor_total: +(cantidad * costo).toFixed(2),
+      usuario: (r.usuario as string) ?? null,
+      fecha: String(r.created_at || ""),
+    }
+  })
   return { data: rows, error: null }
 }
 
@@ -124,6 +212,9 @@ export async function recibirCorrida(
     cantidad,
     costo_unitario_real: costo,
     transaccion_id: tx?.id ?? null,
+    // created_at HN-as-UTC para que el historial y el filtro por fecha usen el
+    // dia operativo de Honduras (consistente con transacciones_inventario).
+    created_at: getHondurasNowISO(),
     ...stamp,
   })
   if (recErr && !isMissingTable(recErr)) return { success: false, error: recErr.message }

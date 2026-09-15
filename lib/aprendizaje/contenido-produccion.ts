@@ -365,9 +365,11 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
     descripcion:
       "Confirma las corridas ejecutadas y recibe el producto terminado al inventario, con el costo real de la corrida (promedio ponderado).",
     queHace: [
-      "Lista las corridas ejecutadas pendientes de recibir, con sus unidades buenas y el costo unitario real.",
+      "Dos pestañas: 'Por recibir' (pendientes) e 'Historial' (recepciones anteriores).",
+      "Por recibir: lista las corridas ejecutadas pendientes de recibir, con sus unidades buenas y el costo unitario real.",
       "Al recibir, entran las unidades BUENAS al almacén y localización que elijas.",
       "Registra la entrada en el kardex del producto (movimiento 'Entrada Producción') y recalcula su costo promedio ponderado, igual que una compra.",
+      "Historial: al filtrar un rango de fechas, muestra las recepciones ya hechas (fecha, producto, destino, cantidad, costo, valor y usuario) con sus totales.",
       "No permite recibir dos veces la misma corrida.",
     ],
     queNoHace: [
@@ -378,10 +380,17 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
       {
         titulo: "Recibir una corrida al inventario",
         pasos: [
-          "Abre Producción → Recepción de Producción.",
+          "Abre Producción → Recepción de Producción, pestaña 'Por recibir'.",
           "En la lista de corridas por recibir, presiona 'Recibir' en la que corresponda.",
           "Elige el almacén y la localización donde entra el producto terminado y confirma.",
           "El stock del producto sube por las unidades buenas y su costo promedio se recalcula con el costo real de la corrida.",
+        ],
+      },
+      {
+        titulo: "Consultar el historial de recepciones",
+        pasos: [
+          "Abre la pestaña 'Historial' y elige el rango de fechas (Desde / Hasta).",
+          "Presiona 'Consultar': verás cada recepción con su producto, destino, cantidad, costo y valor, y los totales del rango.",
         ],
       },
     ],
