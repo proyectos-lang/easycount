@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils"
 import { getProductos, type Producto } from "@/lib/services/catalogos"
 import { getProductosFabricados } from "@/lib/services/productos-fabricados"
 import {
-  getOrdenes, createOrden, setEstadoOrden,
+  getOrdenes, createOrden, setEstadoOrden, codigoOrden,
   type OrdenProduccion, type EstadoOrden,
 } from "@/lib/services/produccion-ordenes"
 
@@ -159,6 +159,7 @@ export default function OrdenesProduccionPage() {
                   <Table containerClassName="max-h-[60vh] overflow-y-auto">
                     <TableHeader sticky>
                       <TableRow>
+                        <TableHead>N° Orden</TableHead>
                         <TableHead>Producto</TableHead>
                         <TableHead className="text-right">Cantidad</TableHead>
                         <TableHead>Fecha objetivo</TableHead>
@@ -170,6 +171,7 @@ export default function OrdenesProduccionPage() {
                     <TableBody>
                       {ordenes.map((o) => (
                         <TableRow key={o.id}>
+                          <TableCell className="font-mono text-xs whitespace-nowrap">{codigoOrden(o.id)}</TableCell>
                           <TableCell className="font-medium">{o.producto_nombre || `Producto #${o.producto_id}`}</TableCell>
                           <TableCell className="text-right">{o.cantidad_objetivo}</TableCell>
                           <TableCell className="text-sm">{o.fecha_objetivo || "-"}</TableCell>

@@ -10,6 +10,14 @@ import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from "@/lib/servi
 
 export type EstadoOrden = "Abierta" | "En Proceso" | "Cerrada" | "Cancelada"
 
+/**
+ * Codigo legible de una orden de produccion, derivado de su id (unico y estable):
+ * 'OP-0007'. No requiere columna ni secuencia; el id garantiza unicidad.
+ */
+export function codigoOrden(id: number): string {
+  return `OP-${String(id).padStart(4, "0")}`
+}
+
 export interface OrdenProduccion {
   id: number
   producto_id: number

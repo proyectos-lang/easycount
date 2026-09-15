@@ -11,7 +11,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { useToast } from "@/hooks/use-toast"
 import { getHondurasTodayISODate } from "@/lib/utils/honduras-time"
 import {
-  getPlaneadorDia, setJornada, programarOrden, moverOrdenInicio, desprogramarOrden,
+  getPlaneadorDia, setJornada, programarOrden, moverOrdenInicio, desprogramarOrden, codigoOrden,
   type JornadaDia, type OrdenPlaneada,
 } from "@/lib/services/produccion-ordenes"
 
@@ -198,27 +198,55 @@ export function PlaneadorProduccion() {
                     const left = ((ini - jornada.hora_inicio_min) / rangoMin) * 100
                     const width = (durMin / rangoMin) * 100
                     const fin = ini + durMin
+                    const codigo = codigoOrden(o.id)
+                    // Barra angosta: la etiqueta no cabe adentro -> se muestra al
+                    // lado (fuera de la barra) para no cortar el nombre. Si la
+                    // barra termina cerca del borde derecho, la etiqueta va a la izq.
+                    const angosta = width < 16
+                    const etiquetaAntes = left + width > 78
+                    const etiquetaTexto = `${codigo} · ${o.producto_nombre || `#${o.producto_id}`}`
+                    const rango = `${minToHHMM(ini)}–${minToHHMM(fin)} · ${o.fabricado}/${o.cantidad_objetivo} (${o.completado_pct}%)`
                     return (
                       <div
                         key={o.id}
-                        className={`absolute rounded-md text-white shadow-sm cursor-grab active:cursor-grabbing select-none ${colorDe(o.producto_id)} ${dragId === o.id ? "ring-2 ring-offset-1 ring-stone-400 z-10" : ""}`}
+                        className={`absolute select-none ${dragId === o.id ? "z-10" : ""}`}
                         style={{ left: `${left}%`, width: `calc(${width}% - 2px)`, top: i * 44, height: 40 }}
-                        onPointerDown={(e) => onPointerDown(e, o)}
-                        title={`${o.producto_nombre} · ${minToHHMM(ini)}–${minToHHMM(fin)} · ${o.duracion_efectiva_horas}h`}
+                        title={`${codigo} · ${o.producto_nombre} · ${minToHHMM(ini)}–${minToHHMM(fin)} · ${o.duracion_efectiva_horas}h`}
                       >
-                        {/* Relleno de % completado */}
-                        <div className="absolute inset-y-0 left-0 bg-white/25 rounded-l-md pointer-events-none" style={{ width: `${o.completado_pct}%` }} />
-                        <div className="relative px-2 py-1 h-full flex flex-col justify-center overflow-hidden">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-xs font-medium truncate">{o.producto_nombre || `#${o.producto_id}`}</span>
-                            <button onPointerDown={(e) => e.stopPropagation()} onClick={() => quitarDelDia(o)} className="shrink-0 opacity-70 hover:opacity-100" title="Quitar del día">
+                        {/* Barra */}
+                        <div
+                          className={`relative h-full w-full rounded-md text-white shadow-sm overflow-hidden cursor-grab active:cursor-grabbing ${colorDe(o.producto_id)} ${dragId === o.id ? "ring-2 ring-offset-1 ring-stone-400" : ""}`}
+                          onPointerDown={(e) => onPointerDown(e, o)}
+                        >
+                          {/* Relleno de % completado */}
+                          <div className="absolute inset-y-0 left-0 bg-white/25 pointer-events-none" style={{ width: `${o.completado_pct}%` }} />
+                          {/* Etiqueta DENTRO solo si la barra es suficientemente ancha */}
+                          {!angosta && (
+                            <div className="relative px-2 py-1 h-full flex flex-col justify-center overflow-hidden">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="text-xs font-medium truncate">{etiquetaTexto}</span>
+                                <button onPointerDown={(e) => e.stopPropagation()} onClick={() => quitarDelDia(o)} className="shrink-0 opacity-70 hover:opacity-100" title="Quitar del día">
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                              <span className="text-[10px] opacity-90 tabular-nums truncate">{rango}</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Etiqueta FUERA cuando la barra es angosta (no se corta el nombre) */}
+                        {angosta && (
+                          <div
+                            className={`absolute top-0 h-full flex items-center gap-1 pointer-events-none ${etiquetaAntes ? "right-full mr-1 flex-row-reverse" : "left-full ml-1"}`}
+                          >
+                            <span className="whitespace-nowrap text-[11px] font-medium text-stone-700 leading-tight">
+                              {etiquetaTexto}
+                              <span className="text-stone-400"> · {minToHHMM(ini)}–{minToHHMM(fin)} · {o.completado_pct}%</span>
+                            </span>
+                            <button onPointerDown={(e) => e.stopPropagation()} onClick={() => quitarDelDia(o)} className="pointer-events-auto shrink-0 text-stone-400 hover:text-rose-600" title="Quitar del día">
                               <X className="h-3 w-3" />
                             </button>
                           </div>
-                          <span className="text-[10px] opacity-90 tabular-nums truncate">
-                            {minToHHMM(ini)}–{minToHHMM(fin)} · {o.fabricado}/{o.cantidad_objetivo} ({o.completado_pct}%)
-                          </span>
-                        </div>
+                        )}
                       </div>
                     )
                   })}
@@ -246,6 +274,7 @@ export function PlaneadorProduccion() {
                 <div key={o.id} className="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 pl-3 pr-1.5 py-1.5">
                   <span className={`h-2.5 w-2.5 rounded-full ${colorDe(o.producto_id)}`} />
                   <div className="text-sm">
+                    <span className="font-mono text-[11px] text-stone-500">{codigoOrden(o.id)}</span>{" "}
                     <span className="font-medium">{o.producto_nombre || `#${o.producto_id}`}</span>
                     <span className="text-stone-400 text-xs"> · {o.cantidad_objetivo}u · ~{o.duracion_efectiva_horas}h</span>
                     {o.completado_pct > 0 && <span className="text-emerald-600 text-xs"> · {o.completado_pct}%</span>}
