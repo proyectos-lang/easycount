@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Gauge, Plus, Trash2, Loader2, PlayCircle, CheckCircle2, AlertTriangle, ClipboardList, Activity, CalendarRange, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
+import { Gauge, Plus, Trash2, Loader2, PackageMinus, CheckCircle2, AlertTriangle, ClipboardList, Activity, CalendarRange, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -295,8 +295,8 @@ export default function ControlPisoPage() {
                                         <TableCell>
                                           {c.estado === "Registrada" ? (
                                             <Button size="sm" variant="outline" className="h-8 gap-1" disabled={ejecutandoId === c.id} onClick={() => ejecutar(c)}>
-                                              {ejecutandoId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />}
-                                              Ejecutar
+                                              {ejecutandoId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PackageMinus className="h-3.5 w-3.5" />}
+                                              Descontar material
                                             </Button>
                                           ) : (
                                             <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> {c.estado}</span>
