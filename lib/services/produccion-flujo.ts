@@ -210,6 +210,146 @@ async function actualizarEtapa(id: number, patch: Record<string, unknown>): Prom
   return { error: null }
 }
 
+// ==================== REPORTE DE FLUJO (fase 3) ====================
+
+/** Tiempo promedio por operación (sobre etapas entregadas). */
+export interface TiempoOperacion {
+  nombre: string
+  /** Etapas entregadas con recepción y entrega registradas. */
+  muestras: number
+  /** Promedio recepción→entrega en minutos. */
+  promedio_min: number
+  /** Máximo recepción→entrega en minutos. */
+  max_min: number
+}
+
+/** Carga actual: órdenes en curso por operación (etapa no entregada). */
+export interface CargaOperacion {
+  nombre: string
+  /** Órdenes cuya etapa actual es esta operación. */
+  ordenes: number
+}
+
+/** Una etapa "abierta" (recibida/en proceso, sin entregar) con su antigüedad. */
+export interface EtapaAbierta {
+  etapa_id: number
+  orden_id: number
+  producto_nombre: string
+  nombre: string
+  estado: EstadoEtapa
+  responsable: string | null
+  fecha_recepcion: string | null
+  /** Minutos desde la recepción hasta ahora (antigüedad en la etapa). */
+  antiguedad_min: number
+}
+
+export interface ReporteFlujo {
+  tiempos: TiempoOperacion[]
+  cargas: CargaOperacion[]
+  abiertas: EtapaAbierta[]
+}
+
+/** Diferencia en minutos entre dos ISO HN-as-UTC (o real). Null si falta alguno. */
+function difMin(desde: string | null, hasta: string | null): number | null {
+  if (!desde || !hasta) return null
+  const a = Date.parse(desde), b = Date.parse(hasta)
+  if (Number.isNaN(a) || Number.isNaN(b)) return null
+  return Math.max(0, Math.round((b - a) / 60000))
+}
+
+/**
+ * Reporte del flujo por etapas: tiempo promedio por operación (etapas
+ * entregadas), carga actual por operación (etapas en curso) y las etapas
+ * abiertas con su antigüedad (para detectar cuellos de botella / trabadas).
+ * Opcionalmente filtra por rango de fechas (por fecha_recepcion de la etapa).
+ */
+export async function getReporteFlujo(opts?: {
+  desde?: string
+  hasta?: string
+}): Promise<{ data: ReporteFlujo; error: string | null }> {
+  const empty: ReporteFlujo = { tiempos: [], cargas: [], abiertas: [] }
+  if (!isSupabaseConfigured()) return { data: empty, error: null }
+  const supabase = createClient()
+  if (!supabase) return { data: empty, error: "Cliente no disponible" }
+
+  let q = supabase
+    .from("produccion_orden_etapas")
+    .select("id, orden_id, nombre, estado, responsable, fecha_recepcion, fecha_entrega")
+  if (opts?.desde) q = q.gte("fecha_recepcion", `${opts.desde}T00:00:00.000Z`)
+  if (opts?.hasta) q = q.lte("fecha_recepcion", `${opts.hasta}T23:59:59.999Z`)
+
+  const { data, error } = await q
+  if (error) {
+    if (isMissingTable(error)) return { data: empty, error: null }
+    return { data: empty, error: error.message }
+  }
+  const etapas = (data || []) as Record<string, unknown>[]
+  if (etapas.length === 0) return { data: empty, error: null }
+
+  // Tiempos por operación (entregadas con recepción+entrega).
+  const tMap = new Map<string, { total: number; n: number; max: number }>()
+  // Carga por operación (no entregadas).
+  const cMap = new Map<string, number>()
+  const abiertasRaw: { etapa_id: number; orden_id: number; nombre: string; estado: EstadoEtapa; responsable: string | null; fecha_recepcion: string | null }[] = []
+
+  const ahora = getHondurasNowISO()
+  for (const e of etapas) {
+    const nombre = String(e.nombre || "")
+    const estado = String(e.estado || "Pendiente") as EstadoEtapa
+    if (estado === "Entregada") {
+      const d = difMin(e.fecha_recepcion as string, e.fecha_entrega as string)
+      if (d != null) {
+        const cur = tMap.get(nombre) || { total: 0, n: 0, max: 0 }
+        cur.total += d; cur.n += 1; cur.max = Math.max(cur.max, d)
+        tMap.set(nombre, cur)
+      }
+    } else if (estado === "Recibida" || estado === "En Proceso") {
+      cMap.set(nombre, (cMap.get(nombre) || 0) + 1)
+      abiertasRaw.push({
+        etapa_id: Number(e.id),
+        orden_id: Number(e.orden_id),
+        nombre,
+        estado,
+        responsable: (e.responsable as string) ?? null,
+        fecha_recepcion: (e.fecha_recepcion as string) ?? null,
+      })
+    }
+  }
+
+  const tiempos: TiempoOperacion[] = Array.from(tMap.entries())
+    .map(([nombre, v]) => ({ nombre, muestras: v.n, promedio_min: Math.round(v.total / v.n), max_min: v.max }))
+    .sort((a, b) => b.promedio_min - a.promedio_min)
+  const cargas: CargaOperacion[] = Array.from(cMap.entries())
+    .map(([nombre, ordenes]) => ({ nombre, ordenes }))
+    .sort((a, b) => b.ordenes - a.ordenes)
+
+  // Nombres de producto para las etapas abiertas.
+  const ordenIds = Array.from(new Set(abiertasRaw.map((a) => a.orden_id)))
+  const nombreProd = new Map<number, string>()
+  if (ordenIds.length > 0) {
+    const { data: ords } = await supabase.from("produccion_ordenes").select("id, producto_id").in("id", ordenIds)
+    const prodIds = Array.from(new Set((ords || []).map((o) => Number(o.producto_id))))
+    const ordProd = new Map<number, number>()
+    for (const o of ords || []) ordProd.set(Number(o.id), Number(o.producto_id))
+    if (prodIds.length > 0) {
+      const { data: prods } = await supabase.from("productos").select("id, nombre").in("id", prodIds)
+      const pn = new Map<number, string>()
+      for (const p of prods || []) pn.set(Number(p.id), String(p.nombre || ""))
+      for (const [oid, pid] of ordProd) nombreProd.set(oid, pn.get(pid) || `Producto #${pid}`)
+    }
+  }
+
+  const abiertas: EtapaAbierta[] = abiertasRaw
+    .map((a) => ({
+      ...a,
+      producto_nombre: nombreProd.get(a.orden_id) || `Orden #${a.orden_id}`,
+      antiguedad_min: difMin(a.fecha_recepcion, ahora) ?? 0,
+    }))
+    .sort((a, b) => b.antiguedad_min - a.antiguedad_min)
+
+  return { data: { tiempos, cargas, abiertas }, error: null }
+}
+
 /** Marca una etapa como Recibida (llegó el trabajo a esta operación). */
 export async function recibirEtapa(id: number, responsable?: string | null): Promise<{ error: string | null }> {
   return actualizarEtapa(id, {
@@ -270,6 +410,22 @@ export async function entregarEtapa(
       .from("produccion_orden_etapas")
       .update({ estado: "Recibida", fecha_recepcion: nowHN, updated_at: new Date().toISOString() })
       .eq("id", sig.id)
+  } else if (!sig) {
+    // No hay etapa siguiente: si TODAS las etapas de la orden estan entregadas,
+    // el flujo termino -> cerramos la orden automaticamente.
+    const { data: pendientes } = await supabase
+      .from("produccion_orden_etapas")
+      .select("id")
+      .eq("orden_id", etapa.orden_id)
+      .neq("estado", "Entregada")
+      .limit(1)
+    if (!pendientes || pendientes.length === 0) {
+      await supabase
+        .from("produccion_ordenes")
+        .update({ estado: "Cerrada", updated_at: new Date().toISOString() })
+        .eq("id", etapa.orden_id)
+        .neq("estado", "Cancelada")
+    }
   }
   return { error: null }
 }

@@ -75,7 +75,7 @@ export interface ModuloGranular {
 }
 
 /**
- * 43 modulos granulares. Cualquier cambio aqui debe replicarse en la tabla
+ * 44 modulos granulares. Cualquier cambio aqui debe replicarse en la tabla
  * `modulos` (y viceversa). NOTA: "Listas de Precios" y TODOS los de la
  * categoria "Produccion" NO van en MODULOS_BASE (nacen deshabilitados por
  * empresa; el super-admin los habilita desde /plataforma).
@@ -135,6 +135,7 @@ export const MODULOS: ReadonlyArray<ModuloGranular> = [
   // ── Produccion (modulos NUEVOS, nacen deshabilitados: no estan en MODULOS_BASE) ──
   { nombre: "Operaciones de Produccion", href: "/produccion/operaciones", categoria: "Produccion", icon: Workflow },
   { nombre: "Flujo de Produccion", href: "/produccion/flujo", categoria: "Produccion", icon: ArrowLeftRight },
+  { nombre: "Reporte de Flujo", href: "/produccion/reporte-flujo", categoria: "Produccion", icon: BarChart3 },
   { nombre: "Materiales", href: "/produccion/materiales", categoria: "Produccion", icon: Boxes },
   { nombre: "Compra de Materiales", href: "/produccion/compras-materiales", categoria: "Produccion", icon: Truck },
   { nombre: "Inventario de Materiales", href: "/produccion/inventario-materiales", categoria: "Produccion", icon: Warehouse },

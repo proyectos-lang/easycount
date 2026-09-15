@@ -77,7 +77,7 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
           "Despliega la orden en 'Órdenes en flujo'.",
           "En la etapa actual, presiona 'Entregar' cuando termines: registra responsable, cantidad y notas.",
           "Al entregar, la siguiente etapa queda 'Recibida' (lista para trabajar) automáticamente.",
-          "Cuando entregues la última etapa, la orden queda 'Completado'.",
+          "Cuando entregues la última etapa, el flujo queda 'Completado' y la orden se cierra automáticamente.",
         ],
       },
     ],
@@ -94,6 +94,40 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
       },
     ],
     keywords: ["flujo", "etapas", "recepcion", "entrega", "avance", "tablero", "operaciones", "produccion", "recorrido", "estaciones", "wip", "proceso"],
+  },
+  {
+    modulo: "Reporte de Flujo",
+    titulo: "Reporte de Flujo",
+    descripcion:
+      "Los indicadores del flujo por etapas: cuánto tarda cada operación, cuánta carga tiene cada una y qué órdenes están trabadas (cuellos de botella).",
+    queHace: [
+      "Tiempo por operación: promedio (y máximo) que tarda cada etapa desde que se recibe hasta que se entrega, en el rango de fechas elegido.",
+      "Carga actual por operación: cuántas órdenes están AHORA en cada etapa (etapas no entregadas).",
+      "Etapas en curso: lista de etapas recibidas/en proceso sin entregar, ordenadas por antigüedad — para ver dónde se atasca el trabajo.",
+      "El rango de fechas afecta los tiempos por operación; la carga y las etapas en curso son del estado actual.",
+    ],
+    queNoHace: [
+      "No mueve órdenes ni etapas: es solo un reporte de consulta (el avance se hace en Flujo de Producción).",
+      "No calcula costos: eso es del Control de Piso y el Dashboard de Producción.",
+    ],
+    operaciones: [
+      {
+        titulo: "Analizar el flujo",
+        pasos: [
+          "Abre Producción → Reporte de Flujo.",
+          "Elige el rango de fechas y presiona 'Consultar'.",
+          "Mira el tiempo por operación para ver cuál etapa tarda más, la carga por operación para ver dónde se acumulan órdenes, y las etapas en curso para detectar las que llevan más tiempo sin avanzar (en rojo si pasan de un día).",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        pregunta: "¿Por qué una operación no aparece en 'tiempo por operación'?",
+        respuesta:
+          "Solo aparecen operaciones con al menos una etapa ENTREGADA en el rango (necesita recepción y entrega para medir el tiempo). Las que aún no se entregan salen en 'carga' y 'etapas en curso'.",
+      },
+    ],
+    keywords: ["reporte", "flujo", "tiempos", "cuello de botella", "carga", "operaciones", "etapas", "produccion", "atascada", "trabada", "indicadores"],
   },
   {
     modulo: "Materiales",
