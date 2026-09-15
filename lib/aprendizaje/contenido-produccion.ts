@@ -158,24 +158,33 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
     descripcion:
       "La receta de cada producto fabricado: qué materiales consume por unidad y sus factores de costo (energía, mano de obra, overhead). Calcula el costo estimado del artículo.",
     queHace: [
-      "Arma la receta de un producto EXISTENTE del catálogo: elige el producto y agrega una línea por material con su consumo por unidad producida.",
+      "Dos pestañas: 'Productos fabricados' (tabla) y 'Crear/Editar receta' (editor).",
+      "La tabla lista los productos marcados como fabricados e indica si cada uno tiene o no receta y su costo estimado por unidad; al desplegar un producto con receta, muestra el detalle de materiales y el desglose de costos.",
+      "El editor arma la receta de un producto: agrega una línea por material con su consumo por unidad producida.",
       "Registra factores de costo POR UNIDAD: energía, mano de obra y overhead (en Lempiras).",
       "Calcula en vivo el costo estimado por unidad = Σ(consumo × costo del material) + factores.",
       "Guarda el estándar de producción (unidades por minuto), usado luego para el rendimiento/OEE.",
-      "Tener una receta MARCA al producto como fabricado (se distingue de los productos que solo se compran/venden).",
     ],
     queNoHace: [
       "No cambia el costo real del producto: el costo estimado es una referencia. El costo REAL se fija al recibir cada corrida de producción (con el consumo real de esa corrida).",
-      "No crea el producto: debe existir antes en Configuración → Productos.",
+      "No crea el producto ni lo marca como fabricado: el producto debe existir y estar marcado 'Es producto fabricado' en Configuración → Productos para aparecer aquí.",
       "No consume inventario: la receta es solo la definición; el consumo ocurre en Control de Piso.",
     ],
     operaciones: [
       {
-        titulo: "Crear la receta de un producto",
+        titulo: "Ver qué productos tienen receta y sus costos",
         pasos: [
-          "Abre Producción → Recetas y elige el producto a fabricar en el buscador.",
+          "Abre Producción → Recetas, pestaña 'Productos fabricados'.",
+          "Cada fila muestra si el producto tiene receta ('Con receta'/'Sin receta') y su costo estimado por unidad.",
+          "Despliega una fila con receta para ver sus materiales (consumo y costo) y el desglose completo del costo.",
+        ],
+      },
+      {
+        titulo: "Crear o editar la receta de un producto",
+        pasos: [
+          "En la pestaña 'Crear/Editar receta' elige el producto (o presiona 'Crear/Editar receta' desde la tabla).",
           "Escribe su estándar de producción (unidades por minuto), si lo conoces.",
-          "Agrega una línea por cada material y su consumo por unidad producida (ej. 0.5 kg de tela por camiseta).",
+          "Agrega una línea por cada material y su consumo por unidad producida (ej. 0.5 m de tela por camiseta).",
           "Ingresa los factores de costo por unidad (energía, mano de obra, overhead).",
           "Revisa el costo estimado por unidad que se calcula solo y presiona 'Guardar receta'.",
         ],
