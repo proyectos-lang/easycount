@@ -272,8 +272,9 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
       "Registra las corridas de producción de cada orden y monitorea lo procesado por día y por rango. Al ejecutar una corrida, descuenta automáticamente los materiales según la receta.",
     queHace: [
       "Tres pestañas: 'Registro' (por orden), 'En vivo' (por día) y 'Consolidado' (por rango de fechas).",
-      "Registro: elige una orden abierta o en proceso y registra una o varias corridas (turnos/lotes), con hora de inicio/fin, unidades buenas y defectuosas (con motivos), paros en minutos, tiempo planificado y novedades.",
-      "En vivo: muestra lo procesado en un día (por defecto hoy) — corridas, paros/defectos con su motivo e indicadores del día (buenas, defectuosas, calidad, paros). Puedes moverte a días anteriores.",
+      "Registro: elige la orden (aparecen primero las PROGRAMADAS en el planeador, con su número OP-####), y registra una o varias corridas con: operador (texto libre), hora de inicio/fin, unidades buenas y defectuosas (con motivos), VARIOS paros (cada uno con su motivo y minutos), tiempo planificado y novedades.",
+      "Al escribir las unidades, muestra en vivo el CONSUMO de materia prima que corresponde (receta × unidades procesadas) por material, y avisa en rojo si el stock no alcanza.",
+      "En vivo: muestra lo procesado en un día (por defecto hoy) — corridas con su operador, los paros registrados (motivo y duración) e indicadores del día (buenas, defectuosas, calidad, paros). Puedes moverte a días anteriores.",
       "Consolidado: al filtrar un rango de fechas, una tabla con una fila por día y sus indicadores (corridas, órdenes, buenas, defectuosas, calidad, paros, tiempo planificado y los productos trabajados).",
       "Al 'Ejecutar' la corrida, descuenta los materiales = receta × unidades PROCESADAS (buenas + defectuosas) y calcula el costo real (materiales + factores) por unidad buena.",
       "Bloquea la ejecución si algún material no alcanza (nunca deja el stock de material en negativo).",
@@ -288,8 +289,9 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
       {
         titulo: "Registrar y ejecutar una corrida",
         pasos: [
-          "En la pestaña 'Registro', elige la orden.",
-          "Presiona 'Registrar corrida' y captura las unidades buenas/defectuosas, horas, paros y novedades. Si hubo defectos, agrega sus motivos.",
+          "En la pestaña 'Registro', elige la orden (las programadas aparecen primero).",
+          "Presiona 'Registrar corrida' y captura el operador, las horas, las unidades buenas/defectuosas y el tiempo planificado.",
+          "Agrega los paros que hubo (cada uno con su motivo y minutos) y, si hubo defectos, sus motivos. Al escribir las unidades verás el consumo de materia prima estimado.",
           "Guarda: la corrida queda 'Registrada' (aún no descuenta material).",
           "Presiona 'Ejecutar' en la fila: se descuentan los materiales de la receta según las unidades procesadas y se calcula el costo real. Si falta material, te avisa y no ejecuta.",
         ],

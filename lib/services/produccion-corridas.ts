@@ -19,11 +19,14 @@ import { matAjustarStock } from "@/lib/services/produccion-materiales"
 export type EstadoCorrida = "Registrada" | "Ejecutada" | "Recibida" | "Cancelada"
 
 export interface DefectoInput { motivo: string; cantidad: number }
+/** Un paro de la corrida: motivo (texto libre) + duración en minutos. */
+export interface ParoInput { motivo: string; minutos: number }
 
 export interface Corrida {
   id: number
   orden_id: number
   producto_id: number
+  operador: string | null
   hora_inicio: string | null
   hora_fin: string | null
   unidades_buenas: number
@@ -82,6 +85,69 @@ export function calcularConsumoYCosto(
   return { consumos, costoMateriales, costoFactores, costoUnitarioReal }
 }
 
+/** Línea del preview de consumo de materia prima de una corrida. */
+export interface ConsumoPreviewLinea {
+  material_id: number
+  material_nombre: string
+  unidad_medida: string
+  consumo_por_unidad: number
+  cantidad_requerida: number
+  stock_actual: number
+  suficiente: boolean
+}
+
+/**
+ * Preview del consumo de materia prima para una producción: por cada material de
+ * la receta del producto, cuánto se consumiría = consumo_por_unidad × unidades
+ * PROCESADAS, y si el stock actual alcanza. Es informativo (no descuenta nada);
+ * el descuento real y su validación ocurren al Ejecutar la corrida.
+ */
+export async function getConsumoPreview(
+  productoId: number,
+  unidadesProcesadas: number,
+): Promise<{ data: ConsumoPreviewLinea[]; tieneReceta: boolean; error: string | null }> {
+  if (!isSupabaseConfigured()) return { data: [], tieneReceta: false, error: null }
+  const supabase = createClient()
+  if (!supabase) return { data: [], tieneReceta: false, error: "Cliente no disponible" }
+
+  // Receta del producto (su existencia = tiene receta).
+  const { data: rec, error: rErr } = await supabase
+    .from("produccion_recetas")
+    .select("id")
+    .eq("producto_id", productoId)
+    .maybeSingle()
+  if (rErr) {
+    if (isMissingTable(rErr)) return { data: [], tieneReceta: false, error: null }
+    return { data: [], tieneReceta: false, error: rErr.message }
+  }
+  if (!rec?.id) return { data: [], tieneReceta: false, error: null }
+
+  const { data: lins, error: lErr } = await supabase
+    .from("produccion_receta_materiales")
+    .select("material_id, consumo_por_unidad, materiales (nombre, unidad_medida, stock_total)")
+    .eq("receta_id", rec.id)
+  if (lErr) return { data: [], tieneReceta: true, error: lErr.message }
+
+  const proc = Math.max(0, Number(unidadesProcesadas) || 0)
+  const filas: ConsumoPreviewLinea[] = (lins || []).map((l: Record<string, unknown>) => {
+    const m = l.materiales as { nombre?: string; unidad_medida?: string; stock_total?: number } | null
+    const consumoUnit = Number(l.consumo_por_unidad || 0)
+    const requerido = +(consumoUnit * proc).toFixed(6)
+    const stock = Number(m?.stock_total || 0)
+    return {
+      material_id: Number(l.material_id),
+      material_nombre: m?.nombre || `Material #${l.material_id}`,
+      unidad_medida: m?.unidad_medida || "",
+      consumo_por_unidad: consumoUnit,
+      cantidad_requerida: requerido,
+      stock_actual: stock,
+      suficiente: stock + 1e-6 >= requerido,
+    }
+  })
+  filas.sort((a, b) => a.material_nombre.localeCompare(b.material_nombre, "es"))
+  return { data: filas, tieneReceta: true, error: null }
+}
+
 export async function getCorridas(ordenId: number): Promise<{ data: Corrida[]; error: string | null }> {
   if (!isSupabaseConfigured()) return { data: [], error: null }
   const supabase = createClient()
@@ -98,18 +164,33 @@ export async function getCorridas(ordenId: number): Promise<{ data: Corrida[]; e
   return { data: (data || []) as Corrida[], error: null }
 }
 
+/** true si el error de PostgREST es por columna inexistente (script 055 no aplicado). */
+function isMissingColumn(err: { message?: string; code?: string } | null): boolean {
+  if (!err) return false
+  const msg = (err.message || "").toLowerCase()
+  return (
+    err.code === "42703" ||
+    /column .* does not exist/.test(msg) ||
+    (msg.includes("could not find") && msg.includes("column"))
+  )
+}
+
 /** Crea una corrida en estado 'Registrada' (aún NO descuenta material). */
 export async function createCorrida(input: {
   orden_id: number
   producto_id: number
+  operador?: string | null
   hora_inicio?: string | null
   hora_fin?: string | null
   unidades_buenas: number
   unidades_defectuosas: number
-  paros_minutos: number
+  /** Total de paros (min). Si se envían `paros`, se ignora y se usa su suma. */
+  paros_minutos?: number
   tiempo_planificado_minutos?: number | null
   novedades?: string | null
   defectos?: DefectoInput[]
+  /** Varios paros con su motivo y minutos. Su suma alimenta paros_minutos. */
+  paros?: ParoInput[]
 }): Promise<{ data: { id: number } | null; error: string | null }> {
   const supabase = createClient()
   if (!supabase) return { data: null, error: "Cliente no disponible" }
@@ -120,28 +201,46 @@ export async function createCorrida(input: {
   const defect = Math.max(0, Number(input.unidades_defectuosas) || 0)
   const procesadas = +(buenas + defect).toFixed(4)
 
-  const { data, error } = await supabase
+  // Paros: si viene la lista detallada, el total es su suma; si no, el número suelto.
+  const parosLista = (input.paros || []).filter((p) => Number(p.minutos) > 0)
+  const parosTotal = parosLista.length > 0
+    ? +parosLista.reduce((a, p) => a + Number(p.minutos), 0).toFixed(2)
+    : Number(input.paros_minutos) || 0
+
+  const baseInsert = {
+    orden_id: input.orden_id,
+    producto_id: input.producto_id,
+    hora_inicio: input.hora_inicio || null,
+    hora_fin: input.hora_fin || null,
+    unidades_buenas: buenas,
+    unidades_defectuosas: defect,
+    unidades_procesadas: procesadas,
+    paros_minutos: parosTotal,
+    tiempo_planificado_minutos: input.tiempo_planificado_minutos ?? null,
+    novedades: (input.novedades || "").trim() || null,
+    estado: "Registrada",
+    // created_at en hora de Honduras (HN-as-UTC): asi las vistas por dia
+    // (getActividadDia / getConsolidadoRango, que usan getHondurasDayRange)
+    // agrupan la corrida en el dia operativo correcto, sin desfase de 6h.
+    created_at: getHondurasNowISO(),
+    ...stamp,
+  }
+  const operador = (input.operador || "").trim() || null
+
+  let { data, error } = await supabase
     .from("produccion_corridas")
-    .insert({
-      orden_id: input.orden_id,
-      producto_id: input.producto_id,
-      hora_inicio: input.hora_inicio || null,
-      hora_fin: input.hora_fin || null,
-      unidades_buenas: buenas,
-      unidades_defectuosas: defect,
-      unidades_procesadas: procesadas,
-      paros_minutos: Number(input.paros_minutos) || 0,
-      tiempo_planificado_minutos: input.tiempo_planificado_minutos ?? null,
-      novedades: (input.novedades || "").trim() || null,
-      estado: "Registrada",
-      // created_at en hora de Honduras (HN-as-UTC): asi las vistas por dia
-      // (getActividadDia / getConsolidadoRango, que usan getHondurasDayRange)
-      // agrupan la corrida en el dia operativo correcto, sin desfase de 6h.
-      created_at: getHondurasNowISO(),
-      ...stamp,
-    })
+    .insert({ ...baseInsert, operador })
     .select("id")
     .single()
+
+  // Fallback: si el script 055 (columna operador) no se aplicó, insertamos sin él.
+  if (error && isMissingColumn(error)) {
+    ;({ data, error } = await supabase
+      .from("produccion_corridas")
+      .insert(baseInsert)
+      .select("id")
+      .single())
+  }
   if (error || !data?.id) {
     if (isMissingTable(error)) return { data: null, error: CORRIDAS_FEATURE_PENDING }
     return { data: null, error: error?.message || "No se pudo registrar la corrida" }
@@ -151,9 +250,20 @@ export async function createCorrida(input: {
   const defs = (input.defectos || []).filter((d) => d.motivo.trim() && Number(d.cantidad) > 0)
   if (defs.length > 0) {
     await supabase.from("produccion_corrida_defectos").insert(
-      defs.map((d) => ({ corrida_id: data.id, motivo: d.motivo.trim(), cantidad: Number(d.cantidad), ...stamp })),
+      defs.map((d) => ({ corrida_id: data!.id, motivo: d.motivo.trim(), cantidad: Number(d.cantidad), ...stamp })),
     )
   }
+
+  // Paros detallados (best-effort; si falta la tabla 055, no rompe la corrida).
+  if (parosLista.length > 0) {
+    const { error: parosErr } = await supabase.from("produccion_corrida_paros").insert(
+      parosLista.map((p) => ({ corrida_id: data!.id, motivo: (p.motivo || "").trim() || null, minutos: Number(p.minutos), ...stamp })),
+    )
+    if (parosErr && !isMissingTable(parosErr)) {
+      console.warn("[createCorrida] no se guardaron los paros:", parosErr.message)
+    }
+  }
+
   return { data: { id: data.id as number }, error: null }
 }
 
@@ -293,12 +403,12 @@ export interface CorridaConProducto extends Corrida {
   producto_nombre: string
 }
 
-/** Un paro registrado (motivo de defecto o novedad) para el detalle del día. */
+/** Un paro registrado (motivo + minutos) para el detalle del día. */
 export interface ParoDia {
   corrida_id: number
   producto_nombre: string
   motivo: string
-  cantidad: number
+  minutos: number
 }
 
 /** Totales agregados de un día (o del rango, por fila). */
@@ -396,21 +506,22 @@ export async function getActividadDia(fecha: string): Promise<{ data: ActividadD
   const { data: corridas, error } = await corridasEnRango(supabase, start, end)
   if (error) return { data: vacio, error }
 
-  // Paros = motivos de defecto de esas corridas (por qué se registraron paros/defectos).
+  // Paros registrados (motivo + minutos) de las corridas del día. Si la tabla
+  // 055 no existe aún, la lista queda vacía (no rompe).
   const paros: ParoDia[] = []
   const corridaIds = corridas.map((c) => c.id)
   if (corridaIds.length > 0) {
-    const { data: defs } = await supabase
-      .from("produccion_corrida_defectos")
-      .select("corrida_id, motivo, cantidad")
+    const { data: pr } = await supabase
+      .from("produccion_corrida_paros")
+      .select("corrida_id, motivo, minutos")
       .in("corrida_id", corridaIds)
     const nombrePorCorrida = new Map(corridas.map((c) => [c.id, c.producto_nombre]))
-    for (const d of defs || []) {
+    for (const p of pr || []) {
       paros.push({
-        corrida_id: Number(d.corrida_id),
-        producto_nombre: nombrePorCorrida.get(Number(d.corrida_id)) || "",
-        motivo: String(d.motivo || ""),
-        cantidad: Number(d.cantidad) || 0,
+        corrida_id: Number(p.corrida_id),
+        producto_nombre: nombrePorCorrida.get(Number(p.corrida_id)) || "",
+        motivo: String(p.motivo || "Sin motivo"),
+        minutos: Number(p.minutos) || 0,
       })
     }
   }

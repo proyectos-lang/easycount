@@ -22,13 +22,14 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { formatCurrency } from "@/lib/utils/format"
 import { getHondurasTodayISODate } from "@/lib/utils/honduras-time"
-import { getOrdenes, type OrdenProduccion } from "@/lib/services/produccion-ordenes"
+import { getOrdenes, codigoOrden, type OrdenProduccion } from "@/lib/services/produccion-ordenes"
 import {
-  getCorridas, createCorrida, ejecutarCorrida, getActividadDia, getConsolidadoRango,
-  type Corrida, type ActividadDia, type DiaConsolidado,
+  getCorridas, createCorrida, ejecutarCorrida, getActividadDia, getConsolidadoRango, getConsumoPreview,
+  type Corrida, type ActividadDia, type DiaConsolidado, type ConsumoPreviewLinea,
 } from "@/lib/services/produccion-corridas"
 
 interface DefectoForm { _id: string; motivo: string; cantidad: string }
+interface ParoForm { _id: string; motivo: string; minutos: string }
 let seq = 0
 const nid = () => `d-${++seq}`
 
@@ -52,16 +53,21 @@ export default function ControlPisoPage() {
 
   // Nueva corrida
   const [nuevoOpen, setNuevoOpen] = React.useState(false)
+  const [operador, setOperador] = React.useState("")
   const [horaInicio, setHoraInicio] = React.useState("")
   const [horaFin, setHoraFin] = React.useState("")
   const [buenas, setBuenas] = React.useState("")
   const [defectuosas, setDefectuosas] = React.useState("")
-  const [paros, setParos] = React.useState("")
   const [planificado, setPlanificado] = React.useState("")
   const [novedades, setNovedades] = React.useState("")
   const [defectos, setDefectos] = React.useState<DefectoForm[]>([])
+  const [parosList, setParosList] = React.useState<ParoForm[]>([])
   const [saving, setSaving] = React.useState(false)
   const [ejecutandoId, setEjecutandoId] = React.useState<number | null>(null)
+
+  // Preview de consumo de materia prima (según unidades procesadas).
+  const [consumo, setConsumo] = React.useState<ConsumoPreviewLinea[]>([])
+  const [tieneReceta, setTieneReceta] = React.useState(true)
 
   React.useEffect(() => {
     getOrdenes().then(({ data }) => {
@@ -72,6 +78,18 @@ export default function ControlPisoPage() {
   }, [])
 
   const ordenSel = ordenes.find((o) => String(o.id) === ordenId)
+
+  // Órdenes PROGRAMADAS (colocadas en el planeador) primero; luego el resto.
+  const { programadas, sinProgramar } = React.useMemo(() => {
+    const prog = ordenes.filter((o) => o.fecha_programada != null && o.inicio_min_dia != null)
+    const rest = ordenes.filter((o) => !(o.fecha_programada != null && o.inicio_min_dia != null))
+    // Programadas: por fecha y hora de inicio.
+    prog.sort((a, b) =>
+      (a.fecha_programada || "").localeCompare(b.fecha_programada || "") ||
+      (a.inicio_min_dia ?? 0) - (b.inicio_min_dia ?? 0),
+    )
+    return { programadas: prog, sinProgramar: rest }
+  }, [ordenes])
 
   const cargarCorridas = React.useCallback(async (id: number) => {
     setCargandoCorridas(true)
@@ -86,10 +104,24 @@ export default function ControlPisoPage() {
   }, [ordenId, cargarCorridas])
 
   function abrirNueva() {
-    setHoraInicio(""); setHoraFin(""); setBuenas(""); setDefectuosas(""); setParos(""); setPlanificado(""); setNovedades("")
-    setDefectos([])
+    setOperador(""); setHoraInicio(""); setHoraFin(""); setBuenas(""); setDefectuosas(""); setPlanificado(""); setNovedades("")
+    setDefectos([]); setParosList([]); setConsumo([]); setTieneReceta(true)
     setNuevoOpen(true)
   }
+
+  // Preview de consumo: al cambiar buenas/defectuosas (con el diálogo abierto),
+  // consulta la receta del producto y cuánto material consumiría.
+  const procesadasNum = (Number(buenas) || 0) + (Number(defectuosas) || 0)
+  React.useEffect(() => {
+    if (!nuevoOpen || !ordenSel) return
+    if (procesadasNum <= 0) { setConsumo([]); return }
+    let cancel = false
+    const t = setTimeout(async () => {
+      const { data, tieneReceta } = await getConsumoPreview(ordenSel.producto_id, procesadasNum)
+      if (!cancel) { setConsumo(data); setTieneReceta(tieneReceta) }
+    }, 250)
+    return () => { cancel = true; clearTimeout(t) }
+  }, [nuevoOpen, ordenSel, procesadasNum])
 
   async function guardarCorrida() {
     if (!ordenSel) return
@@ -101,14 +133,15 @@ export default function ControlPisoPage() {
     const res = await createCorrida({
       orden_id: ordenSel.id,
       producto_id: ordenSel.producto_id,
+      operador: operador || null,
       hora_inicio: horaInicio ? new Date(horaInicio).toISOString() : null,
       hora_fin: horaFin ? new Date(horaFin).toISOString() : null,
       unidades_buenas: Number(buenas) || 0,
       unidades_defectuosas: Number(defectuosas) || 0,
-      paros_minutos: Number(paros) || 0,
       tiempo_planificado_minutos: planificado ? Number(planificado) : null,
       novedades: novedades || null,
       defectos: defectos.map((d) => ({ motivo: d.motivo, cantidad: Number(d.cantidad) || 0 })),
+      paros: parosList.map((p) => ({ motivo: p.motivo, minutos: Number(p.minutos) || 0 })),
     })
     setSaving(false)
     if (res.error) {
@@ -168,9 +201,21 @@ export default function ControlPisoPage() {
                   <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar orden…" /></SelectTrigger>
                   <SelectContent>
                     {ordenes.length === 0 && <div className="px-2 py-3 text-sm text-stone-500 text-center">No hay órdenes abiertas.</div>}
-                    {ordenes.map((o) => (
+                    {programadas.length > 0 && (
+                      <div className="px-2 pt-1.5 pb-0.5 text-[11px] font-semibold uppercase text-emerald-700">Programadas</div>
+                    )}
+                    {programadas.map((o) => (
                       <SelectItem key={o.id} value={String(o.id)}>
-                        {o.producto_nombre} · {o.cantidad_objetivo} und · {o.estado}
+                        <span className="font-mono text-xs text-stone-500">{codigoOrden(o.id)}</span> · {o.producto_nombre} · {o.cantidad_objetivo} und
+                        {o.fecha_programada ? ` · ${o.fecha_programada}` : ""}
+                      </SelectItem>
+                    ))}
+                    {sinProgramar.length > 0 && (
+                      <div className="px-2 pt-2 pb-0.5 text-[11px] font-semibold uppercase text-stone-400">Sin programar</div>
+                    )}
+                    {sinProgramar.map((o) => (
+                      <SelectItem key={o.id} value={String(o.id)}>
+                        <span className="font-mono text-xs text-stone-500">{codigoOrden(o.id)}</span> · {o.producto_nombre} · {o.cantidad_objetivo} und · {o.estado}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -253,10 +298,14 @@ export default function ControlPisoPage() {
       <Dialog open={nuevoOpen} onOpenChange={setNuevoOpen}>
         <DialogContent className="max-w-lg max-h-[88vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Registrar corrida</DialogTitle>
+            <DialogTitle>Registrar corrida{ordenSel ? ` · ${codigoOrden(ordenSel.id)}` : ""}</DialogTitle>
             <DialogDescription>{ordenSel?.producto_nombre}. El consumo se calcula sobre las unidades procesadas (buenas + defectuosas).</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-1">
+            <div className="grid gap-1.5">
+              <Label className="text-xs">Operador</Label>
+              <Input value={operador} onChange={(e) => setOperador(e.target.value)} placeholder="Nombre del operador" className="h-9" />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5"><Label className="text-xs">Hora inicio</Label><Input type="datetime-local" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} className="h-9" /></div>
               <div className="grid gap-1.5"><Label className="text-xs">Hora fin</Label><Input type="datetime-local" value={horaFin} onChange={(e) => setHoraFin(e.target.value)} className="h-9" /></div>
@@ -265,9 +314,59 @@ export default function ControlPisoPage() {
               <div className="grid gap-1.5"><Label className="text-xs">Unidades buenas</Label><Input type="number" min="0" value={buenas} onChange={(e) => setBuenas(e.target.value)} className="h-10 text-base" placeholder="0" /></div>
               <div className="grid gap-1.5"><Label className="text-xs">Unidades defectuosas</Label><Input type="number" min="0" value={defectuosas} onChange={(e) => setDefectuosas(e.target.value)} className="h-10 text-base" placeholder="0" /></div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-1.5"><Label className="text-xs">Paros (minutos)</Label><Input type="number" min="0" value={paros} onChange={(e) => setParos(e.target.value)} className="h-9" placeholder="0" /></div>
-              <div className="grid gap-1.5"><Label className="text-xs">Tiempo planificado (min)</Label><Input type="number" min="0" value={planificado} onChange={(e) => setPlanificado(e.target.value)} className="h-9" placeholder="turno" /></div>
+
+            {/* Preview del consumo de materia prima según las unidades procesadas */}
+            {procesadasNum > 0 && (
+              <div className="rounded-lg border border-stone-200 bg-stone-50/60 p-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <Label className="text-xs">Consumo de materia prima <span className="text-stone-400 font-normal">({procesadasNum} u procesadas)</span></Label>
+                </div>
+                {!tieneReceta ? (
+                  <p className="text-xs text-amber-700 flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5" /> Este producto no tiene receta; no se puede estimar el consumo ni ejecutar la corrida.</p>
+                ) : consumo.length === 0 ? (
+                  <p className="text-xs text-stone-400">Calculando…</p>
+                ) : (
+                  <div className="space-y-1">
+                    {consumo.map((m) => (
+                      <div key={m.material_id} className="flex items-center justify-between text-xs">
+                        <span className="text-stone-600 truncate">{m.material_nombre}</span>
+                        <span className={`tabular-nums font-medium ${m.suficiente ? "text-stone-700" : "text-rose-600"}`}>
+                          {m.cantidad_requerida} {m.unidad_medida}
+                          {!m.suficiente && <span className="ml-1 text-[10px] text-rose-600">(stock {m.stock_actual})</span>}
+                        </span>
+                      </div>
+                    ))}
+                    {consumo.some((m) => !m.suficiente) && (
+                      <p className="text-[11px] text-rose-600 pt-1 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Stock insuficiente en los materiales en rojo; al ejecutar se bloqueará.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="grid gap-1.5">
+              <Label className="text-xs">Tiempo planificado (min) <span className="text-stone-400 font-normal">(turno)</span></Label>
+              <Input type="number" min="0" value={planificado} onChange={(e) => setPlanificado(e.target.value)} className="h-9 max-w-[160px]" placeholder="480" />
+            </div>
+
+            {/* Paros: varios, cada uno con su motivo y minutos */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Paros <span className="text-stone-400 font-normal">(motivo y minutos)</span></Label>
+                {parosList.length > 0 && (
+                  <span className="text-[11px] text-amber-700">Total: {parosList.reduce((a, p) => a + (Number(p.minutos) || 0), 0)} min</span>
+                )}
+              </div>
+              {parosList.map((p) => (
+                <div key={p._id} className="flex items-center gap-2">
+                  <Input value={p.motivo} onChange={(e) => setParosList((prev) => prev.map((x) => x._id === p._id ? { ...x, motivo: e.target.value } : x))} placeholder="Motivo (ej. falla eléctrica)" className="h-9 flex-1" />
+                  <Input type="number" min="0" value={p.minutos} onChange={(e) => setParosList((prev) => prev.map((x) => x._id === p._id ? { ...x, minutos: e.target.value } : x))} placeholder="min" className="h-9 w-20" />
+                  <Button type="button" variant="ghost" size="icon" className="h-9 w-8 text-stone-500 hover:text-destructive" onClick={() => setParosList((prev) => prev.filter((x) => x._id !== p._id))}><Trash2 className="h-4 w-4" /></Button>
+                </div>
+              ))}
+              <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setParosList((prev) => [...prev, { _id: nid(), motivo: "", minutos: "" }])}>
+                <Plus className="h-4 w-4" /> Agregar paro
+              </Button>
             </div>
 
             {/* Motivos de defecto */}
@@ -404,6 +503,7 @@ function EnVivoDia() {
                       <TableRow>
                         <TableHead>Hora</TableHead>
                         <TableHead>Producto</TableHead>
+                        <TableHead>Operador</TableHead>
                         <TableHead className="text-right">Buenas</TableHead>
                         <TableHead className="text-right">Defect.</TableHead>
                         <TableHead className="text-right">Paros</TableHead>
@@ -416,6 +516,7 @@ function EnVivoDia() {
                         <TableRow key={c.id}>
                           <TableCell className="text-xs text-stone-500 tabular-nums whitespace-nowrap">{(c.created_at || "").slice(11, 16)}</TableCell>
                           <TableCell className="text-sm font-medium">{c.producto_nombre}</TableCell>
+                          <TableCell className="text-xs text-stone-600">{c.operador || "—"}</TableCell>
                           <TableCell className="text-right font-medium">{c.unidades_buenas}</TableCell>
                           <TableCell className="text-right text-rose-600">{c.unidades_defectuosas || 0}</TableCell>
                           <TableCell className="text-right text-amber-700">{fmtMin(c.paros_minutos || 0)}</TableCell>
@@ -433,12 +534,12 @@ function EnVivoDia() {
           {/* Paros / defectos del día */}
           <Card className="rounded-xl border-stone-200">
             <CardHeader className="p-4 pb-2">
-              <CardTitle className="text-base flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-amber-600" /> Paros y defectos registrados</CardTitle>
-              <CardDescription className="text-xs">Motivos de las unidades defectuosas de las corridas del día.</CardDescription>
+              <CardTitle className="text-base flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-amber-600" /> Paros registrados</CardTitle>
+              <CardDescription className="text-xs">Motivo y duración de cada paro de las corridas del día.</CardDescription>
             </CardHeader>
             <CardContent className="p-4 pt-0">
               {(data?.paros.length ?? 0) === 0 ? (
-                <p className="text-sm text-stone-400 py-3">Sin paros ni defectos con motivo este día.</p>
+                <p className="text-sm text-stone-400 py-3">Sin paros registrados este día.</p>
               ) : (
                 <div className="rounded-lg border border-stone-200 overflow-x-auto">
                   <Table>
@@ -446,7 +547,7 @@ function EnVivoDia() {
                       <TableRow>
                         <TableHead>Producto</TableHead>
                         <TableHead>Motivo</TableHead>
-                        <TableHead className="text-right">Cantidad</TableHead>
+                        <TableHead className="text-right">Duración</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -454,7 +555,7 @@ function EnVivoDia() {
                         <TableRow key={`${p.corrida_id}-${i}`}>
                           <TableCell className="text-sm">{p.producto_nombre}</TableCell>
                           <TableCell className="text-sm">{p.motivo}</TableCell>
-                          <TableCell className="text-right text-rose-600 font-medium">{p.cantidad}</TableCell>
+                          <TableCell className="text-right text-amber-700 font-medium">{fmtMin(p.minutos)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
