@@ -1,9 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { FileText, Plus, Loader2, Check, ChevronsUpDown, AlertTriangle } from "lucide-react"
+import { FileText, Plus, Loader2, Check, ChevronsUpDown, AlertTriangle, CalendarClock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { PlaneadorProduccion } from "./planeador"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
@@ -120,73 +122,88 @@ export default function OrdenesProduccionPage() {
 
   return (
     <div className="space-y-4 md:space-y-6 p-4 md:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold text-foreground flex items-center gap-2">
-            <FileText className="h-6 w-6 text-stone-600" /> Órdenes de Producción
-          </h1>
-          <p className="text-sm text-muted-foreground">Qué producir, cuánto y para cuándo. El control de piso registra las corridas.</p>
-        </div>
-        <Button onClick={abrirNuevo} size="sm" className="w-full sm:w-auto">
-          <Plus className="h-4 w-4 mr-1" /> Nueva orden
-        </Button>
+      <div>
+        <h1 className="text-xl md:text-2xl font-bold text-foreground flex items-center gap-2">
+          <FileText className="h-6 w-6 text-stone-600" /> Órdenes de Producción
+        </h1>
+        <p className="text-sm text-muted-foreground">Qué producir, cuánto y para cuándo; y prográmalas en el día con el planeador.</p>
       </div>
 
-      <Card className="rounded-xl border-stone-200">
-        <CardHeader className="p-4 md:p-6 pb-3">
-          <CardTitle className="text-base md:text-lg">Órdenes</CardTitle>
-          <CardDescription className="text-xs md:text-sm">{ordenes.length} orden(es).</CardDescription>
-        </CardHeader>
-        <CardContent className="p-4 md:p-6 pt-0">
-          {loading ? (
-            <div className="flex justify-center py-10"><Spinner className="h-6 w-6" /></div>
-          ) : ordenes.length === 0 ? (
-            <div className="text-center py-10 text-stone-500 text-sm">
-              <FileText className="h-10 w-10 mx-auto mb-2 opacity-40" /> Sin órdenes de producción todavía.
-            </div>
-          ) : (
-            <div className="rounded-lg border border-stone-200 overflow-x-auto">
-              <Table containerClassName="max-h-[60vh] overflow-y-auto">
-                <TableHeader sticky>
-                  <TableRow>
-                    <TableHead>Producto</TableHead>
-                    <TableHead className="text-right">Cantidad</TableHead>
-                    <TableHead>Fecha objetivo</TableHead>
-                    <TableHead>Receta</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead className="w-40">Cambiar estado</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {ordenes.map((o) => (
-                    <TableRow key={o.id}>
-                      <TableCell className="font-medium">{o.producto_nombre || `Producto #${o.producto_id}`}</TableCell>
-                      <TableCell className="text-right">{o.cantidad_objetivo}</TableCell>
-                      <TableCell className="text-sm">{o.fecha_objetivo || "-"}</TableCell>
-                      <TableCell>
-                        {o.receta_id ? (
-                          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px]">Sí</Badge>
-                        ) : (
-                          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800 text-[10px] gap-1"><AlertTriangle className="h-3 w-3" /> Sin receta</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>{estadoBadge(o.estado)}</TableCell>
-                      <TableCell>
-                        <Select value={o.estado} onValueChange={(v) => cambiarEstado(o, v as EstadoOrden)}>
-                          <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {ESTADOS.map((e) => (<SelectItem key={e} value={e}>{e}</SelectItem>))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="ordenes" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="ordenes" className="gap-1.5"><FileText className="h-4 w-4" /> Órdenes</TabsTrigger>
+          <TabsTrigger value="planeador" className="gap-1.5"><CalendarClock className="h-4 w-4" /> Planeador</TabsTrigger>
+        </TabsList>
+
+        {/* ── Tab 1: crear/listar órdenes ── */}
+        <TabsContent value="ordenes" className="space-y-4">
+          <div className="flex justify-end">
+            <Button onClick={abrirNuevo} size="sm">
+              <Plus className="h-4 w-4 mr-1" /> Nueva orden
+            </Button>
+          </div>
+          <Card className="rounded-xl border-stone-200">
+            <CardHeader className="p-4 md:p-6 pb-3">
+              <CardTitle className="text-base md:text-lg">Órdenes</CardTitle>
+              <CardDescription className="text-xs md:text-sm">{ordenes.length} orden(es).</CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 md:p-6 pt-0">
+              {loading ? (
+                <div className="flex justify-center py-10"><Spinner className="h-6 w-6" /></div>
+              ) : ordenes.length === 0 ? (
+                <div className="text-center py-10 text-stone-500 text-sm">
+                  <FileText className="h-10 w-10 mx-auto mb-2 opacity-40" /> Sin órdenes de producción todavía.
+                </div>
+              ) : (
+                <div className="rounded-lg border border-stone-200 overflow-x-auto">
+                  <Table containerClassName="max-h-[60vh] overflow-y-auto">
+                    <TableHeader sticky>
+                      <TableRow>
+                        <TableHead>Producto</TableHead>
+                        <TableHead className="text-right">Cantidad</TableHead>
+                        <TableHead>Fecha objetivo</TableHead>
+                        <TableHead>Receta</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead className="w-40">Cambiar estado</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ordenes.map((o) => (
+                        <TableRow key={o.id}>
+                          <TableCell className="font-medium">{o.producto_nombre || `Producto #${o.producto_id}`}</TableCell>
+                          <TableCell className="text-right">{o.cantidad_objetivo}</TableCell>
+                          <TableCell className="text-sm">{o.fecha_objetivo || "-"}</TableCell>
+                          <TableCell>
+                            {o.receta_id ? (
+                              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px]">Sí</Badge>
+                            ) : (
+                              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800 text-[10px] gap-1"><AlertTriangle className="h-3 w-3" /> Sin receta</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>{estadoBadge(o.estado)}</TableCell>
+                          <TableCell>
+                            <Select value={o.estado} onValueChange={(v) => cambiarEstado(o, v as EstadoOrden)}>
+                              <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {ESTADOS.map((e) => (<SelectItem key={e} value={e}>{e}</SelectItem>))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Tab 2: planeador (Gantt de un día) ── */}
+        <TabsContent value="planeador">
+          <PlaneadorProduccion />
+        </TabsContent>
+      </Tabs>
 
       {/* Nueva orden */}
       <Dialog open={nuevoOpen} onOpenChange={setNuevoOpen}>

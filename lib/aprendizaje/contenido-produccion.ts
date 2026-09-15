@@ -208,16 +208,20 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
     modulo: "Ordenes de Produccion",
     titulo: "Órdenes de Producción",
     descripcion:
-      "Planifica qué producto fabricar, cuánto y para cuándo. Cada orden congela la receta del producto para el control de piso y el costeo.",
+      "Planifica qué producto fabricar, cuánto y para cuándo, y prográmalo en el día con un planeador tipo Gantt. Cada orden congela la receta del producto para el control de piso y el costeo.",
     queHace: [
+      "Dos pestañas: 'Órdenes' (crear y listar) y 'Planeador' (programar el día).",
       "Crea órdenes para productos marcados como fabricados: cantidad a producir, fecha objetivo y notas.",
       "Al crear la orden, congela la receta vigente del producto (si tiene) para que el control de piso sepa qué materiales consumir.",
+      "Planeador: eliges un día y su horario de trabajo (entrada/salida, se guarda por día) y colocas las órdenes en una línea de tiempo. Arrastra cada orden para fijar su hora de inicio (se guarda al soltar); la hora de fin sale de su duración.",
+      "La duración de cada orden se calcula desde la receta (cantidad ÷ estándar de producción) y se puede ajustar; cada barra muestra el avance según lo ya fabricado (unidades buenas).",
       "Maneja el estado de cada orden: Abierta, En Proceso, Cerrada o Cancelada.",
       "Solo muestra productos marcados como 'Es producto fabricado' (se marca en Configuración → Productos).",
     ],
     queNoHace: [
       "No descuenta materiales ni fabrica nada: eso ocurre en el Control de Piso al registrar las corridas.",
       "No obliga a que el producto tenga receta para crear la orden, pero avisa: sin receta no se podrá descontar materiales ni costear la producción.",
+      "El planeador no traslapa validando capacidad: es una guía visual del orden y horario del día.",
     ],
     operaciones: [
       {
@@ -231,10 +235,19 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
       {
         titulo: "Crear una orden de producción",
         pasos: [
-          "Abre Producción → Órdenes de Producción y presiona 'Nueva orden'.",
+          "En la pestaña 'Órdenes' presiona 'Nueva orden'.",
           "Elige el producto fabricado, la cantidad a producir, la fecha objetivo y notas si aplica.",
           "Guarda. Si el producto no tiene receta, el sistema te avisa para que la definas en Recetas.",
           "Usa el selector de estado para pasar la orden a 'En Proceso' o 'Cerrada' (o Cancelada).",
+        ],
+      },
+      {
+        titulo: "Programar el día en el planeador",
+        pasos: [
+          "Abre la pestaña 'Planeador' y elige el día; ajusta la hora de entrada y salida (se guarda para ese día).",
+          "En 'Sin programar', presiona 'Agregar' en las órdenes que trabajarás ese día: se colocan en la línea de tiempo.",
+          "Arrastra cada barra para mover su hora de inicio; la hora de fin se recalcula por su duración. Se guarda al soltar.",
+          "Cada barra muestra el rango de horas y el avance (fabricado/objetivo). La 'X' quita la orden del día.",
         ],
       },
     ],
