@@ -2348,7 +2348,7 @@ export async function editarVenta(
     // 0. La venta debe existir y ser del tenant.
     const { data: venta, error: vErr } = await supabase
       .from('ventas_encabezado')
-      .select('id, razon_social_id, numero_factura')
+      .select('id, razon_social_id, numero_factura, almacen_id')
       .eq('id', ventaId)
       .single()
     if (vErr || !venta) return { error: 'La venta no existe' }
@@ -2390,9 +2390,16 @@ export async function editarVenta(
       .select('total_venta, valorpago, estado_pago, cliente_id')
       .eq('id', ventaId)
       .single()
-    const { almacen_id, localizacion_id } = await getLocalizacionVenta(ventaId)
-    if (localizacion_id == null || almacen_id == null) {
-      return { error: 'No se pudo determinar el almacén/localización de la venta original' }
+    // Almacen/localizacion originales (del movimiento 'Salida Venta'). Si la
+    // venta no tenia lineas con inventario (Venta Rapida) o el movimiento no
+    // guardo localizacion, caemos al almacen del encabezado. Solo se BLOQUEA si
+    // la venta editada trae lineas de producto y aun asi no hay almacen.
+    const locOriginal = await getLocalizacionVenta(ventaId)
+    const almacen_id = locOriginal.almacen_id ?? (venta.almacen_id != null ? Number(venta.almacen_id) : null)
+    const localizacion_id = locOriginal.localizacion_id
+    const hayLineasProducto = data.detalles.some((d) => d.producto_id != null)
+    if (hayLineasProducto && almacen_id == null) {
+      return { error: 'No se pudo determinar el almacén de la venta original. Crea una venta nueva.' }
     }
 
     // 4. Revertir todos los efectos actuales (inventario, tesoreria, pagos).
@@ -2417,16 +2424,57 @@ export async function editarVenta(
       .eq('razon_social_id', stamp.razon_social_id)
     if (updErr) return { error: updErr.message }
 
-    // 6. Reemplazar el detalle.
+    // 6. Reemplazar el detalle. `descripcion_libre` NO es columna de
+    //    ventas_detalle (va aparte en ventas_detalle_descripcion, script 045):
+    //    se quita del insert y se guarda despues por indice (igual que crearVenta).
+    // Primero limpiamos las descripciones libres de las lineas actuales
+    // (no hay FK cascade), y luego borramos el detalle.
+    const { data: detalleActual } = await supabase
+      .from('ventas_detalle')
+      .select('id')
+      .eq('venta_id', ventaId)
+      .eq('razon_social_id', stamp.razon_social_id)
+    const idsActuales = (detalleActual || []).map((r: { id: number }) => r.id)
+    if (idsActuales.length > 0) {
+      await supabase
+        .from('ventas_detalle_descripcion')
+        .delete()
+        .eq('razon_social_id', stamp.razon_social_id)
+        .in('detalle_id', idsActuales)
+    }
     await supabase
       .from('ventas_detalle')
       .delete()
       .eq('venta_id', ventaId)
       .eq('razon_social_id', stamp.razon_social_id)
-    const { error: detInsErr } = await supabase.from('ventas_detalle').insert(
-      data.detalles.map((d) => ({ ...d, venta_id: ventaId, razon_social_id: stamp.razon_social_id }))
-    )
+    const detallesConVenta = data.detalles.map(({ descripcion_libre: _omit, ...d }) => ({
+      ...d,
+      venta_id: ventaId,
+      razon_social_id: stamp.razon_social_id,
+    }))
+    const { data: detallesInsertados, error: detInsErr } = await supabase
+      .from('ventas_detalle')
+      .insert(detallesConVenta)
+      .select('id')
     if (detInsErr) return { error: detInsErr.message }
+
+    // 6b. Descripcion libre de las lineas de Venta Rapida (producto_id NULL).
+    //     Best-effort: si el script 045 no se aplico, no rompe la edicion.
+    const filasDesc: { detalle_id: number; razon_social_id: number | null; descripcion: string }[] = []
+    ;(detallesInsertados || []).forEach((fila: { id: number }, i: number) => {
+      const orig = data.detalles[i]
+      if (orig && orig.producto_id == null && (orig.descripcion_libre || '').trim() !== '') {
+        filasDesc.push({
+          detalle_id: fila.id,
+          razon_social_id: stamp.razon_social_id,
+          descripcion: (orig.descripcion_libre as string).trim(),
+        })
+      }
+    })
+    if (filasDesc.length > 0) {
+      const { error: descErr } = await supabase.from('ventas_detalle_descripcion').insert(filasDesc)
+      if (descErr) console.warn('[editarVenta] no se guardo descripcion libre:', descErr.message)
+    }
 
     // 7. Re-aplicar inventario (stock + kardex 'Salida Venta').
     // Las lineas de Venta Rapida (producto_id NULL) no afectan inventario.
