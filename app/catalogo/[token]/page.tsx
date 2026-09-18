@@ -4,11 +4,12 @@ import { use, useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import {
   ShoppingCart, Search, Plus, Minus, Send, PackageX, CheckCircle2,
-  ImageIcon, Loader2, LinkIcon,
+  ImageIcon, Loader2, LinkIcon, ZoomIn, X,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -36,7 +37,7 @@ interface CatalogoData {
   productos: ProductoCatalogo[]
 }
 
-function FotoProducto({ url, nombre }: { url: string | null; nombre: string }) {
+function FotoProducto({ url, nombre, onZoom }: { url: string | null; nombre: string; onZoom?: () => void }) {
   const [error, setError] = useState(false)
   if (!url || error) {
     return (
@@ -46,8 +47,19 @@ function FotoProducto({ url, nombre }: { url: string | null; nombre: string }) {
     )
   }
   return (
-    <div className="relative w-full h-32 rounded-lg overflow-hidden bg-stone-100">
+    <div className="relative w-full h-32 rounded-lg overflow-hidden bg-stone-100 group">
       <Image src={url} alt={nombre} fill className="object-cover" unoptimized onError={() => setError(true)} />
+      {/* Botón de lupa para ampliar la imagen. */}
+      {onZoom && (
+        <button
+          type="button"
+          onClick={onZoom}
+          aria-label="Ampliar imagen"
+          className="absolute bottom-1.5 right-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-white/85 text-stone-700 shadow-sm backdrop-blur-sm transition hover:bg-white hover:text-stone-900 focus:outline-none focus:ring-2 focus:ring-stone-400"
+        >
+          <ZoomIn className="h-4 w-4" />
+        </button>
+      )}
     </div>
   )
 }
@@ -60,6 +72,8 @@ export default function CatalogoPublicoPage({ params }: { params: Promise<{ toke
   const [invalido, setInvalido] = useState<string | null>(null)
   const [data, setData] = useState<CatalogoData | null>(null)
   const [busqueda, setBusqueda] = useState("")
+  // Imagen ampliada (lightbox): { url, nombre } o null.
+  const [zoom, setZoom] = useState<{ url: string; nombre: string } | null>(null)
 
   // Carrito: producto_id -> cantidad
   const [carrito, setCarrito] = useState<Record<number, number>>({})
@@ -236,7 +250,11 @@ export default function CatalogoPublicoPage({ params }: { params: Promise<{ toke
               return (
                 <Card key={p.id} className={`overflow-hidden ${!p.disponible ? "opacity-60" : ""}`}>
                   <CardContent className="p-3 space-y-2">
-                    <FotoProducto url={p.foto_url} nombre={p.nombre} />
+                    <FotoProducto
+                      url={p.foto_url}
+                      nombre={p.nombre}
+                      onZoom={p.foto_url ? () => setZoom({ url: p.foto_url!, nombre: p.nombre }) : undefined}
+                    />
                     <div className="min-h-[40px]">
                       <p className="text-sm font-medium text-stone-800 line-clamp-2">{p.nombre}</p>
                       {p.talla ? (
@@ -368,6 +386,30 @@ export default function CatalogoPublicoPage({ params }: { params: Promise<{ toke
           </div>
         </div>
       )}
+
+      {/* Lightbox: imagen ampliada del producto */}
+      <Dialog open={zoom !== null} onOpenChange={(o) => { if (!o) setZoom(null) }}>
+        <DialogContent className="max-w-3xl p-0 overflow-hidden bg-black/90 border-0 [&>button]:hidden">
+          <DialogTitle className="sr-only">{zoom?.nombre || "Imagen del producto"}</DialogTitle>
+          {zoom && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setZoom(null)}
+                aria-label="Cerrar"
+                className="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/85 text-stone-800 shadow hover:bg-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              <div className="relative w-full aspect-square max-h-[80vh]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={zoom.url} alt={zoom.nombre} className="h-full w-full object-contain" />
+              </div>
+              <p className="bg-black/60 px-4 py-2 text-center text-sm text-white">{zoom.nombre}</p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
