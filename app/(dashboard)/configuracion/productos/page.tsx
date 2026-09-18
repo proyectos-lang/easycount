@@ -23,6 +23,8 @@ import {
   ChevronRight,
   ChevronDown,
   Layers3,
+  Link2,
+  ExternalLink,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -222,6 +224,8 @@ export default function ProductosConfigPage() {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string>("")
   const [uploadingImage, setUploadingImage] = useState(false)
+  // Campo para pegar la URL de una imagen de la web (alternativa a subir archivo).
+  const [imageUrlInput, setImageUrlInput] = useState<string>("")
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
 
   // Inventario inicial (SOLO al crear un producto nuevo): genera un ingreso
@@ -722,6 +726,7 @@ export default function ProductosConfigPage() {
     setEsFabricado(false)
     setImagePreview("")
     setImageFile(null)
+    setImageUrlInput("")
     setShowCalculator(false)
     setCalcCosto(0)
     setCalcMargen(30)
@@ -743,6 +748,7 @@ export default function ProductosConfigPage() {
     })
     setImagePreview(producto.foto_url || "")
     setImageFile(null)
+    setImageUrlInput("")
     setShowCalculator(false)
     setCalcCosto(producto.costo_promedio || 0)
     setCalcMargen(30)
@@ -771,10 +777,33 @@ export default function ProductosConfigPage() {
       } else if (url) {
         setFormData(prev => ({ ...prev, foto_url: url }))
         setImagePreview(url)
+        setImageUrlInput("")
         setValidationErrors(prev => ({ ...prev, foto_url: "" }))
         toast({ title: "Imagen subida", description: "La imagen se ha subido correctamente" })
       }
     }
+  }
+
+  // Usa la URL pegada como foto del producto (se guarda el enlace tal cual).
+  function usarImagenPorUrl() {
+    const url = imageUrlInput.trim()
+    if (!url) return
+    if (!/^https?:\/\/.+/i.test(url)) {
+      toast({ title: "URL inválida", description: "Pega una dirección que empiece con http:// o https://", variant: "destructive" })
+      return
+    }
+    setImageFile(null)
+    setFormData(prev => ({ ...prev, foto_url: url }))
+    setImagePreview(url)
+    setValidationErrors(prev => ({ ...prev, foto_url: "" }))
+    toast({ title: "Imagen enlazada", description: "Se usará la imagen de esa dirección." })
+  }
+
+  // Abre Google Imágenes con el nombre del producto para buscar una foto.
+  function buscarEnGoogle() {
+    const q = (formData.nombre || "").trim()
+    const url = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(q || "producto")}`
+    window.open(url, "_blank", "noopener,noreferrer")
   }
 
   // Calculate suggested price based on cost and margin
@@ -1355,10 +1384,19 @@ export default function ProductosConfigPage() {
               <div className="flex flex-col items-center gap-4 rounded-lg border-2 border-dashed p-4">
                 {imagePreview ? (
                   <div className="relative">
-                    <img 
-                      src={imagePreview} 
-                      alt="Preview" 
-                      className="h-32 w-32 rounded-lg object-cover shadow-md" 
+                    <img
+                      src={imagePreview}
+                      alt="Preview"
+                      className="h-32 w-32 rounded-lg object-cover shadow-md"
+                      onError={() => {
+                        // La imagen (tipicamente una URL externa) no cargo: avisa
+                        // y vuelve al estado sin foto para no dejar rota la vista.
+                        if (formData.foto_url) {
+                          toast({ title: "No se pudo cargar la imagen", description: "Esa dirección no muestra la foto (puede estar protegida o rota). Prueba con otra URL.", variant: "destructive" })
+                        }
+                        setImagePreview("")
+                        setFormData(prev => ({ ...prev, foto_url: "" }))
+                      }}
                     />
                     {uploadingImage && (
                       <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-background/80">
@@ -1404,6 +1442,34 @@ export default function ProductosConfigPage() {
                   </Button>
                 </label>
                 <p className="text-xs text-muted-foreground">PNG, JPG o GIF. Maximo 5MB.</p>
+
+                {/* Alternativa: usar una imagen de la web por su URL */}
+                <div className="w-full border-t pt-3 space-y-2">
+                  <p className="text-xs text-muted-foreground text-center">o usa una imagen de la web</p>
+                  <div className="flex gap-2">
+                    <Input
+                      type="url"
+                      inputMode="url"
+                      placeholder="Pega la URL de una imagen…"
+                      value={imageUrlInput}
+                      onChange={(e) => setImageUrlInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); usarImagenPorUrl() } }}
+                      className="h-9"
+                    />
+                    <Button type="button" variant="outline" className="h-9 shrink-0 gap-1" onClick={usarImagenPorUrl} disabled={!imageUrlInput.trim()}>
+                      <Link2 className="h-4 w-4" /> Usar
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-center">
+                    <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 text-xs text-muted-foreground" onClick={buscarEnGoogle}>
+                      <Search className="h-3.5 w-3.5" /> Buscar en Google Imágenes
+                      <ExternalLink className="h-3 w-3 opacity-60" />
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground text-center leading-snug">
+                    En Google: clic derecho sobre la foto → &quot;Copiar dirección de imagen&quot; y pégala aquí.
+                  </p>
+                </div>
               </div>
               {validationErrors.foto_url && (
                 <p className="text-sm text-destructive">{validationErrors.foto_url}</p>

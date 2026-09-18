@@ -152,6 +152,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "Gestiona marcas, categorías y subcategorías desde el mismo módulo.",
       "Muestra el stock total y el costo promedio actuales (informativos).",
       "La foto se sube al almacenamiento de la nube y aparece en el catálogo de Nueva Venta. Las fotos grandes (de celular) se comprimen automáticamente al subir para que carguen rápido.",
+      "Foto desde la web: en vez de subir un archivo puedes pegar la URL de una imagen alojada en internet. El botón 'Buscar en Google Imágenes' abre una búsqueda con el nombre del producto; copias la dirección de la foto (clic derecho → 'Copiar dirección de imagen') y la pegas. Se guarda el enlace tal cual (si el sitio original borra la imagen, la foto dejaría de verse).",
       "Botón 'Comprimir fotos': optimiza de una sola vez el peso de las fotos ya subidas de la empresa (baja la resolución sin borrar ni cambiar los productos). Útil si el catálogo carga lento por fotos de muy alta resolución.",
       "Al crear un producto puedes indicar una cantidad inicial (con su costo, almacén y localización): el sistema genera automáticamente un ingreso manual al inventario para que arranque con existencias.",
       "Opción 'Este producto tiene tallas' (al crear, solo si tu empresa tiene activado el sistema de tallas): con el botón 'Agregar talla' añades una línea por cada talla y escribes la talla y su cantidad inicial propia. El precio de venta y el costo son únicos (los del formulario) para todas las tallas. Al guardar se crea un producto independiente por cada talla —mismo nombre + talla, su propio stock y código— en un solo guardado, y quedan agrupados. La talla se muestra en el catálogo de Nueva Venta.",
@@ -172,7 +173,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
         pasos: [
           "Abre Configuración → Productos y presiona Nuevo Producto.",
           "Nombre, código de barras (puedes escanearlo), marca y categoría.",
-          "Define el precio de venta sugerido y sube la foto si la tienes.",
+          "Define el precio de venta sugerido y agrega la foto: súbela desde tu dispositivo o pega la URL de una imagen de la web (el botón 'Buscar en Google Imágenes' te ayuda a encontrarla).",
           "En 'Inventario inicial (opcional)' indica la cantidad y el costo unitario con que arranca; elige almacén y localización.",
           "Guarda: se crea el producto y, si pusiste cantidad, se genera el ingreso al inventario automáticamente. Déjalo en 0 si aún no tienes existencias (las cargas luego por Compras o Ingreso Manual).",
         ],
@@ -256,7 +257,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "No, si tu empresa tiene activado el sistema de tallas (se habilita por empresa desde el panel de administración). Al crear el producto marca 'Este producto tiene tallas', elige las tallas y guarda una sola vez: el sistema crea un producto por cada talla (con su propio stock, código y precio) y los deja agrupados. En la lista de Productos y en Inventario → Valoración la prenda aparece una sola vez y se despliega para ver cada talla; el botón de editar del grupo permite cambiar precios, quitar tallas o agregar nuevas. En Nueva Venta cada talla se ve por separado con su etiqueta. Si tu empresa no maneja tallas, no verás nada de esto.",
       },
     ],
-    keywords: ["producto", "codigo de barras", "sku", "precio", "marca", "categoria", "talla", "tallas", "variantes", "grupo", "agrupar", "desplegar", "convertir en tallado", "repartir stock", "dividir unidades", "foto", "catalogo", "eliminar", "borrar", "cascada", "comprimir fotos", "imagen pesada", "resolucion", "carga lenta", "carga masiva", "importar productos", "plantilla", "excel", "masivo", "inventario inicial"],
+    keywords: ["producto", "codigo de barras", "sku", "precio", "marca", "categoria", "talla", "tallas", "variantes", "grupo", "agrupar", "desplegar", "convertir en tallado", "repartir stock", "dividir unidades", "foto", "catalogo", "eliminar", "borrar", "cascada", "comprimir fotos", "imagen pesada", "resolucion", "carga lenta", "carga masiva", "importar productos", "plantilla", "excel", "masivo", "inventario inicial", "url imagen", "foto por url", "google imagenes", "imagen de la web", "enlace foto"],
   },
   {
     modulo: "Almacenes",
