@@ -18,6 +18,7 @@ import { useAuth } from "@/lib/contexts/auth-context"
 import { RouteGuard } from "@/components/route-guard"
 import { BusquedaGlobal } from "@/components/busqueda-global"
 import { ActualizacionModal } from "@/components/actualizacion-modal"
+import { InstalarApp } from "@/components/instalar-app"
 
 // Dynamic import with SSR disabled to prevent hydration mismatch from Radix IDs
 const ERPSidebar = dynamic(
@@ -140,6 +141,7 @@ export default function DashboardLayout({
         </main>
       </SidebarInset>
       <ActualizacionModal />
+      <InstalarApp variant="banner" />
     </SidebarProvider>
   )
 }

@@ -8,6 +8,7 @@ import { esPlataformaAdmin } from "@/app/plataforma/actions"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
+import { InstalarApp } from "@/components/instalar-app"
 
 // Brand palette
 // Ink Black:  #0D1821
@@ -277,6 +278,11 @@ export default function LoginPage() {
               <p className="text-xs text-center leading-relaxed" style={{ color: "#344966", opacity: 0.7 }}>
                 {"Si olvidaste tu contraseña, contacta al administrador de tu empresa."}
               </p>
+            </div>
+
+            {/* Instalar como app (se muestra solo si aplica y no está instalada) */}
+            <div className="mt-4">
+              <InstalarApp variant="inline" />
             </div>
           </div>
 
