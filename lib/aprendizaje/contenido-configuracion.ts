@@ -152,7 +152,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "Gestiona marcas, categorías y subcategorías desde el mismo módulo.",
       "Muestra el stock total y el costo promedio actuales (informativos).",
       "La foto se sube al almacenamiento de la nube y aparece en el catálogo de Nueva Venta. Las fotos grandes (de celular) se comprimen automáticamente al subir para que carguen rápido.",
-      "Foto desde la web: en vez de subir un archivo puedes pegar la URL de una imagen alojada en internet. El botón 'Buscar en Google Imágenes' abre una búsqueda con el nombre del producto; copias la dirección de la foto (clic derecho → 'Copiar dirección de imagen') y la pegas. Se guarda el enlace tal cual (si el sitio original borra la imagen, la foto dejaría de verse).",
+      "Foto desde la web: el botón 'Buscar imágenes en la web' abre una galería (dentro de EasyCount) con resultados de Google; al hacer clic en una imagen, se descarga a tu almacenamiento y queda como foto del producto. También puedes pegar la URL de una imagen. En ambos casos la imagen se guarda en tu almacenamiento (no depende del sitio original). El buscador requiere que el administrador configure la clave de Google.",
       "Botón 'Comprimir fotos': optimiza de una sola vez el peso de las fotos ya subidas de la empresa (baja la resolución sin borrar ni cambiar los productos). Útil si el catálogo carga lento por fotos de muy alta resolución.",
       "Al crear un producto puedes indicar una cantidad inicial (con su costo, almacén y localización): el sistema genera automáticamente un ingreso manual al inventario para que arranque con existencias.",
       "Opción 'Este producto tiene tallas' (al crear, solo si tu empresa tiene activado el sistema de tallas): con el botón 'Agregar talla' añades una línea por cada talla y escribes la talla y su cantidad inicial propia. El precio de venta y el costo son únicos (los del formulario) para todas las tallas. Al guardar se crea un producto independiente por cada talla —mismo nombre + talla, su propio stock y código— en un solo guardado, y quedan agrupados. La talla se muestra en el catálogo de Nueva Venta.",
@@ -173,7 +173,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
         pasos: [
           "Abre Configuración → Productos y presiona Nuevo Producto.",
           "Nombre, código de barras (puedes escanearlo), marca y categoría.",
-          "Define el precio de venta sugerido y agrega la foto: súbela desde tu dispositivo o pega la URL de una imagen de la web (el botón 'Buscar en Google Imágenes' te ayuda a encontrarla).",
+          "Define el precio de venta sugerido y agrega la foto: súbela desde tu dispositivo, o usa 'Buscar imágenes en la web' (galería) y elige una con un clic, o pega la URL de una imagen.",
           "En 'Inventario inicial (opcional)' indica la cantidad y el costo unitario con que arranca; elige almacén y localización.",
           "Guarda: se crea el producto y, si pusiste cantidad, se genera el ingreso al inventario automáticamente. Déjalo en 0 si aún no tienes existencias (las cargas luego por Compras o Ingreso Manual).",
         ],

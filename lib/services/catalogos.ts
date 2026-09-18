@@ -536,6 +536,64 @@ export async function uploadProductoImage(
   }
 }
 
+/** Un resultado de la búsqueda de imágenes en la web (Google Custom Search). */
+export interface ImagenWeb {
+  url: string
+  thumbnail: string
+  titulo: string
+  ancho: number
+  alto: number
+  contexto: string
+}
+
+/**
+ * Busca imágenes en la web (Google Custom Search, via /api/buscar-imagenes).
+ * Devuelve `noConfigurado: true` si faltan las claves del servidor (la UI lo
+ * muestra en vez de romper).
+ */
+export async function buscarImagenesWeb(
+  q: string
+): Promise<{ data: ImagenWeb[]; error: string | null; noConfigurado?: boolean }> {
+  try {
+    const res = await fetch('/api/buscar-imagenes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q }),
+    })
+    const json = await res.json()
+    if (!res.ok) {
+      return { data: [], error: json.error || 'Error al buscar imágenes', noConfigurado: res.status === 503 }
+    }
+    return { data: (json.resultados || []) as ImagenWeb[], error: null }
+  } catch (err) {
+    console.error('[buscarImagenesWeb] error:', err)
+    return { data: [], error: 'Error al buscar imágenes' }
+  }
+}
+
+/**
+ * Descarga una imagen desde una URL externa y la sube al almacenamiento propio
+ * (bucket 'productos'), devolviendo su URL pública. Se usa al elegir una imagen
+ * de la web para conservarla (a prueba de que el origen la borre).
+ */
+export async function importarImagenDeUrl(
+  urlExterna: string
+): Promise<{ url: string | null; error: string | null }> {
+  try {
+    const res = await fetch('/api/importar-imagen-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: urlExterna }),
+    })
+    const json = await res.json()
+    if (!res.ok) return { url: null, error: json.error || 'No se pudo importar la imagen' }
+    return { url: json.url, error: null }
+  } catch (err) {
+    console.error('[importarImagenDeUrl] error:', err)
+    return { url: null, error: 'No se pudo importar la imagen' }
+  }
+}
+
 export interface ProgresoRecompresion {
   total: number
   procesados: number
