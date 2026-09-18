@@ -208,40 +208,49 @@ export default function NuevoLinkCatalogoPage() {
                 </div>
               </CardHeader>
               <CardContent className="p-4 md:p-6 pt-0 space-y-3">
-                {/* Filtros */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-                  <div className="relative lg:col-span-1 sm:col-span-2">
+                {/* Filtros. Cada celda es min-w-0 + w-full para que el texto
+                    largo de un select no lo agrande ni se monte sobre el vecino. */}
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+                  <div className="relative col-span-2 lg:col-span-1 min-w-0">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-                    <Input className="pl-9 h-9" placeholder="Nombre o código…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
+                    <Input className="pl-9 h-9 w-full" placeholder="Nombre o código…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
                   </div>
-                  <Select value={fMarca} onValueChange={setFMarca}>
-                    <SelectTrigger className="h-9"><SelectValue placeholder="Marca" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={TODOS}>Todas las marcas</SelectItem>
-                      {opciones.marcas.map((m) => <SelectItem key={m.id} value={String(m.id)}>{m.nombre}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Select value={fCategoria} onValueChange={setFCategoria}>
-                    <SelectTrigger className="h-9"><SelectValue placeholder="Categoría" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={TODOS}>Todas las categorías</SelectItem>
-                      {opciones.categorias.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Select value={fSubcategoria} onValueChange={setFSubcategoria} disabled={subcategoriasOpts.length === 0}>
-                    <SelectTrigger className="h-9"><SelectValue placeholder="Subcategoría" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={TODOS}>Todas las subcategorías</SelectItem>
-                      {subcategoriasOpts.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.nombre}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Select value={fTalla} onValueChange={setFTalla} disabled={opciones.tallas.length === 0}>
-                    <SelectTrigger className="h-9"><SelectValue placeholder="Talla" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={TODOS}>Todas las tallas</SelectItem>
-                      {opciones.tallas.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <div className="min-w-0">
+                    <Select value={fMarca} onValueChange={setFMarca}>
+                      <SelectTrigger className="h-9 w-full"><SelectValue placeholder="Marca" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={TODOS}>Todas las marcas</SelectItem>
+                        {opciones.marcas.map((m) => <SelectItem key={m.id} value={String(m.id)}>{m.nombre}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="min-w-0">
+                    <Select value={fCategoria} onValueChange={setFCategoria}>
+                      <SelectTrigger className="h-9 w-full"><SelectValue placeholder="Categoría" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={TODOS}>Todas las categorías</SelectItem>
+                        {opciones.categorias.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="min-w-0">
+                    <Select value={fSubcategoria} onValueChange={setFSubcategoria} disabled={subcategoriasOpts.length === 0}>
+                      <SelectTrigger className="h-9 w-full"><SelectValue placeholder="Subcategoría" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={TODOS}>Todas las subcategorías</SelectItem>
+                        {subcategoriasOpts.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.nombre}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="min-w-0">
+                    <Select value={fTalla} onValueChange={setFTalla} disabled={opciones.tallas.length === 0}>
+                      <SelectTrigger className="h-9 w-full"><SelectValue placeholder="Talla" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={TODOS}>Todas las tallas</SelectItem>
+                        {opciones.tallas.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 {hayFiltroActivo && (
