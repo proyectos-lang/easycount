@@ -13,6 +13,7 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
  * Si faltan, responde 503 con un mensaje claro (la UI degrada, no rompe).
  */
 
+// nota: deploy limpio para que Vercel relea GOOGLE_CSE_API_KEY / GOOGLE_CSE_ID.
 export const runtime = 'nodejs'
 
 interface ResultadoImagen {
