@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Link2, Copy, Ban, Plus, Search, Inbox, Eye, XCircle, CheckCircle2,
@@ -195,7 +196,9 @@ export default function PedidosCatalogoPage() {
         {/* ================= TAB LINKS ================= */}
         <TabsContent value="links" className="space-y-4">
           <div className="flex justify-end">
-            <NuevoLinkDialog onDone={cargar} />
+            <Button asChild className="gap-2">
+              <Link href="/ventas/pedidos/nuevo-link"><Plus className="h-4 w-4" /> Nuevo link</Link>
+            </Button>
           </div>
           <Card>
             <CardContent className="p-0">
@@ -278,185 +281,6 @@ export default function PedidosCatalogoPage() {
   )
 }
 
-// ==================== DIALOGO: NUEVO LINK ====================
-
-function NuevoLinkDialog({ onDone }: { onDone: () => void }) {
-  const { toast } = useToast()
-  const [open, setOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [nombre, setNombre] = useState("")
-  const [tipo, setTipo] = useState<"completo" | "seleccion">("completo")
-  const [dias, setDias] = useState("7")
-  const [productos, setProductos] = useState<Producto[]>([])
-  const [seleccion, setSeleccion] = useState<Set<number>>(new Set())
-  const [filtro, setFiltro] = useState("")
-  const [linkCreado, setLinkCreado] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (open && productos.length === 0) {
-      getProductos().then((r) => setProductos(r.data || []))
-    }
-  }, [open, productos.length])
-
-  // Todo lo que calza con el filtro (sin tope): base de "seleccionar todo".
-  const productosFiltradosTodos = useMemo(() => {
-    const q = filtro.trim().toLowerCase()
-    if (!q) return productos
-    return productos.filter((p) => p.nombre.toLowerCase().includes(q))
-  }, [productos, filtro])
-
-  // La lista visible se limita a 100 por rendimiento.
-  const productosFiltrados = useMemo(
-    () => productosFiltradosTodos.slice(0, 100),
-    [productosFiltradosTodos],
-  )
-
-  const todosFiltradosSeleccionados =
-    productosFiltradosTodos.length > 0 &&
-    productosFiltradosTodos.every((p) => seleccion.has(p.id!))
-
-  function toggle(id: number) {
-    setSeleccion((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  // Marca/desmarca TODO lo filtrado (incluye lo que no cabe en los 100 visibles).
-  function toggleTodosFiltrados() {
-    setSeleccion((prev) => {
-      const next = new Set(prev)
-      if (todosFiltradosSeleccionados) {
-        productosFiltradosTodos.forEach((p) => next.delete(p.id!))
-      } else {
-        productosFiltradosTodos.forEach((p) => next.add(p.id!))
-      }
-      return next
-    })
-  }
-
-  function reset() {
-    setNombre(""); setTipo("completo"); setDias("7"); setSeleccion(new Set()); setFiltro(""); setLinkCreado(null)
-  }
-
-  async function guardar() {
-    setSaving(true)
-    const res = await crearLink({
-      nombre,
-      tipo,
-      producto_ids: tipo === "seleccion" ? Array.from(seleccion) : undefined,
-      dias_vigencia: dias === "" ? null : Number(dias),
-    })
-    setSaving(false)
-    if (res.error || !res.data) {
-      toast({ title: "Error", description: res.error || "No se pudo crear", variant: "destructive" })
-      return
-    }
-    const url = `${window.location.origin}/catalogo/${res.data.token}`
-    setLinkCreado(url)
-    navigator.clipboard.writeText(url).catch(() => {})
-    onDone()
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset() }}>
-      <Button className="gap-2" onClick={() => setOpen(true)}>
-        <Plus className="h-4 w-4" /> Nuevo link
-      </Button>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Nuevo link de catálogo</DialogTitle>
-          <DialogDescription>
-            Comparte el link con tu cliente; podrá armar su carrito y enviarte el pedido.
-          </DialogDescription>
-        </DialogHeader>
-
-        {linkCreado ? (
-          <div className="space-y-4">
-            <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4 text-center space-y-2">
-              <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto" />
-              <p className="text-sm text-emerald-800 font-medium">Link creado y copiado al portapapeles</p>
-              <p className="text-xs font-mono break-all text-stone-600">{linkCreado}</p>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => { navigator.clipboard.writeText(linkCreado); }}>
-                <Copy className="h-4 w-4 mr-1" /> Copiar de nuevo
-              </Button>
-              <Button onClick={() => setOpen(false)}>Listo</Button>
-            </DialogFooter>
-          </div>
-        ) : (
-          <>
-            <div className="space-y-4">
-              <div className="grid gap-2">
-                <Label htmlFor="link-nombre">Referencia interna</Label>
-                <Input id="link-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej. Catálogo Doña María - julio" />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label>Tipo de catálogo</Label>
-                  <Select value={tipo} onValueChange={(v) => setTipo(v as "completo" | "seleccion")}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="completo">Catálogo completo</SelectItem>
-                      <SelectItem value="seleccion">Seleccionar productos</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="link-dias">Vigencia (días)</Label>
-                  <Input id="link-dias" type="number" min={1} value={dias} onChange={(e) => setDias(e.target.value)} placeholder="Sin límite" />
-                </div>
-              </div>
-
-              {tipo === "seleccion" && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Productos del catálogo</Label>
-                    <span className="text-xs text-muted-foreground">{seleccion.size} seleccionados</span>
-                  </div>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
-                    <Input className="pl-9" placeholder="Filtrar productos…" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
-                  </div>
-                  {productosFiltradosTodos.length > 0 && (
-                    <label className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-stone-50 cursor-pointer">
-                      <Checkbox checked={todosFiltradosSeleccionados} onCheckedChange={toggleTodosFiltrados} />
-                      <span className="text-sm font-medium flex-1">
-                        {todosFiltradosSeleccionados ? "Quitar todo lo filtrado" : "Seleccionar todo lo filtrado"}
-                      </span>
-                      <span className="text-xs text-muted-foreground">{productosFiltradosTodos.length}</span>
-                    </label>
-                  )}
-                  <ScrollArea className="h-52 rounded-md border">
-                    <div className="p-2 space-y-1">
-                      {productosFiltrados.map((p) => (
-                        <label key={p.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-stone-50 cursor-pointer">
-                          <Checkbox checked={seleccion.has(p.id!)} onCheckedChange={() => toggle(p.id!)} />
-                          <span className="text-sm flex-1 truncate">{p.nombre}{p.talla ? ` · Talla ${p.talla}` : ""}</span>
-                          <span className="text-xs text-muted-foreground">{formatCurrency(Number(p.precio_venta_sugerido || 0))}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>Cancelar</Button>
-              <Button onClick={guardar} disabled={saving || (tipo === "seleccion" && seleccion.size === 0)}>
-                {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Link2 className="h-4 w-4 mr-1" />}
-                Generar link
-              </Button>
-            </DialogFooter>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
-  )
-}
 
 // ==================== DIALOGO: REVISAR / APROBAR PEDIDO ====================
 

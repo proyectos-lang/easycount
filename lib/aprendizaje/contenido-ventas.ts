@@ -289,6 +289,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Genera links de catálogo para enviar a tus clientes: ellos arman su carrito sin necesidad de usuario, y tú conviertes el pedido en una venta al aprobarlo.",
     queHace: [
       "Genera links únicos de catálogo: completo (todos tus productos) o una selección específica para ese cliente.",
+      "Al 'Seleccionar productos', puedes filtrar el listado por nombre/código, marca, categoría, subcategoría y talla (la subcategoría se limita a la categoría elegida) y 'Seleccionar todo lo filtrado' de un clic.",
       "El cliente abre el link SIN iniciar sesión, ve productos con foto, precio de catálogo y disponibilidad, arma su carrito y lo envía con su nombre y teléfono.",
       "El link se vence automáticamente al enviarse el carrito, al pasar su vigencia (días configurables) o si lo anulas.",
       "Los pedidos llegan a tu bandeja en estado Pendiente: puedes modificar cantidades y precios, rechazar con motivo, o aprobar.",
@@ -306,11 +307,10 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       {
         titulo: "Generar y enviar un link de catálogo",
         pasos: [
-          "Abre Ventas → Catálogo, pestaña 'Links de catálogo'.",
-          "Presiona 'Nuevo link': ponle una referencia interna (ej. 'Catálogo Doña María').",
-          "Elige el tipo: catálogo completo o selección de productos (márcalos en la lista).",
-          "Define la vigencia en días (ej. 7) y presiona 'Generar link'.",
-          "El link se copia solo al portapapeles: pégalo en WhatsApp o correo al cliente.",
+          "Abre Ventas → Catálogo, pestaña 'Links de catálogo' y presiona 'Nuevo link' (se abre una pantalla completa).",
+          "Ponle una referencia interna (ej. 'Catálogo Doña María') y define la vigencia en días (ej. 7).",
+          "Elige el tipo: catálogo completo o selección de productos. Si es selección, usa los filtros (marca, categoría, subcategoría, talla o texto) para acotar y marca los productos.",
+          "Presiona 'Generar link': se copia solo al portapapeles; pégalo en WhatsApp o correo al cliente.",
         ],
       },
       {
