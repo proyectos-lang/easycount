@@ -62,11 +62,22 @@ export async function POST(req: NextRequest) {
     const resp = await fetch(`https://www.googleapis.com/customsearch/v1?${params.toString()}`)
     if (!resp.ok) {
       const detalle = await resp.text().catch(() => '')
+      // Extrae el motivo textual que da Google (p.ej. "API_KEY_SERVICE_BLOCKED",
+      // "dailyLimitExceeded", "invalid argument") para distinguir la causa real.
+      let motivoGoogle = ''
+      try {
+        const j = JSON.parse(detalle)
+        motivoGoogle =
+          String(j?.error?.errors?.[0]?.reason || '') ||
+          String(j?.error?.status || '') ||
+          String(j?.error?.message || '')
+      } catch { /* detalle no era JSON */ }
       // 429/403 suelen ser cuota agotada o clave/cx inválidos.
-      const msg = resp.status === 429 || resp.status === 403
+      const base = resp.status === 429 || resp.status === 403
         ? 'Se agotó la cuota diaria de búsqueda o las credenciales no son válidas.'
         : 'No se pudo consultar la búsqueda de imágenes.'
-      console.warn('[buscar-imagenes] Google CSE error', resp.status, detalle.slice(0, 200))
+      const msg = motivoGoogle ? `${base} (Google: ${motivoGoogle})` : base
+      console.warn('[buscar-imagenes] Google CSE error', resp.status, detalle.slice(0, 300))
       return NextResponse.json({ error: msg }, { status: 502 })
     }
     const data = await resp.json()
