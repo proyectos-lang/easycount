@@ -68,9 +68,7 @@ import {
   deleteProducto,
   getProductoDependencias,
   uploadProductoImage,
-  buscarImagenesWeb,
   importarImagenDeUrl,
-  type ImagenWeb,
   recomprimirFotosProductos,
   type ProgresoRecompresion,
   getMarcas,
@@ -227,13 +225,8 @@ export default function ProductosConfigPage() {
   const [imagePreview, setImagePreview] = useState<string>("")
   const [uploadingImage, setUploadingImage] = useState(false)
   // Campo para pegar la URL de una imagen de la web (alternativa a subir archivo).
+  // La imagen se descarga a nuestro almacenamiento (a prueba de que el origen la borre).
   const [imageUrlInput, setImageUrlInput] = useState<string>("")
-  // Buscador de imágenes en la web (galería integrada, Google Custom Search).
-  const [buscadorOpen, setBuscadorOpen] = useState(false)
-  const [busquedaImg, setBusquedaImg] = useState("")
-  const [buscandoImg, setBuscandoImg] = useState(false)
-  const [resultadosImg, setResultadosImg] = useState<ImagenWeb[]>([])
-  const [errorBusquedaImg, setErrorBusquedaImg] = useState<string | null>(null)
   const [importandoImg, setImportandoImg] = useState(false)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
 
@@ -795,7 +788,7 @@ export default function ProductosConfigPage() {
 
   // Descarga la imagen de una URL externa a nuestro almacenamiento y la usa
   // como foto del producto (a prueba de que el origen la borre).
-  async function importarImagen(urlExterna: string, cerrarBuscador = false): Promise<boolean> {
+  async function importarImagen(urlExterna: string): Promise<boolean> {
     const url = urlExterna.trim()
     if (!/^https?:\/\/.+/i.test(url)) {
       toast({ title: "URL inválida", description: "Pega una dirección que empiece con http:// o https://", variant: "destructive" })
@@ -813,41 +806,12 @@ export default function ProductosConfigPage() {
     setImagePreview(guardada)
     setImageUrlInput("")
     setValidationErrors(prev => ({ ...prev, foto_url: "" }))
-    if (cerrarBuscador) setBuscadorOpen(false)
     toast({ title: "Imagen guardada", description: "La foto se descargó a tu almacenamiento." })
     return true
   }
 
   function usarImagenPorUrl() {
     importarImagen(imageUrlInput)
-  }
-
-  // Abre el buscador de imágenes integrado (galería) y lanza la búsqueda inicial.
-  function abrirBuscador() {
-    const q = (formData.nombre || "").trim()
-    setBusquedaImg(q)
-    setResultadosImg([])
-    setErrorBusquedaImg(null)
-    setBuscadorOpen(true)
-    if (q) ejecutarBusqueda(q)
-  }
-
-  async function ejecutarBusqueda(q?: string) {
-    const termino = (q ?? busquedaImg).trim()
-    if (!termino) return
-    setBuscandoImg(true)
-    setErrorBusquedaImg(null)
-    const { data, error, noConfigurado } = await buscarImagenesWeb(termino)
-    setBuscandoImg(false)
-    if (error) {
-      setResultadosImg([])
-      setErrorBusquedaImg(noConfigurado
-        ? "La búsqueda de imágenes no está configurada. Contacta al administrador (falta la clave de Google)."
-        : error)
-      return
-    }
-    setResultadosImg(data)
-    if (data.length === 0) setErrorBusquedaImg("Sin resultados. Prueba con otras palabras.")
   }
 
   // Calculate suggested price based on cost and margin
@@ -1487,17 +1451,14 @@ export default function ProductosConfigPage() {
                 </label>
                 <p className="text-xs text-muted-foreground">PNG, JPG o GIF. Maximo 5MB.</p>
 
-                {/* Alternativa: usar una imagen de la web */}
+                {/* Alternativa: usar una imagen de la web por su URL */}
                 <div className="w-full border-t pt-3 space-y-2">
-                  <p className="text-xs text-muted-foreground text-center">o usa una imagen de la web</p>
-                  <Button type="button" variant="outline" className="w-full h-9 gap-1" onClick={abrirBuscador}>
-                    <Search className="h-4 w-4" /> Buscar imágenes en la web
-                  </Button>
+                  <p className="text-xs text-muted-foreground text-center">o usa una imagen de la web por su URL</p>
                   <div className="flex gap-2">
                     <Input
                       type="url"
                       inputMode="url"
-                      placeholder="…o pega la URL de una imagen"
+                      placeholder="Pega la URL de una imagen (https://…)"
                       value={imageUrlInput}
                       onChange={(e) => setImageUrlInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); usarImagenPorUrl() } }}
@@ -1509,7 +1470,7 @@ export default function ProductosConfigPage() {
                     </Button>
                   </div>
                   <p className="text-[11px] text-muted-foreground text-center leading-snug">
-                    La imagen elegida se descarga a tu almacenamiento.
+                    Copia la dirección de una imagen (clic derecho → «Copiar dirección de la imagen»). Se descarga a tu almacenamiento.
                   </p>
                 </div>
               </div>
@@ -2154,62 +2115,6 @@ export default function ProductosConfigPage() {
               {saving && <Spinner className="mr-2 h-4 w-4" />}
               Guardar
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Buscador de imágenes en la web (galería integrada) */}
-      <Dialog open={buscadorOpen} onOpenChange={(o) => { if (!importandoImg) setBuscadorOpen(o) }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Buscar imágenes en la web</DialogTitle>
-            <DialogDescription>Elige una imagen; se descargará a tu almacenamiento y se usará como foto del producto.</DialogDescription>
-          </DialogHeader>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Qué buscar (ej. el nombre del producto)…"
-              value={busquedaImg}
-              onChange={(e) => setBusquedaImg(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); ejecutarBusqueda() } }}
-              className="h-9"
-              autoFocus
-            />
-            <Button type="button" className="h-9 shrink-0 gap-1" onClick={() => ejecutarBusqueda()} disabled={buscandoImg || !busquedaImg.trim()}>
-              {buscandoImg ? <Spinner className="h-4 w-4" /> : <Search className="h-4 w-4" />} Buscar
-            </Button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto -mx-1 px-1">
-            {buscandoImg ? (
-              <div className="flex justify-center py-12"><Spinner className="h-7 w-7" /></div>
-            ) : errorBusquedaImg ? (
-              <p className="text-sm text-muted-foreground text-center py-10">{errorBusquedaImg}</p>
-            ) : resultadosImg.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-10">Escribe algo y presiona Buscar.</p>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 py-1">
-                {resultadosImg.map((img, i) => (
-                  <button
-                    key={`${img.url}-${i}`}
-                    type="button"
-                    disabled={importandoImg}
-                    onClick={() => importarImagen(img.url, true)}
-                    title={img.titulo}
-                    className="group relative aspect-square overflow-hidden rounded-lg border border-stone-200 bg-stone-100 hover:ring-2 hover:ring-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={img.thumbnail} alt={img.titulo || "imagen"} className="h-full w-full object-cover" loading="lazy" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {importandoImg && (
-            <p className="text-xs text-center text-muted-foreground flex items-center justify-center gap-1"><Spinner className="h-3.5 w-3.5" /> Guardando la imagen…</p>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBuscadorOpen(false)} disabled={importandoImg}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

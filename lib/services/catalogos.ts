@@ -536,41 +536,6 @@ export async function uploadProductoImage(
   }
 }
 
-/** Un resultado de la búsqueda de imágenes en la web (Google Custom Search). */
-export interface ImagenWeb {
-  url: string
-  thumbnail: string
-  titulo: string
-  ancho: number
-  alto: number
-  contexto: string
-}
-
-/**
- * Busca imágenes en la web (Google Custom Search, via /api/buscar-imagenes).
- * Devuelve `noConfigurado: true` si faltan las claves del servidor (la UI lo
- * muestra en vez de romper).
- */
-export async function buscarImagenesWeb(
-  q: string
-): Promise<{ data: ImagenWeb[]; error: string | null; noConfigurado?: boolean }> {
-  try {
-    const res = await fetch('/api/buscar-imagenes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q }),
-    })
-    const json = await res.json()
-    if (!res.ok) {
-      return { data: [], error: json.error || 'Error al buscar imágenes', noConfigurado: res.status === 503 }
-    }
-    return { data: (json.resultados || []) as ImagenWeb[], error: null }
-  } catch (err) {
-    console.error('[buscarImagenesWeb] error:', err)
-    return { data: [], error: 'Error al buscar imágenes' }
-  }
-}
-
 /**
  * Descarga una imagen desde una URL externa y la sube al almacenamiento propio
  * (bucket 'productos'), devolviendo su URL pública. Se usa al elegir una imagen
