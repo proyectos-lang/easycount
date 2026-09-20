@@ -191,3 +191,74 @@ export async function saveConfigCai(
     return { data: null, error: 'Error de conexión' }
   }
 }
+
+/** Correlativo fiscal ya emitido (consumido) para una factura. */
+export interface CorrelativoCaiEmitido {
+  numero: string // 'ESTAB-PUNTO-TIPO-NNNNNNNN'
+  correlativo: number
+  establecimiento: string
+  punto_emision: string
+  tipo_documento: string
+  cai: string | null
+}
+
+/**
+ * Emite (CONSUME) el siguiente correlativo fiscal via el RPC atómico
+ * `siguiente_correlativo_cai` (script 061). Fuente de verdad del número fiscal;
+ * se llama al crear la venta. Devuelve:
+ *   - { data, error: null }  si emitió un folio.
+ *   - { data: null, error }  si no hay config / rango agotado / RPC ausente.
+ * En error, el llamador puede degradar (venta sin número fiscal).
+ */
+export async function emitirCorrelativoCai(
+  supabase: NonNullable<ReturnType<typeof createClient>>,
+  tipoDocumento: string = '01'
+): Promise<{ data: CorrelativoCaiEmitido | null; error: string | null }> {
+  try {
+    const { data, error } = await supabase.rpc('siguiente_correlativo_cai', {
+      p_tipo_documento: tipoDocumento,
+    })
+    if (error) {
+      // 42883 = función inexistente (script 061 sin correr). No es error "duro".
+      if (error.code === '42883') {
+        console.warn('[emitirCorrelativoCai] RPC ausente; corre scripts/061.')
+      }
+      return { data: null, error: error.message }
+    }
+    const fila = Array.isArray(data) ? data[0] : data
+    if (!fila || !fila.numero) return { data: null, error: 'Sin correlativo emitido' }
+    return {
+      data: {
+        numero: String(fila.numero),
+        correlativo: Number(fila.correlativo),
+        establecimiento: String(fila.establecimiento ?? '000'),
+        punto_emision: String(fila.punto_emision ?? '001'),
+        tipo_documento: String(fila.tipo_documento ?? tipoDocumento),
+        cai: fila.cai != null ? String(fila.cai) : null,
+      },
+      error: null,
+    }
+  } catch (e) {
+    console.warn('[emitirCorrelativoCai] excepción:', e)
+    return { data: null, error: 'Error de conexión' }
+  }
+}
+
+/**
+ * PEEK (solo lectura, NO consume): el número fiscal que se emitiría a
+ * continuación, para mostrarlo en Nueva Venta. Devuelve null si no hay config
+ * activa o el RPC no está disponible.
+ */
+export async function peekCorrelativoCai(tipoDocumento: string = '01'): Promise<string | null> {
+  const supabase = createClient()
+  if (!supabase) return null
+  try {
+    const { data, error } = await supabase.rpc('peek_correlativo_cai', {
+      p_tipo_documento: tipoDocumento,
+    })
+    if (error) return null
+    return typeof data === 'string' && data ? data : null
+  } catch {
+    return null
+  }
+}
