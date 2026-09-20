@@ -524,6 +524,7 @@ export async function getCierreDiario(fechaISO: string): Promise<{
     const { data, error } = await supabase
       .from("ventas_detalle")
       .select(`
+        id,
         producto_id,
         cantidad,
         precio_unitario,
@@ -534,20 +535,52 @@ export async function getCierreDiario(fechaISO: string): Promise<{
     if (error) {
       console.warn("[cierre-diario] error productos:", error.message)
     } else {
-      const map = new Map<number | null, ProductoVendido>()
-      for (const r of data || []) {
+      const detalles = data || []
+
+      // Lineas de Venta Rapida (producto_id NULL): su nombre no viene por join a
+      // `productos` sino de la tabla mapa `ventas_detalle_descripcion` (script
+      // 045). Se lee best-effort: si el script no existe, cae al texto generico.
+      const idsSinProducto = detalles
+        .filter((r) => r.producto_id == null)
+        .map((r) => r.id)
+      const descById = new Map<number, string>()
+      if (idsSinProducto.length > 0) {
+        const { data: descData } = await supabase
+          .from("ventas_detalle_descripcion")
+          .select("detalle_id, descripcion")
+          .in("detalle_id", idsSinProducto)
+        for (const d of (descData || []) as { detalle_id: number; descripcion: string }[]) {
+          descById.set(d.detalle_id, d.descripcion)
+        }
+      }
+
+      // Agrupa por producto del catalogo (por id) y, para Venta Rapida, por su
+      // texto capturado (asi dos lineas rapidas distintas no se mezclan).
+      const map = new Map<string, ProductoVendido>()
+      for (const r of detalles) {
         const prod: { id: number; codigo_barras: string | null; nombre: string } | null =
           (Array.isArray(r.productos) ? r.productos[0] : r.productos) || null
-        const key = r.producto_id ?? null
+        const cant = Number(r.cantidad || 0)
+        const precio = Number(r.precio_unitario || 0)
+
+        let key: string
+        let nombre: string
+        if (r.producto_id != null) {
+          key = `p:${r.producto_id}`
+          nombre = prod?.nombre ?? "Producto eliminado"
+        } else {
+          const desc = (descById.get(r.id) || "").trim()
+          nombre = desc || "Venta rapida"
+          key = `d:${nombre.toLowerCase()}`
+        }
+
         const existing = map.get(key) ?? {
-          producto_id: key,
+          producto_id: r.producto_id ?? null,
           producto_codigo: prod?.codigo_barras ?? null,
-          producto_nombre: prod?.nombre ?? "Producto eliminado",
+          producto_nombre: nombre,
           cantidad: 0,
           total_vendido: 0,
         }
-        const cant = Number(r.cantidad || 0)
-        const precio = Number(r.precio_unitario || 0)
         existing.cantidad += cant
         existing.total_vendido += cant * precio
         map.set(key, existing)
