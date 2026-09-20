@@ -1005,11 +1005,16 @@ export default function NuevaVentaPage() {
       toast({ title: "Venta creada", description: `Factura ${numeroFactura} generada correctamente` })
       
       const ventaData = {
-        encabezado: { 
-          ...encabezado, 
+        encabezado: {
+          ...encabezado,
           id: data?.id,
           cliente_nombre: selectedCliente?.nombre || "",
-          fecha_venta: encabezado.fecha_venta
+          fecha_venta: encabezado.fecha_venta,
+          // Copiar el numero fiscal CAI emitido por el servidor: la carta A4
+          // (generatePdfFromData) lo lee de aqui para armar el bloque fiscal.
+          numero_fiscal: data?.numero_fiscal ?? null,
+          cai_emitido: data?.cai_emitido ?? null,
+          tipo_documento_fiscal: data?.tipo_documento_fiscal ?? null,
         },
         detalles: lineas.map((l, i) => ({ 
           id: i + 1, 
