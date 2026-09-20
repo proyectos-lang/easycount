@@ -30,12 +30,48 @@ export interface TirillaPago {
   monto: number
 }
 
+/**
+ * Datos fiscales del SAR (Honduras) para el comprobante CAI. Cuando `cai` y
+ * `numeroFiscal` vienen presentes, la tirilla se imprime como factura fiscal
+ * (encabezado CAI + desglose gravado/exento + total en letras). Si faltan, la
+ * tirilla sale como el recibo interno de siempre (retrocompatible).
+ */
+export interface TirillaFiscal {
+  cai: string
+  /** Correlativo fiscal completo 'ESTAB-PUNTO-TIPO-NNNNNNNN'. */
+  numeroFiscal: string
+  /** Rango autorizado, ya formateado (inicial y final). */
+  rangoDesde?: string | null
+  rangoHasta?: string | null
+  /** Fecha límite de emisión, ya formateada (dd/mm/aaaa) o null. */
+  fechaLimite?: string | null
+  /** RTN del cliente (o null si Consumidor Final). */
+  clienteRtn?: string | null
+  /** true si es Consumidor Final (imprime la leyenda). */
+  esConsumidorFinal?: boolean
+  /** Desglose fiscal (Fase 2: todo gravado 15% o todo exento según el toggle). */
+  importeExento: number
+  importeExonerado: number
+  importeGravado15: number
+  importeGravado18: number
+  isv15: number
+  isv18: number
+  /** Importe total en letras (p.ej. "MIL ... LEMPIRAS Y CERO CENTAVOS EXACTOS"). */
+  totalEnLetras: string
+  /** Datos de la imprenta, si la empresa emite por imprenta. */
+  imprentaNombre?: string | null
+  imprentaRtn?: string | null
+  imprentaRegistro?: string | null
+}
+
 export interface TirillaVenta {
   empresa: TirillaEmpresa
   numeroFactura: string
   /** ISO string; se formatea a fecha+hora local es-HN. */
   fechaISO: string
   cliente: string
+  /** Datos fiscales CAI (opcional). Si viene, la tirilla es comprobante SAR. */
+  fiscal?: TirillaFiscal | null
   lineas: TirillaLinea[]
   subtotal: number
   descuentoPct: number
@@ -148,6 +184,54 @@ export function buildTirillaVentaHtml(v: TirillaVenta): string {
         `<div class="row bold"><span>Vuelto</span><span>${formatCurrency(v.vuelto)}</span></div>`
       : ""
 
+  const f = v.fiscal || null
+
+  // Encabezado fiscal (CAI): reemplaza la linea "Factura: <numero>" cuando la
+  // venta es comprobante SAR. Muestra CAI, correlativo fiscal, rango, fecha
+  // limite y destino de los ejemplares (Original: Cliente).
+  const encabezadoHtml = f
+    ? `<div class="center bold" style="font-size:13px;">FACTURA</div>
+  <div class="meta"><b>CAI:</b> <span class="mono">${esc(f.cai)}</span></div>
+  <div class="meta"><b>No.:</b> <span class="mono">${esc(f.numeroFiscal)}</span></div>
+  ${f.rangoDesde && f.rangoHasta ? `<div class="meta"><b>Rango:</b> <span class="mono">${esc(f.rangoDesde)}</span> a <span class="mono">${esc(f.rangoHasta)}</span></div>` : ""}
+  ${f.fechaLimite ? `<div class="meta"><b>Fecha límite de emisión:</b> ${esc(f.fechaLimite)}</div>` : ""}
+  <div class="meta"><b>Fecha:</b> ${esc(fmtFechaHora(v.fechaISO))}</div>
+  <div class="meta">Original: Cliente</div>`
+    : `<div class="meta"><b>Factura:</b> ${esc(v.numeroFactura)}</div>
+  <div class="meta"><b>Fecha:</b> ${esc(fmtFechaHora(v.fechaISO))}</div>`
+
+  // Cliente + RTN (o "CONSUMIDOR FINAL") en modo fiscal.
+  const clienteHtml = f
+    ? `<div class="meta"><b>Cliente:</b> ${f.esConsumidorFinal ? "CONSUMIDOR FINAL" : esc(v.cliente)}</div>
+  ${f.clienteRtn ? `<div class="meta"><b>RTN:</b> ${esc(f.clienteRtn)}</div>` : ""}`
+    : `<div class="meta"><b>Cliente:</b> ${esc(v.cliente)}</div>`
+
+  // Desglose fiscal (exento / exonerado / gravado 15% / 18% / ISV) o el simple.
+  const totalesHtml = f
+    ? `<div class="row"><span>Subtotal</span><span>${formatCurrency(v.subtotal)}</span></div>
+  ${descuentoHtml}
+  <div class="row"><span>Importe exento</span><span>${formatCurrency(f.importeExento)}</span></div>
+  <div class="row"><span>Importe exonerado</span><span>${formatCurrency(f.importeExonerado)}</span></div>
+  <div class="row"><span>Importe gravado 15%</span><span>${formatCurrency(f.importeGravado15)}</span></div>
+  ${f.importeGravado18 > 0 ? `<div class="row"><span>Importe gravado 18%</span><span>${formatCurrency(f.importeGravado18)}</span></div>` : ""}
+  <div class="row"><span>ISV 15%</span><span>${formatCurrency(f.isv15)}</span></div>
+  ${f.isv18 > 0 ? `<div class="row"><span>ISV 18%</span><span>${formatCurrency(f.isv18)}</span></div>` : ""}
+  <div class="row total"><span>TOTAL</span><span>${formatCurrency(v.total)}</span></div>
+  <div class="meta" style="margin-top:3px;"><b>Son:</b> ${esc(f.totalEnLetras)}</div>`
+    : `<div class="row"><span>Subtotal</span><span>${formatCurrency(v.subtotal)}</span></div>
+  ${descuentoHtml}
+  ${isvHtml}
+  <div class="row total"><span>TOTAL</span><span>${formatCurrency(v.total)}</span></div>`
+
+  // Pie fiscal: datos de imprenta o leyenda de autoimpresor.
+  const pieFiscalHtml = f
+    ? f.imprentaNombre || f.imprentaRtn || f.imprentaRegistro
+      ? `<div class="line"></div><div class="foot" style="font-size:10px;">
+    Imprenta: ${esc(f.imprentaNombre ?? "")}${f.imprentaRtn ? ` · RTN ${esc(f.imprentaRtn)}` : ""}${f.imprentaRegistro ? ` · Reg. ${esc(f.imprentaRegistro)}` : ""}
+  </div>`
+      : `<div class="line"></div><div class="foot" style="font-size:10px;">Documento emitido por autoimpresor autorizado por el SAR.</div>`
+    : ""
+
   return `<!DOCTYPE html>
 <html lang="es"><head><meta charset="UTF-8">
 <style id="page-style">
@@ -175,7 +259,8 @@ export function buildTirillaVentaHtml(v: TirillaVenta): string {
   .logo   { display: block; margin: 0 auto 4px; max-width: 55mm; max-height: 30mm; width: auto; height: auto; }
   .emp    { font-size: 17px; font-weight: 800; text-align: center; word-wrap: break-word; }
   .sub    { font-size: 11px; font-weight: 700; text-align: center; line-height: 1.35; word-wrap: break-word; }
-  .meta   { font-size: 12px; margin: 1px 0; }
+  .meta   { font-size: 12px; margin: 1px 0; word-wrap: break-word; }
+  .mono   { font-family: 'Courier New', monospace; font-weight: 700; }
   .line   { border-top: 1px solid #000; margin: 5px 0; }
   .item       { margin: 4px 0; }
   .item-name  { font-size: 12px; font-weight: 800; word-wrap: break-word; }
@@ -191,22 +276,19 @@ export function buildTirillaVentaHtml(v: TirillaVenta): string {
   <div class="emp">${esc(e.nombre)}</div>
   ${subHtml}
   <div class="line"></div>
-  <div class="meta"><b>Factura:</b> ${esc(v.numeroFactura)}</div>
-  <div class="meta"><b>Fecha:</b> ${esc(fmtFechaHora(v.fechaISO))}</div>
-  <div class="meta"><b>Cliente:</b> ${esc(v.cliente)}</div>
+  ${encabezadoHtml}
+  ${clienteHtml}
   <div class="line"></div>
   ${itemsHtml}
   <div class="line"></div>
-  <div class="row"><span>Subtotal</span><span>${formatCurrency(v.subtotal)}</span></div>
-  ${descuentoHtml}
-  ${isvHtml}
-  <div class="row total"><span>TOTAL</span><span>${formatCurrency(v.total)}</span></div>
+  ${totalesHtml}
   <div class="line"></div>
   <div class="meta"><b>Forma de pago</b></div>
   ${pagosHtml}
   <div class="row"><span>Pagado</span><span>${formatCurrency(v.valorPagado)}</span></div>
   ${saldoHtml}
   ${vueltoHtml}
+  ${pieFiscalHtml}
   <div class="line"></div>
   <div class="foot">Gracias por su compra</div>
 </body></html>`

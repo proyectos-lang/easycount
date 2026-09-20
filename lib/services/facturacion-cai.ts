@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from '@/lib/services/tenant-stamp'
+import { montoEnLetrasLempiras } from '@/lib/utils/numero-a-letras'
 
 /**
  * Facturación CAI (comprobantes fiscales del SAR, Honduras) — FASE 1.
@@ -261,4 +262,61 @@ export async function peekCorrelativoCai(tipoDocumento: string = '01'): Promise<
   } catch {
     return null
   }
+}
+
+/** Desglose fiscal del SAR (importes por régimen + ISV por tasa). */
+export interface DesgloseFiscal {
+  importeExento: number
+  importeExonerado: number
+  importeGravado15: number
+  importeGravado18: number
+  isv15: number
+  isv18: number
+}
+
+/**
+ * Calcula el desglose fiscal de una venta (Fase 2). Regla acordada: TODO gravado
+ * 15% o TODO exento según el toggle de ISV de la venta; 18% y exonerado quedan
+ * en cero (preparados para una fase futura por producto). Función pura.
+ *
+ * @param baseNeta  subtotal - descuento (base imponible / exenta, sin ISV)
+ * @param isv       ISV total ya calculado en la venta
+ * @param aplicaIsv toggle de la venta (mostrarIsv / aplica_impuesto)
+ */
+export function calcularDesgloseFiscal(
+  baseNeta: number,
+  isv: number,
+  aplicaIsv: boolean
+): DesgloseFiscal {
+  const base = +(baseNeta || 0).toFixed(2)
+  if (aplicaIsv) {
+    return {
+      importeExento: 0,
+      importeExonerado: 0,
+      importeGravado15: base,
+      importeGravado18: 0,
+      isv15: +(isv || 0).toFixed(2),
+      isv18: 0,
+    }
+  }
+  return {
+    importeExento: base,
+    importeExonerado: 0,
+    importeGravado15: 0,
+    importeGravado18: 0,
+    isv15: 0,
+    isv18: 0,
+  }
+}
+
+/** Formatea una fecha YYYY-MM-DD a dd/mm/aaaa (o '' si null). */
+export function fmtFechaCorta(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const [y, m, d] = iso.slice(0, 10).split('-')
+  return y && m && d ? `${d}/${m}/${y}` : iso
+}
+
+/** Total en letras de un monto (re-export conveniente para los imprimibles). */
+export function totalEnLetras(monto: number): string {
+  return montoEnLetrasLempiras(monto)
 }

@@ -66,7 +66,15 @@ import { getCuentas, type CuentaConfig } from "@/lib/services/cuentas"
 import { useCajaSesion } from "@/lib/hooks/use-caja-sesion"
 import { printTirilla } from "@/lib/print-tirilla"
 import { tirillaLogoUrl } from "@/lib/utils/tirilla-logos"
-import { buildTirillaVentaHtml, metodoPagoLabel, type TirillaVenta } from "@/lib/utils/tirilla-venta"
+import { buildTirillaVentaHtml, metodoPagoLabel, type TirillaVenta, type TirillaFiscal } from "@/lib/utils/tirilla-venta"
+import {
+  getConfigsCai,
+  calcularDesgloseFiscal,
+  formatearCorrelativoCai,
+  fmtFechaCorta,
+  totalEnLetras,
+  type ConfigCai,
+} from "@/lib/services/facturacion-cai"
 import { hoyISO, timestampNaiveLocal } from "@/lib/utils/fecha"
 
 interface LineaVenta {
@@ -1032,6 +1040,32 @@ export default function NuevaVentaPage() {
       // Foto de la venta para la tirilla termica (80 mm). Se arma AQUI, con el
       // estado local aun disponible, y sobrevive al resetForm().
       const razonSocial = await getRazonSocialForPdf()
+
+      // Bloque fiscal CAI: solo si la empresa tiene Facturación CAI activa Y la
+      // venta obtuvo un numero fiscal (`data.numero_fiscal`). Trae la config CAI
+      // (rango, fecha limite, imprenta) para el encabezado del comprobante SAR.
+      let fiscal: TirillaFiscal | null = null
+      if ((user?.flags?.facturacion_cai ?? false) && data?.numero_fiscal) {
+        const { data: cfgs } = await getConfigsCai()
+        const cfg: ConfigCai | undefined = cfgs.find((c) => c.tipo_documento === "01")
+        const desglose = calcularDesgloseFiscal(subtotal - montoDescuento, isv, mostrarIsv)
+        const esConsumidorFinal = !selectedCliente?.rtn
+        fiscal = {
+          cai: data.cai_emitido || cfg?.cai || "",
+          numeroFiscal: data.numero_fiscal,
+          rangoDesde: cfg ? formatearCorrelativoCai(cfg.establecimiento, cfg.punto_emision, cfg.tipo_documento, cfg.rango_inicial) : null,
+          rangoHasta: cfg && cfg.rango_final > 0 ? formatearCorrelativoCai(cfg.establecimiento, cfg.punto_emision, cfg.tipo_documento, cfg.rango_final) : null,
+          fechaLimite: cfg?.fecha_limite_emision ? fmtFechaCorta(cfg.fecha_limite_emision) : null,
+          clienteRtn: selectedCliente?.rtn || null,
+          esConsumidorFinal,
+          ...desglose,
+          totalEnLetras: totalEnLetras(total),
+          imprentaNombre: cfg?.imprenta_nombre || null,
+          imprentaRtn: cfg?.imprenta_rtn || null,
+          imprentaRegistro: cfg?.imprenta_registro || null,
+        }
+      }
+
       const tirilla: TirillaVenta = {
         empresa: {
           nombre:
@@ -1050,6 +1084,7 @@ export default function NuevaVentaPage() {
         numeroFactura: numeroFactura,
         fechaISO: encabezado.fecha_venta,
         cliente: selectedCliente?.nombre || "Consumidor Final",
+        fiscal,
         lineas: lineas.map((l) => ({
           nombre: l.producto_nombre,
           cantidad: l.cantidad,

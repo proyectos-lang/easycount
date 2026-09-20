@@ -76,7 +76,15 @@ import { contarDevolucionesDeVenta } from "@/lib/services/devoluciones"
 import { useAuth } from "@/lib/contexts/auth-context"
 import { printTirilla } from "@/lib/print-tirilla"
 import { tirillaLogoUrl } from "@/lib/utils/tirilla-logos"
-import { buildTirillaVentaHtml, metodoPagoLabel, type TirillaVenta } from "@/lib/utils/tirilla-venta"
+import { buildTirillaVentaHtml, metodoPagoLabel, type TirillaVenta, type TirillaFiscal } from "@/lib/utils/tirilla-venta"
+import {
+  getConfigsCai,
+  calcularDesgloseFiscal,
+  formatearCorrelativoCai,
+  fmtFechaCorta,
+  totalEnLetras,
+  type ConfigCai,
+} from "@/lib/services/facturacion-cai"
 
 export default function HistorialVentasPage() {
   const { toast } = useToast()
@@ -707,6 +715,32 @@ export default function HistorialVentasPage() {
             ? [{ metodo: metodosPago.get(venta.id) || "Pago", monto: valorPagado }]
             : []
 
+      // Reconstruye el bloque fiscal CAI si la venta se emitio como comprobante
+      // (tiene numero_fiscal persistido). Toma la config CAI vigente para el
+      // rango/fecha limite/imprenta del encabezado.
+      let fiscal: TirillaFiscal | null = null
+      if (venta.numero_fiscal) {
+        const { data: cfgs } = await getConfigsCai()
+        const cfg: ConfigCai | undefined = cfgs.find(
+          (c) => c.tipo_documento === (venta.tipo_documento_fiscal || "01"),
+        )
+        const desglose = calcularDesgloseFiscal(subtotal - descuentoMonto, venta.impuesto_total ?? 0, !!venta.aplica_impuesto)
+        fiscal = {
+          cai: venta.cai_emitido || cfg?.cai || "",
+          numeroFiscal: venta.numero_fiscal,
+          rangoDesde: cfg ? formatearCorrelativoCai(cfg.establecimiento, cfg.punto_emision, cfg.tipo_documento, cfg.rango_inicial) : null,
+          rangoHasta: cfg && cfg.rango_final > 0 ? formatearCorrelativoCai(cfg.establecimiento, cfg.punto_emision, cfg.tipo_documento, cfg.rango_final) : null,
+          fechaLimite: cfg?.fecha_limite_emision ? fmtFechaCorta(cfg.fecha_limite_emision) : null,
+          clienteRtn: cliente?.rtn || null,
+          esConsumidorFinal: !cliente?.rtn,
+          ...desglose,
+          totalEnLetras: totalEnLetras(venta.total_venta ?? 0),
+          imprentaNombre: cfg?.imprenta_nombre || null,
+          imprentaRtn: cfg?.imprenta_rtn || null,
+          imprentaRegistro: cfg?.imprenta_registro || null,
+        }
+      }
+
       const tirilla: TirillaVenta = {
         empresa: {
           nombre:
@@ -722,6 +756,7 @@ export default function HistorialVentasPage() {
         numeroFactura: venta.numero_factura,
         fechaISO: venta.fecha_venta || new Date().toISOString(),
         cliente: cliente?.nombre || venta.cliente_nombre || "Consumidor Final",
+        fiscal,
         lineas: detalles.map((d) => ({
           nombre: d.producto_nombre || "",
           cantidad: d.cantidad ?? 0,
