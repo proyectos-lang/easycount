@@ -814,6 +814,15 @@ export default function ProductosConfigPage() {
     importarImagen(imageUrlInput)
   }
 
+  // Abre Google Imágenes en una pestaña nueva con el nombre del producto ya
+  // buscado. El usuario copia la dirección de la imagen que quiera y la pega en
+  // el campo de URL (no usa ninguna API; funciona siempre).
+  function buscarEnGoogleImagenes() {
+    const q = (formData.nombre || "").trim()
+    const url = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(q)}`
+    window.open(url, "_blank", "noopener,noreferrer")
+  }
+
   // Calculate suggested price based on cost and margin
   // Formula: Margen = (Precio - Costo) / Precio
   // Solving for Precio: Precio = Costo / (1 - Margen)
@@ -1453,12 +1462,15 @@ export default function ProductosConfigPage() {
 
                 {/* Alternativa: usar una imagen de la web por su URL */}
                 <div className="w-full border-t pt-3 space-y-2">
-                  <p className="text-xs text-muted-foreground text-center">o usa una imagen de la web por su URL</p>
+                  <p className="text-xs text-muted-foreground text-center">o usa una imagen de la web</p>
+                  <Button type="button" variant="outline" className="w-full h-9 gap-1" onClick={buscarEnGoogleImagenes} disabled={importandoImg}>
+                    <Search className="h-4 w-4" /> Buscar en Google Imágenes
+                  </Button>
                   <div className="flex gap-2">
                     <Input
                       type="url"
                       inputMode="url"
-                      placeholder="Pega la URL de una imagen (https://…)"
+                      placeholder="…y pega aquí la URL de la imagen"
                       value={imageUrlInput}
                       onChange={(e) => setImageUrlInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); usarImagenPorUrl() } }}
@@ -1470,7 +1482,7 @@ export default function ProductosConfigPage() {
                     </Button>
                   </div>
                   <p className="text-[11px] text-muted-foreground text-center leading-snug">
-                    Copia la dirección de una imagen (clic derecho → «Copiar dirección de la imagen»). Se descarga a tu almacenamiento.
+                    En Google, clic derecho sobre la imagen → «Copiar dirección de la imagen» y pégala. Se descarga a tu almacenamiento.
                   </p>
                 </div>
               </div>
