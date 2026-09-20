@@ -44,10 +44,12 @@ DECLARE
   v_next bigint;
 BEGIN
   -- Lock de la fila del tenant para este tipo de documento (RLS ya la aisla).
+  -- Se califica con el nombre de la tabla porque `tipo_documento` tambien es una
+  -- columna de salida (RETURNS TABLE) -> sin calificar es ambiguo (42702).
   SELECT * INTO v_row
   FROM public.facturacion_cai_config
-  WHERE tipo_documento = p_tipo_documento
-    AND razon_social_id = public.app_current_tenant()
+  WHERE facturacion_cai_config.tipo_documento = p_tipo_documento
+    AND facturacion_cai_config.razon_social_id = public.app_current_tenant()
   FOR UPDATE;
 
   IF NOT FOUND THEN
