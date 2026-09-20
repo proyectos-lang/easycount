@@ -147,7 +147,10 @@ Encabezado de factura de venta.
 | Columna | Tipo | Notas |
 |---|---|---|
 | `id` | bigint | PK |
-| `numero_factura` | text | correlativo generado por la app |
+| `numero_factura` | text | correlativo INTERNO generado por la app (`FC-####`, serie global atómica, script 052). Alimenta caja, cierre, historial. |
+| `numero_fiscal` | text | **(script 062, nullable)** correlativo FISCAL CAI `ESTAB-PUNTO-TIPO-NNNNNNNN` (p.ej. `000-001-01-00000003`), solo si la empresa tiene Facturación CAI activa. Se emite atómico (`siguiente_correlativo_cai`, script 061) al crear la venta. NULL en ventas sin CAI. |
+| `cai_emitido` | text | **(script 062, nullable)** snapshot del CAI vigente al emitir la factura. |
+| `tipo_documento_fiscal` | text | **(script 062, nullable)** tipo SAR emitido: `01` Factura, `06` Nota Crédito, `07` Nota Débito. |
 | `cliente_id` | bigint | FK → `clientes.id` |
 | `almacen_id` | bigint | FK → `almacenes.id` — almacén del que sale la mercancía |
 | `fecha_venta` | timestamptz | default `now()` |

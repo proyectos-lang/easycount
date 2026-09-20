@@ -9,9 +9,11 @@ BD en `docs/DATABASE.md`.
 - **Multi-tenant**: toda query filtra por `razon_social_id`; todo insert lleva
   el sello de `getTenantStamp` (`lib/services/tenant-stamp.ts`). Toda tabla
   nueva recibe política RLS (patrón de `scripts/017-rls-policies.sql`).
-- **Scripts SQL estrictamente aditivos**: solo `CREATE TABLE` de tablas nuevas,
-  `CREATE POLICY` sobre ellas e `INSERT` de datos. **Nunca `ALTER`/`DROP`
-  sobre tablas existentes** ni renombrar columnas.
+- **Scripts SQL aditivos**: `CREATE TABLE` de tablas nuevas, `CREATE POLICY`
+  sobre ellas, `INSERT` de datos y `ADD COLUMN IF NOT EXISTS` sobre tablas
+  existentes (solo columnas **nullable, sin default ni constraints** → operación
+  instantánea que no reescribe filas). **Nunca `DROP`, renombrar columnas ni
+  `ALTER` que reescriba/bloquee** (cambiar tipo, `SET NOT NULL`, defaults, etc.).
 - **Stock/costo**: nunca leer-modificar-escribir `productos.stock_total` o
   `costo_promedio`; usar `ajustarStock` / `aplicarEntradaCompra`
   (`lib/services/stock.ts`).

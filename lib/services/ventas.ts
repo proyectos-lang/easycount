@@ -5,6 +5,7 @@ import { registrarMovimientoCuenta, recalcCadenaSaldoCuenta } from '@/lib/servic
 import { ajustarStock } from '@/lib/services/stock'
 import { getHondurasNowISO } from '@/lib/utils/honduras-time'
 import { revertirDevolucionesDeVenta } from '@/lib/services/devoluciones'
+import { emitirCorrelativoCai } from '@/lib/services/facturacion-cai'
 
 /**
  * True SOLO si el error es "la relacion/tabla no existe" (migracion pendiente):
@@ -67,6 +68,16 @@ export interface VentaEncabezado {
    * saldo_pendiente = total_venta - valorpago
    */
   valorpago?: number
+  /**
+   * Número fiscal CAI (SAR Honduras) 'ESTAB-PUNTO-TIPO-NNNNNNNN', si la empresa
+   * tiene Facturación CAI activa. NULL en ventas sin CAI (script 062). El
+   * correlativo interno sigue en `numero_factura` (FC-####).
+   */
+  numero_fiscal?: string | null
+  /** CAI vigente al emitir la factura (snapshot). NULL si no hay CAI. */
+  cai_emitido?: string | null
+  /** Tipo de documento fiscal emitido: '01' Factura, '06' NC, '07' ND. */
+  tipo_documento_fiscal?: string | null
 }
 
 export interface VentaDetalle {
@@ -565,6 +576,13 @@ interface CrearVentaData {
    * haya calculado el cliente.
    */
   conservarNumeroFactura?: boolean
+  /**
+   * Cuando es `true` (la empresa tiene Facturación CAI activa), la venta emite
+   * ADEMAS un número fiscal CAI atómico y lo guarda en `numero_fiscal`. Si la
+   * config CAI no está lista (sin rango, agotada, RPC ausente), la venta NO se
+   * bloquea: se crea sin número fiscal (modo degradado) y se avisa en consola.
+   */
+  emitirNumeroFiscal?: boolean
 }
 
 /**
@@ -722,6 +740,24 @@ export async function crearVenta(
       ? null
       : await emitirCorrelativoVenta(supabase)
 
+    // Numero FISCAL CAI (SAR Honduras): SOLO si la empresa tiene Facturación CAI
+    // activa (`emitirNumeroFiscal`) y no es una importacion. Es independiente del
+    // FC-#### interno. Si la config CAI no esta lista o el RPC no existe, la venta
+    // NO se bloquea: se crea sin numero fiscal (degradado) y se avisa en consola.
+    let numeroFiscal: string | null = null
+    let caiEmitido: string | null = null
+    let tipoDocFiscal: string | null = null
+    if (data.emitirNumeroFiscal && !data.conservarNumeroFactura) {
+      const { data: corr, error: corrErr } = await emitirCorrelativoCai(supabase, '01')
+      if (corr) {
+        numeroFiscal = corr.numero
+        caiEmitido = corr.cai
+        tipoDocFiscal = corr.tipo_documento
+      } else {
+        console.warn('[crearVenta] no se emitio numero fiscal CAI:', corrErr)
+      }
+    }
+
     // 1. Insert venta encabezado with almacen_id (sello completo: empresa + usuario)
     // fecha_venta HN-as-UTC por defecto si el caller no la envia (p.ej. aprobar
     // pedido): sin esto caia al DEFAULT now() de la BD (UTC real) y de noche
@@ -732,6 +768,9 @@ export async function crearVenta(
       fecha_venta: getHondurasNowISO(),
       ...data.encabezado,
       ...(numeroAtomico ? { numero_factura: numeroAtomico } : {}),
+      ...(numeroFiscal
+        ? { numero_fiscal: numeroFiscal, cai_emitido: caiEmitido, tipo_documento_fiscal: tipoDocFiscal }
+        : {}),
       valorpago: valorpagoCalculado,
       estado_pago: estadoPagoCalculado,
       almacen_id: data.almacen_id,
@@ -758,6 +797,29 @@ export async function crearVenta(
       const retry = await supabase
         .from('ventas_encabezado')
         .insert(sinValorpago)
+        .select()
+        .single()
+      ventaData = retry.data
+      ventaError = retry.error
+    }
+
+    // Fallback: si las columnas fiscales CAI aun no existen (script 062
+    // pendiente) reintentamos sin ellas, para no bloquear la venta. El numero
+    // interno FC-#### ya quedo asignado; solo se pierde el numero fiscal.
+    if (ventaError && /numero_fiscal|cai_emitido|tipo_documento_fiscal/i.test(ventaError.message || '')) {
+      console.warn(
+        '[crearVenta] Columnas fiscales CAI no existen. Reintentando sin ellas. ' +
+        'Aplica scripts/062-ventas-numero-fiscal.sql para guardar el numero fiscal.'
+      )
+      const { numero_fiscal: _nf, cai_emitido: _ce, tipo_documento_fiscal: _td, ...sinFiscal } =
+        encabezadoConAlmacen as {
+          numero_fiscal?: string | null
+          cai_emitido?: string | null
+          tipo_documento_fiscal?: string | null
+        } & Record<string, unknown>
+      const retry = await supabase
+        .from('ventas_encabezado')
+        .insert(sinFiscal)
         .select()
         .single()
       ventaData = retry.data

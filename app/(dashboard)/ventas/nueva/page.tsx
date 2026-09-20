@@ -986,6 +986,8 @@ export default function NuevaVentaPage() {
         localizacion_id: parseInt(localizacionId),
         // Convertimos las lineas locales (con _id) al payload del servicio.
         pagos_detalle: pagosDetalle.map(({ _id: _omit, ...rest }) => rest),
+        // Emite numero fiscal CAI si la empresa tiene Facturación CAI activa.
+        emitirNumeroFiscal: user?.flags?.facturacion_cai ?? false,
       })
 
       if (error) {
