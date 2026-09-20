@@ -28,6 +28,14 @@ export interface FeatureFlags {
    * SIN afectar inventario. Si es false, el boton no aparece.
    */
   venta_rapida: boolean
+  /**
+   * Activa "Facturación CAI" (facturas oficiales del SAR de Honduras). Cuando es
+   * true, la empresa ve/usa el modulo "Facturación CAI" en Configuracion para
+   * capturar CAI, rango autorizado, correlativo, punto de emision y fecha limite,
+   * y (Fase 2) las facturas impresas (tirilla y carta) salen como comprobante
+   * fiscal. Si es false, el modulo avisa "funcion no activada".
+   */
+  facturacion_cai: boolean
 }
 
 export const DEFAULT_FLAGS: FeatureFlags = {
@@ -36,6 +44,7 @@ export const DEFAULT_FLAGS: FeatureFlags = {
   ventas_lector_codigo_barras: false,
   productos_por_talla: false,
   venta_rapida: false,
+  facturacion_cai: false,
 }
 
 /** Etiquetas legibles para el portal (que flags se pueden togglear por empresa). */
@@ -45,6 +54,7 @@ export const FLAG_LABELS: Record<keyof FeatureFlags, string> = {
   ventas_lector_codigo_barras: "Lector de codigo de barras en ventas",
   productos_por_talla: "Productos por talla (tallas agrupadas)",
   venta_rapida: "Venta rápida (linea manual sin inventario)",
+  facturacion_cai: "Impresión de factura CAI (SAR Honduras)",
 }
 
 /**
@@ -74,5 +84,9 @@ export function mergeFlags(config: Record<string, unknown> | null | undefined): 
       c.venta_rapida === undefined
         ? DEFAULT_FLAGS.venta_rapida
         : Boolean(c.venta_rapida),
+    facturacion_cai:
+      c.facturacion_cai === undefined
+        ? DEFAULT_FLAGS.facturacion_cai
+        : Boolean(c.facturacion_cai),
   }
 }

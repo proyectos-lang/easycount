@@ -44,6 +44,7 @@ import {
   Factory,
   Gauge,
   Workflow,
+  Receipt,
   type LucideIcon,
 } from "lucide-react"
 
@@ -75,10 +76,10 @@ export interface ModuloGranular {
 }
 
 /**
- * 44 modulos granulares. Cualquier cambio aqui debe replicarse en la tabla
- * `modulos` (y viceversa). NOTA: "Listas de Precios" y TODOS los de la
- * categoria "Produccion" NO van en MODULOS_BASE (nacen deshabilitados por
- * empresa; el super-admin los habilita desde /plataforma).
+ * 45 modulos granulares. Cualquier cambio aqui debe replicarse en la tabla
+ * `modulos` (y viceversa). NOTA: "Listas de Precios", "Facturación CAI" y TODOS
+ * los de la categoria "Produccion" NO van en MODULOS_BASE (nacen deshabilitados
+ * por empresa; el super-admin los habilita desde /plataforma).
  */
 export const MODULOS: ReadonlyArray<ModuloGranular> = [
   // ── Dashboard ──────────────────────────────────────────────────────────
@@ -189,6 +190,14 @@ export const MODULOS: ReadonlyArray<ModuloGranular> = [
     href: "/configuracion/previsualizacion-pdf",
     categoria: "Configuracion",
     icon: FileText,
+  },
+  // NUEVO (no-base): nace deshabilitado. Solo se ve/usa si el super-admin
+  // enciende el flag `facturacion_cai` Y habilita este modulo para la empresa.
+  {
+    nombre: "Facturación CAI",
+    href: "/configuracion/facturacion-cai",
+    categoria: "Configuracion",
+    icon: Receipt,
   },
 ] as const
 

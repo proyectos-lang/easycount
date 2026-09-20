@@ -459,4 +459,67 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
     ],
     keywords: ["pdf", "factura formato", "vista previa", "documento", "plantilla"],
   },
+  {
+    modulo: "Facturación CAI",
+    titulo: "Facturación CAI (comprobante fiscal SAR)",
+    descripcion:
+      "Configura los datos de tu autorización del SAR (CAI, rango, correlativo y fecha límite) para emitir facturas oficiales de Honduras.",
+    queHace: [
+      "Guarda la Clave de Autorización de Impresión (CAI) que te asigna el SAR.",
+      "Define el establecimiento, punto de emisión y el rango de correlativos autorizado (inicial y final), y el siguiente correlativo a emitir. Muestra un ejemplo del número que saldrá en la factura (000-001-01-00000003).",
+      "Registra la fecha límite de emisión y te avisa cuando quedan pocos folios o cuando la autorización ya venció.",
+      "Permite configurar por separado cada tipo de documento: Factura, Nota de Crédito y Nota de Débito (cada uno con su propio CAI y rango).",
+      "Opcionalmente guarda los datos de la imprenta (para la modalidad por imprenta con formatos preimpresos).",
+    ],
+    queNoHace: [
+      "No emite ni imprime todavía las facturas con formato SAR: esta pantalla solo captura la configuración (la impresión oficial en tirilla y carta llega en una fase siguiente).",
+      "No reemplaza el nombre, RTN, dirección ni teléfono de la empresa: esos se toman de Configuración → Razón Social.",
+      "No gestiona el trámite ante el SAR: el CAI y el rango los obtienes tú (o tu imprenta) ante el SAR y los capturas aquí.",
+      "No aparece si el administrador de la plataforma no activó la función 'Impresión de factura CAI' para tu empresa.",
+    ],
+    operaciones: [
+      {
+        titulo: "Configurar el CAI de la Factura",
+        pasos: [
+          "Abre Configuración → Facturación CAI (debe estar activada la función para tu empresa).",
+          "En la pestaña 'Factura', escribe la Clave de Autorización de Impresión (CAI) que te dio el SAR.",
+          "Escribe el establecimiento y el punto de emisión (por ejemplo 000 y 001).",
+          "Escribe el correlativo inicial y final autorizados, y el siguiente correlativo a emitir; revisa el ejemplo del número (000-001-01-00000003).",
+          "Indica la fecha límite de emisión y, si aplica, los datos de la imprenta.",
+          "Guarda. Repite en las pestañas 'Nota de Crédito' y 'Nota de Débito' si las usas.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        pregunta: "No veo el módulo 'Facturación CAI'.",
+        respuesta:
+          "La función se habilita de forma centralizada. Pídele al administrador de la plataforma que active 'Impresión de factura CAI' para tu empresa; luego aparecerá en Configuración.",
+      },
+      {
+        pregunta: "¿De dónde salen el nombre, RTN y dirección que van en la factura?",
+        respuesta:
+          "Del módulo Razón Social. Mantén esos datos actualizados ahí; aquí solo configuras lo específico del CAI (autorización, rango y correlativo).",
+      },
+      {
+        pregunta: "¿Qué pasa cuando se acaba el rango o vence la fecha límite?",
+        respuesta:
+          "La pantalla te avisa cuando quedan pocos folios o cuando la fecha ya pasó. Debes tramitar una nueva autorización con el SAR y actualizar aquí el CAI, el rango y la fecha límite.",
+      },
+    ],
+    keywords: [
+      "cai",
+      "sar",
+      "factura fiscal",
+      "comprobante fiscal",
+      "rango autorizado",
+      "correlativo fiscal",
+      "punto de emision",
+      "fecha limite de emision",
+      "autoimpresor",
+      "honduras",
+      "nota de credito",
+      "nota de debito",
+    ],
+  },
 ]

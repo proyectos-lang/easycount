@@ -167,12 +167,15 @@ export default async function PlataformaPage() {
                 <th className="px-4 py-2 font-medium" title="Venta rápida: en Nueva Venta, agregar una línea con descripción y precio a mano, sin afectar inventario">
                   Venta rápida
                 </th>
+                <th className="px-4 py-2 font-medium" title="Facturación CAI: habilita el módulo 'Facturación CAI' en Configuración para emitir facturas oficiales del SAR (Honduras)">
+                  Factura CAI
+                </th>
               </tr>
             </thead>
             <tbody>
               {empresas.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-stone-400">
+                  <td colSpan={9} className="px-4 py-10 text-center text-stone-400">
                     Sin empresas para mostrar.
                   </td>
                 </tr>
@@ -249,6 +252,15 @@ export default async function PlataformaPage() {
                         razonSocialId={e.id}
                         flag="venta_rapida"
                         initial={e.flags.venta_rapida}
+                        onLabel="Activo"
+                        offLabel="Inactivo"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <FlagToggle
+                        razonSocialId={e.id}
+                        flag="facturacion_cai"
+                        initial={e.flags.facturacion_cai}
                         onLabel="Activo"
                         offLabel="Inactivo"
                       />
