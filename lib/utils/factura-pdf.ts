@@ -27,6 +27,31 @@ export interface FacturaPdfLinea {
   precioUnitario: number
 }
 
+/**
+ * Datos fiscales del SAR (Honduras) para la factura CAI en A4. Cuando viene
+ * presente, la factura se imprime como comprobante fiscal: encabezado CAI,
+ * desglose gravado/exento, total en letras y "Original: Cliente". Si falta, la
+ * factura A4 sale como el documento normal de siempre.
+ */
+export interface FacturaPdfFiscal {
+  cai: string
+  numeroFiscal: string
+  rangoDesde?: string | null
+  rangoHasta?: string | null
+  fechaLimite?: string | null
+  esConsumidorFinal?: boolean
+  importeExento: number
+  importeExonerado: number
+  importeGravado15: number
+  importeGravado18: number
+  isv15: number
+  isv18: number
+  totalEnLetras: string
+  imprentaNombre?: string | null
+  imprentaRtn?: string | null
+  imprentaRegistro?: string | null
+}
+
 export interface FacturaPdfParams {
   /** "venta" (default) o "devolucion". */
   tipo?: "venta" | "devolucion"
@@ -53,6 +78,8 @@ export interface FacturaPdfParams {
   reembolsoMetodo?: string | null
   /** Solo devolucion: motivo. */
   motivo?: string | null
+  /** Datos fiscales CAI (opcional). Si viene, la factura es comprobante SAR. */
+  fiscal?: FacturaPdfFiscal | null
   /** Nombre del archivo (sin extension se le agrega .pdf si falta). */
   filename?: string
 }
@@ -77,8 +104,10 @@ export async function generarFacturaPdf(
     total,
     reembolsoMetodo,
     motivo,
+    fiscal,
   } = params
   const esDevolucion = tipo === "devolucion"
+  const esFiscal = !esDevolucion && !!fiscal
 
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.getWidth()
@@ -142,11 +171,31 @@ export async function generarFacturaPdf(
 
   doc.setFontSize(12)
   doc.setFont("helvetica", "normal")
-  doc.text(`#${numeroDocumento}`, pageWidth - 20, 38, { align: "right" })
+  // En fiscal, el numero grande es el correlativo CAI; el FC-#### interno queda
+  // fuera del comprobante oficial.
+  doc.text(`#${esFiscal ? fiscal!.numeroFiscal : numeroDocumento}`, pageWidth - 20, 38, { align: "right" })
   if (esDevolucion && facturaReferencia) {
     doc.setFontSize(9)
     doc.setTextColor(100, 100, 100)
     doc.text(`Factura original: ${facturaReferencia}`, pageWidth - 20, 45, { align: "right" })
+    doc.setTextColor(30, 30, 30)
+  }
+  // Bloque CAI (bajo el numero, alineado a la derecha).
+  if (esFiscal) {
+    doc.setFontSize(8)
+    doc.setTextColor(100, 100, 100)
+    let caiY = 45
+    doc.text(`CAI: ${fiscal!.cai}`, pageWidth - 20, caiY, { align: "right" })
+    caiY += 5
+    if (fiscal!.rangoDesde && fiscal!.rangoHasta) {
+      doc.text(`Rango: ${fiscal!.rangoDesde} a ${fiscal!.rangoHasta}`, pageWidth - 20, caiY, { align: "right" })
+      caiY += 5
+    }
+    if (fiscal!.fechaLimite) {
+      doc.text(`Fecha limite de emision: ${fiscal!.fechaLimite}`, pageWidth - 20, caiY, { align: "right" })
+      caiY += 5
+    }
+    doc.text("Original: Cliente", pageWidth - 20, caiY, { align: "right" })
     doc.setTextColor(30, 30, 30)
   }
 
@@ -199,50 +248,62 @@ export async function generarFacturaPdf(
   const totalsY = Math.max(itemY + 15, 180)
   doc.setFontSize(10)
   doc.setFont("helvetica", "normal")
-  doc.setTextColor(100, 100, 100)
 
-  doc.text("Subtotal", pageWidth - 80, totalsY)
-  doc.setTextColor(30, 30, 30)
-  doc.text(`L ${subtotal.toFixed(2)}`, pageWidth - 20, totalsY, { align: "right" })
-  doc.setDrawColor(180, 180, 180)
-  doc.setLineDashPattern([1, 1], 0)
-  doc.line(pageWidth - 80, totalsY + 3, pageWidth - 20, totalsY + 3)
-  doc.setLineDashPattern([], 0)
-
-  let rowOffset = 12
-  if (descuentoPct > 0) {
-    const descuentoMonto = params.descuentoMonto ?? subtotal * (descuentoPct / 100)
+  // Helper: dibuja una fila de total (etiqueta gris izq, valor negro der) + linea.
+  const filaTotal = (label: string, valor: string, y: number) => {
     doc.setTextColor(100, 100, 100)
-    const pctLabel =
-      descuentoPct % 1 === 0 ? `${descuentoPct.toFixed(0)}%` : `${descuentoPct.toFixed(2)}%`
-    doc.text(`Descuento (${pctLabel})`, pageWidth - 80, totalsY + rowOffset)
+    doc.text(label, pageWidth - 90, y)
     doc.setTextColor(30, 30, 30)
-    doc.text(`- L ${descuentoMonto.toFixed(2)}`, pageWidth - 20, totalsY + rowOffset, { align: "right" })
+    doc.text(valor, pageWidth - 20, y, { align: "right" })
     doc.setDrawColor(180, 180, 180)
     doc.setLineDashPattern([1, 1], 0)
-    doc.line(pageWidth - 80, totalsY + rowOffset + 3, pageWidth - 20, totalsY + rowOffset + 3)
+    doc.line(pageWidth - 90, y + 3, pageWidth - 20, y + 3)
     doc.setLineDashPattern([], 0)
+  }
+
+  let rowOffset = 0
+  filaTotal("Subtotal", `L ${subtotal.toFixed(2)}`, totalsY)
+  rowOffset += 12
+
+  if (descuentoPct > 0) {
+    const descuentoMonto = params.descuentoMonto ?? subtotal * (descuentoPct / 100)
+    const pctLabel =
+      descuentoPct % 1 === 0 ? `${descuentoPct.toFixed(0)}%` : `${descuentoPct.toFixed(2)}%`
+    filaTotal(`Descuento (${pctLabel})`, `- L ${descuentoMonto.toFixed(2)}`, totalsY + rowOffset)
     rowOffset += 12
   }
 
-  if (mostrarIsv) {
-    doc.setTextColor(100, 100, 100)
-    doc.text(`ISV (${isvPct}%)`, pageWidth - 80, totalsY + rowOffset)
-    doc.setTextColor(30, 30, 30)
-    doc.text(`L ${isv.toFixed(2)}`, pageWidth - 20, totalsY + rowOffset, { align: "right" })
-    doc.setDrawColor(180, 180, 180)
-    doc.setLineDashPattern([1, 1], 0)
-    doc.line(pageWidth - 80, totalsY + rowOffset + 3, pageWidth - 20, totalsY + rowOffset + 3)
-    doc.setLineDashPattern([], 0)
+  if (esFiscal) {
+    // Desglose fiscal del SAR (importes por regimen + ISV por tasa).
+    filaTotal("Importe exento", `L ${fiscal!.importeExento.toFixed(2)}`, totalsY + rowOffset); rowOffset += 12
+    filaTotal("Importe exonerado", `L ${fiscal!.importeExonerado.toFixed(2)}`, totalsY + rowOffset); rowOffset += 12
+    filaTotal("Importe gravado 15%", `L ${fiscal!.importeGravado15.toFixed(2)}`, totalsY + rowOffset); rowOffset += 12
+    if (fiscal!.importeGravado18 > 0) { filaTotal("Importe gravado 18%", `L ${fiscal!.importeGravado18.toFixed(2)}`, totalsY + rowOffset); rowOffset += 12 }
+    filaTotal("ISV 15%", `L ${fiscal!.isv15.toFixed(2)}`, totalsY + rowOffset); rowOffset += 12
+    if (fiscal!.isv18 > 0) { filaTotal("ISV 18%", `L ${fiscal!.isv18.toFixed(2)}`, totalsY + rowOffset); rowOffset += 12 }
+  } else if (mostrarIsv) {
+    filaTotal(`ISV (${isvPct}%)`, `L ${isv.toFixed(2)}`, totalsY + rowOffset)
+    rowOffset += 12
   }
 
-  // Total (14 mm bajo el ISV cuando se muestra; si no, justo bajo el subtotal/descuento)
-  const totalY = totalsY + rowOffset + (mostrarIsv ? 14 : 0)
+  // Total
+  const totalY = totalsY + rowOffset + 2
   doc.setFont("helvetica", "bold")
   doc.setTextColor(30, 30, 30)
-  doc.text(esDevolucion ? "Total devuelto" : "Total", pageWidth - 80, totalY)
+  doc.setFontSize(10)
+  doc.text(esDevolucion ? "Total devuelto" : "Total", pageWidth - 90, totalY)
   doc.setFontSize(12)
   doc.text(`L ${total.toFixed(2)}`, pageWidth - 20, totalY, { align: "right" })
+
+  // Total en letras (fiscal): debajo del total, ocupando el ancho.
+  if (esFiscal) {
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(8)
+    doc.setTextColor(80, 80, 80)
+    const letras = `Son: ${fiscal!.totalEnLetras}`
+    doc.text(doc.splitTextToSize(letras, pageWidth - 110), pageWidth - 90, totalY + 8, { align: "left" })
+    doc.setTextColor(30, 30, 30)
+  }
 
   // === Pie ===
   const footerY = pageHeight - 40
@@ -274,6 +335,19 @@ export async function generarFacturaPdf(
     doc.text(`Reembolso: ${reembolsoMetodo || "N/A"}`, 110, footerY + 8)
     const motivoLinea = motivo ? `Motivo: ${motivo}` : "Nota de credito por devolucion."
     doc.text(motivoLinea.substring(0, 46), 110, footerY + 14)
+  } else if (esFiscal) {
+    // Modalidad por imprenta -> sus datos; autoimpresor -> leyenda.
+    if (fiscal!.imprentaNombre || fiscal!.imprentaRtn || fiscal!.imprentaRegistro) {
+      doc.text(`Imprenta: ${(fiscal!.imprentaNombre || "").substring(0, 34)}`, 110, footerY + 8)
+      const linea2 = [
+        fiscal!.imprentaRtn ? `RTN ${fiscal!.imprentaRtn}` : "",
+        fiscal!.imprentaRegistro ? `Reg. ${fiscal!.imprentaRegistro}` : "",
+      ].filter(Boolean).join(" - ")
+      doc.text(linea2.substring(0, 46), 110, footerY + 14)
+    } else {
+      doc.text("Documento emitido por autoimpresor", 110, footerY + 8)
+      doc.text("autorizado por el SAR.", 110, footerY + 14)
+    }
   } else {
     doc.text("Gracias por su compra. Este documento", 110, footerY + 8)
     doc.text("es valido como comprobante fiscal.", 110, footerY + 14)

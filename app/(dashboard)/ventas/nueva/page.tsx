@@ -3,8 +3,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Minus, Trash2, FileText, ShoppingCart, User, Receipt, Warehouse, MapPin, AlertTriangle, UserPlus, Wallet, X, Landmark, Printer, CheckCircle2, Maximize2, Minimize2, ChevronsUpDown, Check, Zap } from "lucide-react"
-import { jsPDF } from "jspdf"
-import autoTable from "jspdf-autotable"
+import { generarFacturaPdf, type FacturaPdfFiscal } from "@/lib/utils/factura-pdf"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -1153,247 +1152,60 @@ export default function NuevaVentaPage() {
     cliente: Cliente | undefined
   ) {
     const razonSocial = await getRazonSocialForPdf()
-    const doc = new jsPDF()
-    const pageWidth = doc.internal.pageSize.getWidth()
-    const pageHeight = doc.internal.pageSize.getHeight()
-    
-    // Light gray background
-    doc.setFillColor(245, 245, 245)
-    doc.rect(0, 0, pageWidth, pageHeight, 'F')
-    
-    // === LOGO - Top Left ===
-    try {
-      const logoUrl = razonSocial?.logo_url || ''
-      if (!logoUrl) throw new Error("no-logo")
-      const img = new Image()
-      img.crossOrigin = 'anonymous'
-      img.src = logoUrl
-      await new Promise((resolve, reject) => {
-        img.onload = resolve
-        img.onerror = reject
-        setTimeout(resolve, 1000) // Fallback timeout
-      })
-      if (img.complete && img.naturalWidth > 0) {
-        doc.addImage(img, 'PNG', 20, 12, 50, 12)
+    const enc = ventaData.encabezado
+
+    // Bloque fiscal CAI para la carta A4 (mismo criterio que la tirilla): solo si
+    // la venta tiene numero fiscal. Reusa la config CAI y el desglose.
+    let fiscal: FacturaPdfFiscal | null = null
+    if (enc.numero_fiscal) {
+      const { data: cfgs } = await getConfigsCai()
+      const cfg = cfgs.find((c) => c.tipo_documento === (enc.tipo_documento_fiscal || "01"))
+      const subt = enc.subtotal ?? 0
+      const descMonto = +(subt * ((enc.descuento ?? 0) / 100)).toFixed(2)
+      const desglose = calcularDesgloseFiscal(subt - descMonto, enc.impuesto_total ?? 0, !!enc.aplica_impuesto)
+      fiscal = {
+        cai: enc.cai_emitido || cfg?.cai || "",
+        numeroFiscal: enc.numero_fiscal,
+        rangoDesde: cfg ? formatearCorrelativoCai(cfg.establecimiento, cfg.punto_emision, cfg.tipo_documento, cfg.rango_inicial) : null,
+        rangoHasta: cfg && cfg.rango_final > 0 ? formatearCorrelativoCai(cfg.establecimiento, cfg.punto_emision, cfg.tipo_documento, cfg.rango_final) : null,
+        fechaLimite: cfg?.fecha_limite_emision ? fmtFechaCorta(cfg.fecha_limite_emision) : null,
+        esConsumidorFinal: !cliente?.rtn,
+        ...desglose,
+        totalEnLetras: totalEnLetras(enc.total_venta ?? 0),
+        imprentaNombre: cfg?.imprenta_nombre || null,
+        imprentaRtn: cfg?.imprenta_rtn || null,
+        imprentaRegistro: cfg?.imprenta_registro || null,
       }
-    } catch {
-      // If logo fails, just show company name as fallback
-      doc.setTextColor(30, 30, 30)
-      doc.setFontSize(14)
-      doc.setFont("helvetica", "bold")
-      doc.text(razonSocial?.nombre_empresa || "Mi Empresa", 20, 20)
     }
-    
-    // Contact details - left column
-    doc.setFontSize(9)
-    doc.setTextColor(100, 100, 100)
-    let contactY = 32
-    
-    doc.setFont("helvetica", "normal")
-    doc.text("Correo", 20, contactY)
-    doc.text("Telefono", 20, contactY + 8)
-    doc.text("Direccion", 20, contactY + 16)
-    
-    doc.setTextColor(30, 30, 30)
-    doc.text(razonSocial?.correo || "", 20, contactY + 4)
-    doc.text(razonSocial?.telefono || "", 20, contactY + 12)
-    doc.text((razonSocial?.direccion || "").substring(0, 35), 20, contactY + 20)
-    
-    // Contact details - right column  
-    doc.setTextColor(100, 100, 100)
-    doc.text("RTN", 80, contactY)
-    doc.setTextColor(30, 30, 30)
-    doc.text(razonSocial?.documento || "N/A", 80, contactY + 4)
-    
-    // === RIGHT SIDE: FACTURA Title ===
-    doc.setTextColor(30, 30, 30)
-    doc.setFontSize(28)
-    doc.setFont("helvetica", "bold")
-    doc.text("FACTURA", pageWidth - 20, 28, { align: "right" })
-    
-    // Invoice Number
-    doc.setFontSize(12)
-    doc.setFont("helvetica", "normal")
-    doc.text(`#${ventaData.encabezado.numero_factura}`, pageWidth - 20, 38, { align: "right" })
-    
-    // === CLIENTE Section ===
-    const clienteY = 85
-    
-    // Divider line
-    doc.setDrawColor(200, 200, 200)
-    doc.setLineWidth(0.5)
-    doc.line(20, clienteY - 5, pageWidth - 20, clienteY - 5)
-    
-    doc.setFontSize(9)
-    doc.setTextColor(100, 100, 100)
-    doc.text("Cliente", 20, clienteY)
-    doc.text("RTN Cliente", 80, clienteY)
-    doc.text("Fecha", pageWidth - 60, clienteY)
-    
-    doc.setTextColor(30, 30, 30)
-    doc.setFont("helvetica", "normal")
-    doc.text(cliente?.nombre || ventaData.encabezado.cliente_nombre || "N/A", 20, clienteY + 6)
-    doc.text(cliente?.rtn || "N/A", 80, clienteY + 6)
-    doc.text(ventaData.encabezado.fecha_venta?.split('T')[0] || hoyISO(), pageWidth - 60, clienteY + 6)
-    
-    // === DESCRIPCION Header ===
-    const descY = 110
-    doc.setFontSize(12)
-    doc.setFont("helvetica", "bold")
-    doc.setTextColor(30, 30, 30)
-    doc.text("Descripcion", 20, descY)
-    
-    // Line under description
-    doc.setDrawColor(30, 30, 30)
-    doc.setLineWidth(0.8)
-    doc.line(20, descY + 3, pageWidth - 20, descY + 3)
-    
-    // === ITEMS List ===
-    let itemY = descY + 18
-    const lineSubtotal = (cantidad: number, precio: number) => cantidad * precio
-    
-    doc.setFontSize(10)
-    doc.setFont("helvetica", "normal")
-    
-    ventaData.detalles.forEach((d, index) => {
-      const subtotal = lineSubtotal(d.cantidad ?? 0, d.precio_unitario ?? 0)
-      
-      // Item name with quantity
-      doc.setTextColor(30, 30, 30)
-      doc.text(`${d.producto_nombre || ""} (x${d.cantidad})`, 20, itemY)
-      
-      // Price aligned right
-      doc.text(`L ${subtotal.toFixed(2)}`, pageWidth - 20, itemY, { align: "right" })
-      
-      // Dotted line
-      doc.setDrawColor(180, 180, 180)
-      doc.setLineDashPattern([1, 1], 0)
-      doc.line(20, itemY + 4, pageWidth - 20, itemY + 4)
-      doc.setLineDashPattern([], 0)
-      
-      itemY += 12
+
+    const mostrarIsvPdf = (user?.flags?.ventas_mostrar_isv ?? true) && !!enc.aplica_impuesto
+    const { ok } = await generarFacturaPdf({
+      tipo: "venta",
+      empresa: razonSocial,
+      numeroDocumento: enc.numero_factura,
+      clienteNombre: cliente?.nombre || "Consumidor Final",
+      clienteRtn: cliente?.rtn || null,
+      fecha: enc.fecha_venta || new Date().toISOString(),
+      lineas: ventaData.detalles.map((d) => ({
+        nombre: d.producto_nombre || "",
+        cantidad: d.cantidad ?? 0,
+        precioUnitario: d.precio_unitario ?? 0,
+      })),
+      subtotal: enc.subtotal ?? 0,
+      descuentoPct: enc.descuento ?? 0,
+      mostrarIsv: mostrarIsvPdf,
+      isvPct: enc.porcentaje_impuesto ?? 15,
+      isv: enc.impuesto_total ?? 0,
+      total: enc.total_venta ?? 0,
+      fiscal,
     })
-    
-    // === TOTALS Section ===
-    const totalsY = Math.max(itemY + 15, 180)
-    
-    doc.setFontSize(10)
-    doc.setFont("helvetica", "normal")
-    doc.setTextColor(100, 100, 100)
-    
-    // Subtotal
-    doc.text("Subtotal", pageWidth - 80, totalsY)
-    doc.setTextColor(30, 30, 30)
-    doc.text(`L ${(ventaData.encabezado.subtotal ?? 0).toFixed(2)}`, pageWidth - 20, totalsY, { align: "right" })
-    
-    // Dotted line
-    doc.setDrawColor(180, 180, 180)
-    doc.setLineDashPattern([1, 1], 0)
-    doc.line(pageWidth - 80, totalsY + 3, pageWidth - 20, totalsY + 3)
-    doc.setLineDashPattern([], 0)
-    
-    // Descuento (opcional): solo se imprime si hay porcentaje > 0
-    const descuentoPctPdf = Number(ventaData.encabezado.descuento ?? 0)
-    const hasDescuento = descuentoPctPdf > 0
-    const descuentoMonto = (ventaData.encabezado.subtotal ?? 0) * (descuentoPctPdf / 100)
-    let rowOffset = 12
-    if (hasDescuento) {
-      doc.setTextColor(100, 100, 100)
-      doc.setFont("helvetica", "normal")
-      const pctLabel = descuentoPctPdf % 1 === 0
-        ? `${descuentoPctPdf.toFixed(0)}%`
-        : `${descuentoPctPdf.toFixed(2)}%`
-      doc.text(`Descuento (${pctLabel})`, pageWidth - 80, totalsY + rowOffset)
-      doc.setTextColor(30, 30, 30)
-      doc.text(`- L ${descuentoMonto.toFixed(2)}`, pageWidth - 20, totalsY + rowOffset, { align: "right" })
-      // Dotted line
-      doc.setDrawColor(180, 180, 180)
-      doc.setLineDashPattern([1, 1], 0)
-      doc.line(pageWidth - 80, totalsY + rowOffset + 3, pageWidth - 20, totalsY + rowOffset + 3)
-      doc.setLineDashPattern([], 0)
-      rowOffset += 12
-    }
-    
-    // ISV
-    doc.setTextColor(100, 100, 100)
-    doc.setFont("helvetica", "normal")
-    doc.text(`ISV (${ventaData.encabezado.porcentaje_impuesto || 15}%)`, pageWidth - 80, totalsY + rowOffset)
-    doc.setTextColor(30, 30, 30)
-    doc.text(`L ${(ventaData.encabezado.impuesto_total ?? 0).toFixed(2)}`, pageWidth - 20, totalsY + rowOffset, { align: "right" })
-    
-    // Dotted line
-    doc.setDrawColor(180, 180, 180)
-    doc.setLineDashPattern([1, 1], 0)
-    doc.line(pageWidth - 80, totalsY + rowOffset + 3, pageWidth - 20, totalsY + rowOffset + 3)
-    doc.setLineDashPattern([], 0)
-    
-    // Total
-    doc.setFont("helvetica", "bold")
-    doc.setTextColor(30, 30, 30)
-    doc.text("Total", pageWidth - 80, totalsY + rowOffset + 14)
-    doc.setFontSize(12)
-    doc.text(`L ${(ventaData.encabezado.total_venta ?? 0).toFixed(2)}`, pageWidth - 20, totalsY + rowOffset + 14, { align: "right" })
-    
-    // === FOOTER Section ===
-    const footerY = pageHeight - 40
-    
-    // Divider line
-    doc.setDrawColor(200, 200, 200)
-    doc.setLineWidth(0.5)
-    doc.setLineDashPattern([], 0)
-    doc.line(20, footerY - 10, pageWidth - 20, footerY - 10)
-    
-    // Bank Details (left)
-    doc.setFontSize(9)
-    doc.setFont("helvetica", "bold")
-    doc.setTextColor(30, 30, 30)
-    doc.text("Detalles de Pago", 20, footerY)
-    
-    doc.setFont("helvetica", "normal")
-    doc.setTextColor(100, 100, 100)
-    doc.setFontSize(8)
-    doc.text(`RTN: ${razonSocial?.documento || "N/A"}`, 20, footerY + 8)
-    doc.text(`Tel: ${razonSocial?.telefono || "N/A"}`, 20, footerY + 14)
-    
-    // Terms (right)
-    doc.setFontSize(9)
-    doc.setFont("helvetica", "bold")
-    doc.setTextColor(30, 30, 30)
-    doc.text("Condiciones", 110, footerY)
-    
-    doc.setFont("helvetica", "normal")
-    doc.setTextColor(100, 100, 100)
-    doc.setFontSize(8)
-    doc.text("Gracias por su compra. Este documento", 110, footerY + 8)
-    doc.text("es valido como comprobante fiscal.", 110, footerY + 14)
-
-    // Watermark EasyCount
-    doc.setFontSize(7)
-    doc.setFont("helvetica", "normal")
-    doc.setTextColor(168, 162, 158)
-    doc.text("Generado por EasyCount", pageWidth / 2, pageHeight - 8, { align: "center" })
-
-    // Save and auto-download
-    const filename = `Factura_${ventaData.encabezado.numero_factura}.pdf`
-    
-    try {
-      const pdfBlob = doc.output('blob')
-      const blobUrl = URL.createObjectURL(pdfBlob)
-      
-      const link = document.createElement('a')
-      link.href = blobUrl
-      link.download = filename
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 100)
-      
+    if (ok) {
       toast({ title: "PDF Generado", description: "La factura se descargo automaticamente" })
-    } catch (pdfError) {
+    } else {
       toast({ title: "Error", description: "No se pudo generar el PDF", variant: "destructive" })
     }
   }
+
 
   // Limpia completamente el formulario y obtiene un nuevo correlativo + datos
   // frescos de catalogos. Se llama siempre que el usuario sale del dialog de

@@ -470,7 +470,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "Registra la fecha límite de emisión y te avisa cuando quedan pocos folios o cuando la autorización ya venció.",
       "Permite configurar por separado cada tipo de documento: Factura, Nota de Crédito y Nota de Débito (cada uno con su propio CAI y rango).",
       "Opcionalmente guarda los datos de la imprenta (para la modalidad por imprenta con formatos preimpresos).",
-      "Con la función activa y el CAI configurado, cada venta nueva toma un número fiscal (000-001-01-00000003) y la tirilla (80 mm) se imprime como comprobante del SAR: CAI, correlativo, rango, fecha límite, RTN del cliente (o Consumidor Final), desglose gravado/exento, ISV y el total en letras. El recibo interno FC-#### se conserva aparte.",
+      "Con la función activa y el CAI configurado, cada venta nueva toma un número fiscal (000-001-01-00000003) y tanto la tirilla (80 mm) como la factura en carta (PDF) se imprimen como comprobante del SAR: CAI, correlativo, rango, fecha límite, RTN del cliente (o Consumidor Final), desglose gravado/exento, ISV y el total en letras. El recibo interno FC-#### se conserva aparte.",
     ],
     queNoHace: [
       "No reemplaza el nombre, RTN, dirección ni teléfono de la empresa: esos se toman de Configuración → Razón Social.",

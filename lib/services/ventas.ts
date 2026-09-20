@@ -2035,12 +2035,27 @@ export async function getRazonSocialForPdf(): Promise<{
   if (!supabase) return null
 
   try {
-    const { data, error } = await supabase
-      .from('razon_social')
-      .select('*')
-      .order('id', { ascending: true })
-      .limit(1)
-      .single()
+    // Aislar por tenant: leer la razon_social del usuario autenticado, NO la
+    // primera fila global (antes usaba .order('id').limit(1), lo que en
+    // multi-empresa devolvia los datos fiscales de OTRA empresa en el PDF).
+    let razonSocialId: number | null = null
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (authUser) {
+        const { data: perfil } = await supabase
+          .from('usuarios')
+          .select('razon_social_id')
+          .eq('id', authUser.id)
+          .single()
+        razonSocialId = perfil?.razon_social_id ?? null
+      }
+    } catch { /* sin sesion: cae al fallback de abajo */ }
+
+    let query = supabase.from('razon_social').select('*')
+    query = razonSocialId != null
+      ? query.eq('id', razonSocialId)
+      : query.order('id', { ascending: true }).limit(1)
+    const { data, error } = await query.single()
 
     if (error) {
       console.error('Error fetching razon_social:', error)
