@@ -261,9 +261,11 @@ export default function ProductosConfigPage() {
   }
   
   // Price calculator state
-  const [showCalculator, setShowCalculator] = useState(false)
+  const [showCalculator, setShowCalculator] = useState(true) // desplegada por defecto
   const [calcCosto, setCalcCosto] = useState<number>(0)
   const [calcMargen, setCalcMargen] = useState<number>(30) // Default 30%
+  // Precio de venta editable de la calculadora (bidireccional con el margen).
+  const [calcPrecio, setCalcPrecio] = useState<number>(0)
 
   useEffect(() => {
     if (!ready) {
@@ -729,9 +731,10 @@ export default function ProductosConfigPage() {
     setImagePreview("")
     setImageFile(null)
     setImageUrlInput("")
-    setShowCalculator(false)
+    setShowCalculator(true)
     setCalcCosto(0)
     setCalcMargen(30)
+    setCalcPrecio(0)
     setDialogOpen(true)
   }
 
@@ -751,9 +754,15 @@ export default function ProductosConfigPage() {
     setImagePreview(producto.foto_url || "")
     setImageFile(null)
     setImageUrlInput("")
-    setShowCalculator(false)
+    setShowCalculator(true)
     setCalcCosto(producto.costo_promedio || 0)
-    setCalcMargen(30)
+    setCalcPrecio(producto.precio_venta_sugerido || 0)
+    // Deriva el margen desde el precio y costo actuales del producto.
+    {
+      const c = producto.costo_promedio || 0
+      const p = producto.precio_venta_sugerido || 0
+      setCalcMargen(p > 0 ? +(((p - c) / p) * 100).toFixed(2) : 30)
+    }
     setDialogOpen(true)
   }
 
@@ -823,20 +832,42 @@ export default function ProductosConfigPage() {
     window.open(url, "_blank", "noopener,noreferrer")
   }
 
-  // Calculate suggested price based on cost and margin
-  // Formula: Margen = (Precio - Costo) / Precio
-  // Solving for Precio: Precio = Costo / (1 - Margen)
-  const calcPrecioSugerido = calcCosto > 0 && calcMargen < 100 
-    ? calcCosto / (1 - (calcMargen / 100)) 
-    : 0
+  // Calculadora bidireccional: Margen = (Precio - Costo) / Precio.
+  //   precio = costo / (1 - margen/100)  |  margen = (precio - costo)/precio*100
+  const round2 = (n: number) => Math.round(n * 100) / 100
+
+  // Cambiar el COSTO: mantiene el margen y recalcula el precio.
+  function onCambioCalcCosto(nuevoCosto: number) {
+    const c = Number.isFinite(nuevoCosto) ? nuevoCosto : 0
+    setCalcCosto(c)
+    if (calcMargen < 100) setCalcPrecio(round2(c > 0 ? c / (1 - calcMargen / 100) : 0))
+  }
+  // Cambiar el MARGEN (%): recalcula el precio con el costo actual.
+  function onCambioCalcMargen(nuevoMargen: number) {
+    const m = Math.min(99.99, Math.max(0, Number.isFinite(nuevoMargen) ? nuevoMargen : 0))
+    setCalcMargen(m)
+    setCalcPrecio(round2(calcCosto > 0 ? calcCosto / (1 - m / 100) : 0))
+  }
+  // Cambiar el PRECIO de venta: recalcula el margen con el costo actual.
+  function onCambioCalcPrecio(nuevoPrecio: number) {
+    const p = Number.isFinite(nuevoPrecio) ? nuevoPrecio : 0
+    setCalcPrecio(p)
+    setCalcMargen(p > 0 ? round2(((p - calcCosto) / p) * 100) : 0)
+  }
+
+  // Precio a aplicar (el editable). Se mantiene por compat con el disabled del botón.
+  const calcPrecioSugerido = calcPrecio
 
   function applyCalculatedPrice() {
-    if (calcPrecioSugerido > 0) {
-      setFormData(prev => ({ ...prev, precio_venta_sugerido: Math.round(calcPrecioSugerido * 100) / 100 }))
-      setValidationErrors(prev => ({ ...prev, precio_venta_sugerido: "" }))
-      setShowCalculator(false)
-      toast({ title: "Precio aplicado", description: `Precio sugerido: L ${calcPrecioSugerido.toFixed(2)}` })
-    }
+    if (calcPrecio <= 0) return
+    const precio = round2(calcPrecio)
+    const costo = round2(calcCosto)
+    // Precio de venta (siempre) + costo. Al CREAR el costo vive en el inventario
+    // inicial; al EDITAR vive en formData.costo_promedio.
+    setFormData(prev => ({ ...prev, precio_venta_sugerido: precio, ...(editingProducto ? { costo_promedio: costo } : {}) }))
+    if (!editingProducto) setInvInicial(prev => ({ ...prev, costo_unitario: costo }))
+    setValidationErrors(prev => ({ ...prev, precio_venta_sugerido: "" }))
+    toast({ title: "Aplicado", description: `Precio L ${precio.toFixed(2)} · Costo L ${costo.toFixed(2)}` })
   }
 
   const validateForm = (): boolean => {
@@ -1906,7 +1937,7 @@ export default function ProductosConfigPage() {
                         step="0.01"
                         min="0"
                         value={calcCosto || ""}
-                        onChange={(e) => setCalcCosto(parseFloat(e.target.value) || 0)}
+                        onChange={(e) => onCambioCalcCosto(parseFloat(e.target.value) || 0)}
                         placeholder="0.00"
                         className="bg-white/70 border-amber-200 focus:border-amber-400"
                       />
@@ -1925,35 +1956,42 @@ export default function ProductosConfigPage() {
                         min="0"
                         max="99"
                         value={calcMargen || ""}
-                        onChange={(e) => setCalcMargen(parseFloat(e.target.value) || 0)}
+                        onChange={(e) => onCambioCalcMargen(parseFloat(e.target.value) || 0)}
                         placeholder="30"
                         className="bg-white/70 border-amber-200 focus:border-amber-400"
                       />
                     </div>
                   </div>
                   
-                  {/* Result Preview */}
-                  <div className="flex items-center justify-between rounded-lg bg-white/80 border border-amber-200 p-3">
-                    <div>
-                      <p className="text-xs text-amber-700">Precio Sugerido</p>
-                      <p className="text-xl font-bold text-amber-800">
-                        L {calcPrecioSugerido > 0 ? calcPrecioSugerido.toFixed(2) : "0.00"}
-                      </p>
+                  {/* Precio de venta EDITABLE (bidireccional con el margen) + Aplicar */}
+                  <div className="flex items-end justify-between gap-3 rounded-lg bg-white/80 border border-amber-200 p-3">
+                    <div className="space-y-1.5 flex-1">
+                      <Label htmlFor="calc-precio" className="text-xs text-amber-800">Precio de Venta</Label>
+                      <Input
+                        id="calc-precio"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={calcPrecio || ""}
+                        onChange={(e) => onCambioCalcPrecio(parseFloat(e.target.value) || 0)}
+                        placeholder="0.00"
+                        className="bg-white border-amber-300 focus:border-amber-500 text-lg font-bold text-amber-800"
+                      />
                     </div>
-                    <Button 
+                    <Button
                       type="button"
                       size="sm"
                       disabled={calcPrecioSugerido <= 0}
                       onClick={applyCalculatedPrice}
                       className="bg-amber-600 hover:bg-amber-700 text-white"
                     >
-                      Aplicar Precio
+                      Aplicar precio y costo
                     </Button>
                   </div>
-                  
+
                   {calcCosto > 0 && calcPrecioSugerido > 0 && (
                     <p className="text-xs text-amber-600 text-center">
-                      Ganancia por unidad: L {(calcPrecioSugerido - calcCosto).toFixed(2)}
+                      Ganancia por unidad: L {(calcPrecioSugerido - calcCosto).toFixed(2)} · Margen {calcMargen.toFixed(2)}%
                     </p>
                   )}
                 </div>

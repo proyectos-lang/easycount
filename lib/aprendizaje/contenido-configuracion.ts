@@ -149,6 +149,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "El catálogo maestro: productos con código de barras, marca, categoría, foto, costo promedio y precio de venta sugerido.",
     queHace: [
       "Crea y edita productos: nombre, código de barras, marca, categoría/subcategoría, foto y precio de venta sugerido.",
+      "Calculadora de precio (siempre visible en Nuevo/Editar producto): escribe el costo y el margen deseado y calcula el precio de venta; o escribe el precio de venta y calcula el margen (funciona en ambos sentidos). Al presionar 'Aplicar precio y costo' se copian el precio y el costo a los campos de registro del producto.",
       "Gestiona marcas, categorías y subcategorías desde el mismo módulo.",
       "Muestra el stock total y el costo promedio actuales (informativos).",
       "La foto se sube al almacenamiento de la nube y aparece en el catálogo de Nueva Venta. Las fotos grandes (de celular) se comprimen automáticamente al subir para que carguen rápido.",
