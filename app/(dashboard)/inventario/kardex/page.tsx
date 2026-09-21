@@ -552,6 +552,7 @@ export default function KardexPage() {
                   <TableRow className="bg-stone-50">
                     <TableHead className="font-semibold">Fecha</TableHead>
                     <TableHead className="font-semibold">Tipo Movimiento</TableHead>
+                    <TableHead className="font-semibold">Referencia</TableHead>
                     <TableHead className="font-semibold">Almacen</TableHead>
                     <TableHead className="font-semibold">Localizacion</TableHead>
                     <TableHead className="font-semibold text-right">Entrada</TableHead>
@@ -562,7 +563,7 @@ export default function KardexPage() {
                 <TableBody>
                   {(filtroFechaInicio || filtroFechaFin) && (
                     <TableRow className="bg-stone-100/60">
-                      <TableCell colSpan={6} className="text-sm font-medium text-muted-foreground">
+                      <TableCell colSpan={7} className="text-sm font-medium text-muted-foreground">
                         Saldo inicial (antes del rango)
                       </TableCell>
                       <TableCell className="text-right font-mono font-semibold">{kardex.saldoInicial}</TableCell>
@@ -570,7 +571,7 @@ export default function KardexPage() {
                   )}
                   {kardex.filas.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
+                      <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-6">
                         No hay movimientos en el rango elegido. El <strong>cargue inicial</strong> y los
                         movimientos anteriores estan resumidos arriba en el <strong>Saldo inicial</strong>.
                         Quita la <strong>Fecha Inicio</strong> para ver el cargue inicial como movimiento.
@@ -586,6 +587,9 @@ export default function KardexPage() {
                         </div>
                       </TableCell>
                       <TableCell>{getTipoMovimientoBadge(t.tipo_movimiento)}</TableCell>
+                      <TableCell className="text-sm">
+                        {t.referencia_texto ? <span className="font-mono">{t.referencia_texto}</span> : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
                       <TableCell>{t.almacen_nombre || '-'}</TableCell>
                       <TableCell>{t.localizacion_nombre || '-'}</TableCell>
                       <TableCell className="text-right font-mono text-green-600">
@@ -609,6 +613,7 @@ export default function KardexPage() {
                     <TableHead className="font-semibold">Fecha</TableHead>
                     <TableHead className="font-semibold">Producto</TableHead>
                     <TableHead className="font-semibold">Tipo Movimiento</TableHead>
+                    <TableHead className="font-semibold">Referencia</TableHead>
                     <TableHead className="font-semibold">Almacen</TableHead>
                     <TableHead className="font-semibold">Localizacion</TableHead>
                     <TableHead className="font-semibold text-right">Cantidad</TableHead>
@@ -631,6 +636,9 @@ export default function KardexPage() {
                         </div>
                       </TableCell>
                       <TableCell>{getTipoMovimientoBadge(t.tipo_movimiento)}</TableCell>
+                      <TableCell className="text-sm">
+                        {t.referencia_texto ? <span className="font-mono">{t.referencia_texto}</span> : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
                       <TableCell>{t.almacen_nombre || '-'}</TableCell>
                       <TableCell>{t.localizacion_nombre || '-'}</TableCell>
                       <TableCell className={`text-right font-mono ${t.cantidad >= 0 ? 'text-green-600' : 'text-red-600'}`}>

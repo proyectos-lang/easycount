@@ -37,11 +37,14 @@ export interface TransaccionInventario {
   almacen_nombre?: string
   localizacion_id: number
   localizacion_nombre?: string
-  tipo_movimiento: 'Entrada Compra' | 'Salida Venta' | 'Traslado Entrada' | 'Traslado Salida' | 'Ajuste'
+  tipo_movimiento: string
   cantidad: number
   costo_o_precio_unitario: number
   referencia_id?: number
   fecha?: string
+  /** Etiqueta del documento origen (FC-#### para ventas, factura/OC para compras).
+   *  La rellena `resolverReferenciasMovimientos`. Ausente = sin referencia. */
+  referencia_texto?: string
 }
 
 export interface ProductoValoracion {
@@ -59,6 +62,68 @@ type KardexRow = TransaccionInventario & {
   productos?: { nombre?: string; codigo_barras?: string } | null
   almacenes?: { nombre?: string } | null
   localizaciones?: { nombre?: string } | null
+}
+
+/**
+ * Rellena `referencia_texto` de cada movimiento con el documento origen:
+ *   - 'Salida Venta'   -> numero_factura de la venta (FC-####).
+ *   - 'Entrada Compra' -> numero_factura de la compra, o "OC-{id}", + proveedor.
+ * `referencia_id` es polimórfico (apunta a distintas tablas según el tipo), por
+ * eso se resuelve con queries separadas + Map (no hay FK para un join directo).
+ * Best-effort: cualquier fallo deja el movimiento sin `referencia_texto`.
+ */
+async function resolverReferenciasMovimientos(
+  supabase: NonNullable<ReturnType<typeof createClient>>,
+  transacciones: TransaccionInventario[],
+): Promise<TransaccionInventario[]> {
+  try {
+    const ventaIds = new Set<number>()
+    const compraIds = new Set<number>()
+    for (const t of transacciones) {
+      if (t.referencia_id == null) continue
+      if (t.tipo_movimiento === 'Salida Venta') ventaIds.add(t.referencia_id)
+      else if (t.tipo_movimiento === 'Entrada Compra') compraIds.add(t.referencia_id)
+    }
+
+    const ventaLabel = new Map<number, string>()
+    if (ventaIds.size > 0) {
+      const { data } = await supabase
+        .from('ventas_encabezado')
+        .select('id, numero_factura')
+        .in('id', [...ventaIds])
+      for (const v of (data || []) as { id: number; numero_factura: string | null }[]) {
+        if (v.numero_factura) ventaLabel.set(v.id, v.numero_factura)
+      }
+    }
+
+    const compraLabel = new Map<number, string>()
+    if (compraIds.size > 0) {
+      const { data } = await supabase
+        .from('compras_encabezado')
+        .select('id, numero_factura, proveedores (nombre)')
+        .in('id', [...compraIds])
+      for (const c of (data || []) as { id: number; numero_factura: string | null; proveedores?: { nombre?: string } | null }[]) {
+        const doc = c.numero_factura || `OC-${c.id}`
+        const prov = c.proveedores?.nombre
+        compraLabel.set(c.id, prov ? `${doc} · ${prov}` : doc)
+      }
+    }
+
+    return transacciones.map((t) => {
+      if (t.referencia_id == null) return t
+      if (t.tipo_movimiento === 'Salida Venta') {
+        const label = ventaLabel.get(t.referencia_id)
+        return label ? { ...t, referencia_texto: label } : t
+      }
+      if (t.tipo_movimiento === 'Entrada Compra') {
+        const label = compraLabel.get(t.referencia_id)
+        return label ? { ...t, referencia_texto: label } : t
+      }
+      return t
+    })
+  } catch {
+    return transacciones
+  }
 }
 
 export async function getKardexByProducto(productoId: number): Promise<{ data: TransaccionInventario[]; error: string | null }> {
@@ -100,7 +165,8 @@ export async function getKardexByProducto(productoId: number): Promise<{ data: T
       localizacion_nombre: t.localizaciones?.nombre || ''
     }))
 
-    return { data: formattedData, error: null }
+    const conRef = await resolverReferenciasMovimientos(supabase, formattedData)
+    return { data: conRef, error: null }
   } catch (err) {
     console.error('[Supabase] Error obteniendo kardex:', err)
     return { data: [], error: 'Error de conexion' }
@@ -137,8 +203,9 @@ export async function getAllTransacciones(): Promise<{ data: TransaccionInventar
       almacen_nombre: t.almacenes?.nombre || '',
       localizacion_nombre: t.localizaciones?.nombre || ''
     }))
-    
-    return { data: formattedData, error: null }
+
+    const conRef = await resolverReferenciasMovimientos(supabase, formattedData)
+    return { data: conRef, error: null }
   } catch (err) {
     console.error('[Supabase] Error obteniendo transacciones:', err)
     return { data: [], error: 'Error de conexion' }

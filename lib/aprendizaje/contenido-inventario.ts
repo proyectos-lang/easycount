@@ -12,7 +12,7 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
       "Dos pestañas: 'Kardex por producto' e 'Historial general'. En Kardex eliges un producto, presionas 'Buscar kardex' y trae TODA su historia desde el servidor (sin límite de filas), en orden cronológico con el SALDO acumulado (existencias) tras cada movimiento, separando Entradas y Salidas.",
       "El kardex NO carga solo al seleccionar: hay que presionar 'Buscar kardex' para garantizar que se traiga la historia completa. Los filtros de fecha, almacén, localización y tipo refinan sobre lo ya traído, sin volver a consultar.",
       "Si filtras por fechas, calcula el 'Saldo inicial' (lo acumulado antes del rango) para que el saldo de cada fila siga siendo real; el cargue inicial y todo lo anterior a la 'Fecha Inicio' quedan resumidos ahí. Quita la 'Fecha Inicio' para ver el cargue inicial como movimiento.",
-      "Cada movimiento indica cantidad, costo/precio unitario y referencia al documento origen (compra, venta, devolución…).",
+      "Columna 'Referencia': cada movimiento muestra a qué documento está asociado. Una 'Salida Venta' muestra el número de factura de venta (FC-####); una 'Entrada Compra' muestra el número de factura de la compra (o su OC) y el proveedor. Los ajustes/traslados/ingresos manuales no tienen documento y salen con '—'.",
       "Exporta a Excel: el historial general, o el kardex del producto con Entrada/Salida/Saldo.",
     ],
     queNoHace: [
