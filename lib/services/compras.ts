@@ -10,6 +10,8 @@ export interface CompraEncabezado {
   id?: number
   proveedor_id: number
   proveedor_nombre?: string
+  /** Número de la factura del proveedor (recepción por factura). Script 065. */
+  numero_factura?: string | null
   fecha_orden?: string  // timestamp with time zone, defaults to now()
   fecha_tentativa: string  // date
   moneda: 'LPS' | 'USD'
@@ -202,11 +204,24 @@ export async function createCompra(
 
     // Insert encabezado (sello completo: empresa + usuario que crea la orden).
     // fecha_orden HN-as-UTC (dia de negocio); si el caller ya la trae, gana.
-    const { data: compraData, error: compraError } = await supabase
+    let { data: compraData, error: compraError } = await supabase
       .from('compras_encabezado')
       .insert({ fecha_orden: getHondurasNowISO(), ...encabezado, ...stamp })
       .select()
       .single()
+
+    // Fallback: si la columna `numero_factura` no existe (script 065 pendiente),
+    // reintentamos sin ella para no bloquear la creación de la compra.
+    if (compraError && /numero_factura/i.test(compraError.message || '')) {
+      const { numero_factura: _nf, ...encSinFactura } = encabezado as { numero_factura?: string | null } & typeof encabezado
+      const retry = await supabase
+        .from('compras_encabezado')
+        .insert({ fecha_orden: getHondurasNowISO(), ...encSinFactura, ...stamp })
+        .select()
+        .single()
+      compraData = retry.data
+      compraError = retry.error
+    }
 
     if (compraError) return { data: null, error: compraError.message }
 
@@ -548,6 +563,82 @@ async function ensureConceptoCompra(
   if (existente?.id != null) return existente.id
   const { data: creado } = await createConceptoGasto({ nombre: 'Compra de mercadería', categoria_macro: 'Suministros' })
   return creado?.id ?? null
+}
+
+/**
+ * Recepción por FACTURA que crea una compra REAL y la recibe en un solo paso.
+ * A diferencia de `procesarRecepcion` (que asume una OC existente), aquí se crea
+ * la fila en `compras_encabezado`/`compras_detalle` (con proveedor y número de
+ * factura), y luego se procesa la recepción contra ese id real. Así la compra
+ * aparece en el historial y el kardex puede apuntar a ella.
+ */
+export async function crearCompraYRecibir(input: {
+  proveedor_id: number
+  numero_factura?: string | null
+  moneda: 'LPS' | 'USD'
+  tasa_cambio: number
+  costos_importacion: number
+  impuestos_compra: number
+  otros_costos: number
+  almacen_id: number
+  localizacion_id: number
+  lineas: {
+    producto_id: number
+    cantidad: number
+    costo_unitario_moneda_origen: number
+    costo_final_local: number
+    precio_venta?: number | null
+  }[]
+  pago?: { metodo: 'Efectivo' | 'Banco' | 'Credito'; cuenta_id?: number | null } | null
+}): Promise<{ success: boolean; error: string | null; compraId: number | null }> {
+  // 1. Crear la compra formal (estado Pendiente; procesarRecepcion la pasa a Recibida).
+  const { data: compra, error: compraErr } = await createCompra(
+    {
+      proveedor_id: input.proveedor_id,
+      numero_factura: input.numero_factura ?? null,
+      fecha_tentativa: getHondurasTodayISODate(),
+      moneda: input.moneda,
+      tasa_cambio: input.tasa_cambio,
+      costos_importacion: 0,
+      impuestos_compra: 0,
+      otros_costos: 0,
+      total_compra_local: 0,
+      estado: 'Pendiente',
+    },
+    input.lineas.map((l) => ({
+      producto_id: l.producto_id,
+      cantidad: l.cantidad,
+      cantidad_recibida: 0,
+      costo_unitario_moneda_origen: l.costo_unitario_moneda_origen,
+      costo_final_local: 0,
+    })),
+  )
+  if (compraErr || !compra?.id) return { success: false, error: compraErr || 'No se pudo crear la compra', compraId: null }
+
+  // 2. Traer los detalle_id reales recién creados y mapear por producto_id.
+  const { data: detallesCreados } = await getDetallesCompra(compra.id)
+  const detalleIdPorProducto = new Map<number, number>()
+  for (const d of detallesCreados) if (d.producto_id != null && d.id != null) detalleIdPorProducto.set(d.producto_id, d.id)
+
+  // 3. Procesar la recepción contra el id real.
+  const rec = await procesarRecepcion({
+    compraId: compra.id,
+    costos_importacion: input.costos_importacion,
+    impuestos_compra: input.impuestos_compra,
+    otros_costos: input.otros_costos,
+    tasa_cambio: input.tasa_cambio,
+    almacen_id: input.almacen_id,
+    localizacion_id: input.localizacion_id,
+    detalles: input.lineas.map((l) => ({
+      detalle_id: detalleIdPorProducto.get(l.producto_id) ?? 0,
+      producto_id: l.producto_id,
+      cantidad_recibida: l.cantidad,
+      costo_final_local: l.costo_final_local,
+      precio_venta: l.precio_venta ?? null,
+    })),
+    pago: input.pago ? { ...input.pago, proveedor_id: input.proveedor_id } : null,
+  })
+  return { success: rec.success, error: rec.error, compraId: compra.id }
 }
 
 // ==================== HELPERS: PRORRATEO ====================

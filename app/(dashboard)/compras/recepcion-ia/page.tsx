@@ -57,8 +57,11 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import {
-  procesarRecepcion,
+  crearCompraYRecibir,
   calcularProrrateoDetallado,
+  getCompras,
+  getDetallesCompra,
+  type CompraEncabezado,
   type CompraDetalle
 } from "@/lib/services/compras"
 import { DesgloseProrrateo } from "@/components/recepcion/desglose-prorrateo"
@@ -66,6 +69,7 @@ import { type Proveedor, type Producto, getProveedores, getProductos } from "@/l
 import { type Almacen, type Localizacion, getAlmacenes, getLocalizaciones } from "@/lib/services/catalogos"
 import { type CuentaConfig, getCuentas } from "@/lib/services/cuentas"
 import { QuickCreateProductoDialog } from "@/components/recepcion/quick-create-producto-dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useAuth } from "@/lib/contexts/auth-context"
 
 // Interface for AI extracted data
@@ -140,24 +144,46 @@ export default function RecepcionIAPage() {
   const [cuentas, setCuentas] = useState<CuentaConfig[]>([])
   const [pagoMetodo, setPagoMetodo] = useState<'Efectivo' | 'Banco' | 'Credito'>('Credito')
   const [pagoCuentaId, setPagoCuentaId] = useState<number | null>(null)
+  // Modo de la página: digitalizar (IA) / manual (sin imagen) / historial.
+  const [modo, setModo] = useState<'digitalizar' | 'manual' | 'historial'>('digitalizar')
+  // Número de la factura del proveedor (se guarda en la compra).
+  const [numeroFactura, setNumeroFactura] = useState("")
+  // Buscador para agregar productos manualmente (modo manual).
+  const [addProductoOpen, setAddProductoOpen] = useState(false)
+  // Historial de facturas de compra (compras recibidas) + detalle abierto.
+  const [historial, setHistorial] = useState<CompraEncabezado[]>([])
+  const [detalleAbierto, setDetalleAbierto] = useState<CompraEncabezado | null>(null)
+  const [detalleLineas, setDetalleLineas] = useState<CompraDetalle[]>([])
+  const [cargandoDetalle, setCargandoDetalle] = useState(false)
 
   const { toast } = useToast()
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    const [prodRes, almRes, provRes, cuentasRes] = await Promise.all([
+    const [prodRes, almRes, provRes, cuentasRes, comprasRes] = await Promise.all([
       getProductos(),
       getAlmacenes(),
       getProveedores(),
       getCuentas(),
+      getCompras('Recibida'),
     ])
 
     setProductos(prodRes.data)
     setAlmacenes(almRes.data)
     setProveedores(provRes.data)
     setCuentas(cuentasRes.data || [])
+    setHistorial(comprasRes.data || [])
     setLoading(false)
   }, [])
+
+  // Abre el desglose de una factura del historial.
+  const abrirDetalle = async (compra: CompraEncabezado) => {
+    setDetalleAbierto(compra)
+    setCargandoDetalle(true)
+    const { data } = await getDetallesCompra(compra.id!)
+    setDetalleLineas(data)
+    setCargandoDetalle(false)
+  }
 
   useEffect(() => {
     fetchData()
@@ -442,6 +468,34 @@ export default function RecepcionIAPage() {
   const prodDeLinea = (l: LineaFactura): Producto | undefined =>
     l.productoId != null ? productos.find((p) => p.id === l.productoId) : undefined
 
+  // Agrega una línea manual desde un producto del catálogo (modo sin imagen).
+  const agregarLineaManual = (producto: Producto) => {
+    if (producto.id == null) return
+    setLineas((prev) => {
+      // Si ya está en la lista, solo suma 1 a su cantidad.
+      const existe = prev.find((l) => l.productoId === producto.id)
+      if (existe) {
+        return prev.map((l) => l.id === existe.id ? { ...l, cantidad: l.cantidad + 1 } : l)
+      }
+      return [
+        ...prev,
+        {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          nombreExtraido: producto.nombre,
+          productoId: producto.id!,
+          productoNombre: producto.nombre,
+          productoCodigo: producto.codigo_barras || "",
+          cantidad: 1,
+          costoOriginal: producto.costo_promedio || 0,
+          costoFinalLocal: producto.costo_promedio || 0,
+          precioVenta: producto.precio_venta_sugerido || 0,
+          comboboxOpen: false,
+        },
+      ]
+    })
+    setAddProductoOpen(false)
+  }
+
   // Remove line
   const removeLinea = (lineaId: number) => {
     setLineas(prev => prev.filter(l => l.id !== lineaId))
@@ -483,45 +537,44 @@ export default function RecepcionIAPage() {
       return
     }
 
+    if (!proveedorId) {
+      toast({ title: "Falta el proveedor", description: "Selecciona el proveedor de la factura.", variant: "destructive" })
+      return
+    }
+
     setProcessing(true)
-    
+
     try {
-      // Create a "virtual" compra for the reception
-      // In a real scenario, you might want to create the compra first
-      // For now, we'll directly process the inventory transactions
-      
-      const recepcionData = {
-        compraId: Date.now(), // Virtual ID since we're not creating a formal order
+      // Crea la compra REAL (con proveedor + número de factura) y la recibe, para
+      // que quede en el historial y el kardex pueda apuntar a ella.
+      const { success, error } = await crearCompraYRecibir({
+        proveedor_id: Number(proveedorId),
+        numero_factura: numeroFactura.trim() || null,
+        moneda,
+        tasa_cambio: tasaCambio,
         costos_importacion: costosImportacion,
         impuestos_compra: impuestosCompra,
         otros_costos: otrosCostos,
-        tasa_cambio: tasaCambio,
         almacen_id: almacenId,
         localizacion_id: localizacionId,
-        detalles: lineas.map(l => ({
-          detalle_id: l.id,
+        lineas: lineas.map(l => ({
           producto_id: l.productoId!,
-          cantidad_recibida: l.cantidad,
+          cantidad: l.cantidad,
+          costo_unitario_moneda_origen: l.costoOriginal,
           costo_final_local: l.costoFinalLocal,
           precio_venta: l.precioVenta != null && l.precioVenta > 0 ? l.precioVenta : null,
         })),
-        pago: {
-          metodo: pagoMetodo,
-          cuenta_id: pagoMetodo === 'Banco' ? pagoCuentaId : null,
-          proveedor_id: proveedorId ? Number(proveedorId) : null,
-        },
-      }
+        pago: { metodo: pagoMetodo, cuenta_id: pagoMetodo === 'Banco' ? pagoCuentaId : null },
+      })
 
-      const { success, error } = await procesarRecepcion(recepcionData)
-      
-      if (error) {
+      if (error && !success) {
         toast({ title: "Error", description: error, variant: "destructive" })
-      } else if (success) {
-        toast({ 
-          title: "Recepcion Exitosa", 
-          description: "La mercancia ha sido ingresada al inventario y los costos actualizados" 
+      } else {
+        toast({
+          title: "Recepción exitosa",
+          description: error || "La mercancía entró al inventario y la factura quedó en el historial.",
         })
-        
+
         // Reset form
         setLineas([])
         setUploadedFile(null)
@@ -529,6 +582,9 @@ export default function RecepcionIAPage() {
         setCostosImportacion(0)
         setImpuestosCompra(0)
         setOtrosCostos(0)
+        setNumeroFactura("")
+        // Recarga productos (costo/precio nuevos) y el historial.
+        fetchData()
       }
     } catch (err) {
       toast({ title: "Error", description: "Error procesando la recepcion", variant: "destructive" })
@@ -540,6 +596,11 @@ export default function RecepcionIAPage() {
   const formatCurrency = (value: number, mon: string = "LPS") => {
     const prefix = mon === "USD" ? "$ " : "L "
     return prefix + value.toLocaleString("es-HN", { minimumFractionDigits: 2 })
+  }
+
+  const formatDate = (date?: string | null) => {
+    if (!date) return "—"
+    return new Date(date).toLocaleDateString("es-HN", { timeZone: "UTC", year: "numeric", month: "short", day: "numeric" })
   }
 
   const calcularTotales = () => {
@@ -566,9 +627,67 @@ export default function RecepcionIAPage() {
     <div className="space-y-4 md:space-y-6">
       <div>
         <h1 className="text-xl md:text-2xl font-semibold text-foreground">Recepcion por Factura</h1>
-        <p className="text-sm md:text-base text-muted-foreground">Suba una imagen de factura para extraer los productos automaticamente</p>
+        <p className="text-sm md:text-base text-muted-foreground">Digitaliza con IA, captura manual, o revisa el historial de facturas de compra.</p>
       </div>
 
+      {/* Selector de modo */}
+      <div className="inline-flex rounded-lg border bg-muted/40 p-1 text-sm">
+        {([
+          { k: 'digitalizar', label: 'Digitalizar (IA)' },
+          { k: 'manual', label: 'Captura manual' },
+          { k: 'historial', label: 'Historial' },
+        ] as const).map((t) => (
+          <button
+            key={t.k}
+            type="button"
+            onClick={() => setModo(t.k)}
+            className={`rounded-md px-3 py-1.5 font-medium transition-colors ${modo === t.k ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {modo === 'historial' ? (
+        <Card>
+          <CardHeader className="p-4 md:p-6">
+            <CardTitle className="text-base flex items-center gap-2">
+              <PackageCheck className="h-4 w-4" /> Facturas de compra recibidas
+            </CardTitle>
+            <CardDescription className="text-xs md:text-sm">Abre cada una para ver su desglose de productos.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 md:p-6 pt-0">
+            {historial.length === 0 ? (
+              <p className="text-center text-muted-foreground py-10 text-sm">Aún no hay facturas de compra recibidas.</p>
+            ) : (
+              <Table containerClassName="max-h-[65vh] overflow-y-auto">
+                <TableHeader sticky>
+                  <TableRow>
+                    <TableHead>N.º factura</TableHead>
+                    <TableHead>Proveedor</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead className="text-right">Total (LPS)</TableHead>
+                    <TableHead className="w-24"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {historial.map((c) => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-medium">{c.numero_factura || <span className="text-muted-foreground">OC-{c.id}</span>}</TableCell>
+                      <TableCell>{c.proveedor_nombre || "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">{formatDate(c.fecha_orden)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{formatCurrency(c.total_compra_local || 0, "LPS")}</TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="outline" size="sm" onClick={() => abrirDetalle(c)}>Ver</Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
       <div className="grid gap-4 md:gap-6 lg:grid-cols-3">
         {/* Upload Zone */}
         <Card className="lg:col-span-1 bg-gradient-to-br from-amber-50/50 to-orange-50/30 border-amber-200/60">
@@ -582,12 +701,17 @@ export default function RecepcionIAPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4 md:p-6 pt-0 space-y-4">
-            {!uploadedFile ? (
+            {modo === 'manual' && (
+              <div className="rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/40 p-4 text-center text-sm text-emerald-800">
+                Captura manual: agrega los productos abajo (por nombre o código) sin subir imagen.
+              </div>
+            )}
+            {modo === 'digitalizar' && (!uploadedFile ? (
               <div
                 className={cn(
                   "border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer",
-                  dragOver 
-                    ? "border-amber-500 bg-amber-100/50" 
+                  dragOver
+                    ? "border-amber-500 bg-amber-100/50"
                     : "border-amber-300 hover:border-amber-400 hover:bg-amber-50/50"
                 )}
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
@@ -651,8 +775,8 @@ export default function RecepcionIAPage() {
                   )}
                 </Button>
               </div>
-            )}
-            
+            ))}
+
             {/* Proveedor Selection */}
             <div className="pt-4 border-t border-amber-200">
               <Label className="text-xs text-amber-800">Proveedor</Label>
@@ -666,6 +790,17 @@ export default function RecepcionIAPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Número de factura del proveedor */}
+            <div>
+              <Label className="text-xs text-amber-800">N.º de factura <span className="text-amber-500">(opcional)</span></Label>
+              <Input
+                value={numeroFactura}
+                onChange={(e) => setNumeroFactura(e.target.value)}
+                placeholder="Ej. 000-001-01-00001234"
+                className="mt-1.5 bg-white border-amber-200"
+              />
             </div>
             
             {/* Currency */}
@@ -709,11 +844,48 @@ export default function RecepcionIAPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4 md:p-6 pt-0">
+            {modo === 'manual' && (
+              <div className="mb-4">
+                <Popover open={addProductoOpen} onOpenChange={setAddProductoOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start gap-2">
+                      <Plus className="h-4 w-4" /> Agregar producto (por nombre o código)
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar producto..." />
+                      <CommandList>
+                        <CommandEmpty>No se encontró el producto.</CommandEmpty>
+                        <CommandGroup>
+                          {productos.map((p) => (
+                            <CommandItem
+                              key={p.id}
+                              value={`${p.nombre} ${p.codigo_barras}`}
+                              onSelect={() => agregarLineaManual(p)}
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate font-medium text-sm">{p.nombre}</p>
+                                {p.codigo_barras && <p className="text-xs text-muted-foreground font-mono">{p.codigo_barras}</p>}
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
             {lineas.length === 0 ? (
               <div className="text-center py-12 border-2 border-dashed rounded-xl border-muted">
                 <AlertCircle className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
-                <p className="text-muted-foreground">Suba una factura y procesela con IA</p>
-                <p className="text-sm text-muted-foreground/70 mt-1">Los productos extraidos apareceran aqui</p>
+                <p className="text-muted-foreground">
+                  {modo === 'manual' ? "Agrega productos con el buscador de arriba." : "Suba una factura y procesela con IA"}
+                </p>
+                <p className="text-sm text-muted-foreground/70 mt-1">
+                  {modo === 'manual' ? "Cada producto se agrega como una línea editable." : "Los productos extraidos apareceran aqui"}
+                </p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -1083,6 +1255,46 @@ export default function RecepcionIAPage() {
           </CardContent>
         </Card>
       </div>
+      )}
+
+      {/* Detalle de una factura del historial */}
+      <Dialog open={detalleAbierto !== null} onOpenChange={(o) => { if (!o) { setDetalleAbierto(null); setDetalleLineas([]) } }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Factura {detalleAbierto?.numero_factura || `OC-${detalleAbierto?.id}`}</DialogTitle>
+            <DialogDescription>
+              {detalleAbierto?.proveedor_nombre || "Proveedor"} · {formatDate(detalleAbierto?.fecha_orden)} · Total {formatCurrency(detalleAbierto?.total_compra_local || 0, "LPS")}
+            </DialogDescription>
+          </DialogHeader>
+          {cargandoDetalle ? (
+            <div className="flex justify-center py-8"><Spinner className="h-6 w-6" /></div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Producto</TableHead>
+                  <TableHead className="text-right">Cant.</TableHead>
+                  <TableHead className="text-right">Costo final</TableHead>
+                  <TableHead className="text-right">Subtotal</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {detalleLineas.map((d) => (
+                  <TableRow key={d.id}>
+                    <TableCell>
+                      <p className="font-medium">{d.producto_nombre}</p>
+                      <p className="text-xs text-muted-foreground font-mono">{d.producto_codigo}</p>
+                    </TableCell>
+                    <TableCell className="text-right">{d.cantidad_recibida ?? d.cantidad}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(d.costo_final_local || 0, "LPS")}</TableCell>
+                    <TableCell className="text-right">{formatCurrency((d.cantidad_recibida ?? d.cantidad) * (d.costo_final_local || 0), "LPS")}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/*
         Modal de creacion rapida de producto. Se abre desde el boton

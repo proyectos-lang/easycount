@@ -120,6 +120,10 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
     descripcion:
       "Subir la foto de una factura de proveedor: la inteligencia artificial extrae los productos y cantidades para ingresarlos al inventario sin digitar.",
     queHace: [
+      "Tres modos: 'Digitalizar (IA)' (subir foto/PDF), 'Captura manual' (agregar productos por nombre o código de barras, sin imagen) e 'Historial' (facturas de compra recibidas).",
+      "Campo para el número de factura del proveedor, que se guarda con la compra.",
+      "Cada recepción crea una compra real (con proveedor, número de factura, fecha, líneas y total), así queda registrada en el historial y el kardex puede apuntar a ella.",
+      "Historial: lista las facturas de compra recibidas; abre cada una para ver su desglose de productos (cantidad, costo, subtotal).",
       "Acepta foto o PDF de la factura del proveedor.",
       "La IA (Gemini) lee la factura y extrae cada línea: nombre del producto, cantidad y costo unitario.",
       "Permite mapear cada línea extraída con un producto del catálogo (o crear el producto al vuelo).",
@@ -138,12 +142,30 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
       {
         titulo: "Ingresar mercancía desde una foto de factura",
         pasos: [
-          "Abre Compras → Recepción por Factura.",
-          "Arrastra o sube la imagen/PDF de la factura (JPG, PNG o PDF).",
-          "Presiona 'Procesar con IA' y espera unos segundos.",
+          "Abre Compras → Recepción por Factura, pestaña 'Digitalizar (IA)'.",
+          "Arrastra o sube la imagen/PDF de la factura (JPG, PNG o PDF) y presiona 'Extraer Productos'.",
+          "Elige el proveedor y escribe el número de factura.",
           "Revisa las líneas extraídas: corrige cantidad, costo y precio de venta si hace falta (ves margen y utilidad).",
           "Asocia cada línea con su producto del catálogo (o créalo con el botón rápido).",
-          "Elige almacén/localización, el método de pago (Efectivo/Banco/Cuenta por pagar) y confirma el ingreso.",
+          "Elige almacén/localización, el método de pago (Efectivo/Banco/Cuenta por pagar) y confirma. Se crea la compra y queda en el historial.",
+        ],
+      },
+      {
+        titulo: "Crear una factura de compra manual (sin imagen)",
+        pasos: [
+          "Abre Compras → Recepción por Factura, pestaña 'Captura manual'.",
+          "Elige el proveedor y escribe el número de factura.",
+          "Presiona 'Agregar producto' y búscalo por nombre o código de barras; se agrega una línea editable (repite por cada producto).",
+          "Ajusta cantidad, costo y precio de venta de cada línea.",
+          "Elige almacén/localización, el método de pago y confirma.",
+        ],
+      },
+      {
+        titulo: "Ver el historial de facturas de compra",
+        pasos: [
+          "Abre la pestaña 'Historial'.",
+          "Verás las facturas recibidas con su número, proveedor, fecha y total.",
+          "Presiona 'Ver' en una factura para abrir su desglose de productos.",
         ],
       },
       {

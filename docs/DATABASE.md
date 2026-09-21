@@ -219,6 +219,7 @@ Abonos posteriores a ventas al crédito (cuentas por cobrar).
 |---|---|---|
 | `id` | bigint | PK |
 | `proveedor_id` | bigint | FK → `proveedores.id` |
+| `numero_factura` | text | **(script 065, nullable)** número de la factura del proveedor (Recepción por Factura). |
 | `fecha_orden` | timestamptz | default `now()` |
 | `fecha_tentativa` | date | fecha estimada de llegada |
 | `moneda` | text | `LPS` / `USD` |
