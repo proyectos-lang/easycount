@@ -304,6 +304,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "El RTN aparece en la factura del cliente.",
       "La fecha de nacimiento alimenta las alertas de cumpleaños.",
       "Los clientes se eligen en Nueva Venta y alimentan el ranking del Dashboard de Ventas.",
+      "Carga masiva: con 'Carga masiva' descargas una plantilla de Excel (Nombre, RTN, Dirección, Teléfono, Fecha de Nacimiento), la llenas y la subes para crear muchos clientes de una vez. Antes de cargar muestra cuántos son nuevos y cuáles se omiten por ya existir (por RTN o, si no hay RTN, por nombre).",
       "Eliminar un cliente: si NO tiene ventas registradas, se borra del catálogo. Si SÍ tiene ventas, no se borra (rompería el historial): se DESACTIVA y deja de aparecer en el punto de venta y demás listas, pero se conserva en el registro/historial de ventas. Un cliente inactivo se puede reactivar con el botón de reactivar.",
       "Marca el estado de cada cliente (Activo / Inactivo) en la lista.",
     ],
@@ -319,6 +320,15 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "Nombre (obligatorio), RTN si pedirá factura con datos fiscales, teléfono y dirección.",
           "Agrega la fecha de nacimiento si quieres la alerta de cumpleaños.",
           "Guarda. También puedes crear clientes al vuelo desde Nueva Venta.",
+        ],
+      },
+      {
+        titulo: "Cargar muchos clientes desde Excel",
+        pasos: [
+          "En Configuración → Clientes presiona 'Carga masiva'.",
+          "Descarga la plantilla y llénala (Nombre es obligatorio; RTN, dirección, teléfono y fecha de nacimiento opcionales).",
+          "Sube el archivo: verás cuántos clientes son nuevos y cuáles se omiten por ya existir.",
+          "Presiona 'Cargar'. Se crean los nuevos; los duplicados (por RTN o nombre) se omiten sin tocar los existentes.",
         ],
       },
       {
@@ -343,7 +353,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "Es lo correcto. Un cliente con ventas no se elimina: se desactiva para que no aparezca en el punto de venta ni en las listas, pero se conserva en el registro de ventas para no perder la trazabilidad de esas facturas. Si ya no debería verse en ningún selector, verifica que aparezca como 'Inactivo' en Clientes.",
       },
     ],
-    keywords: ["cliente", "rtn", "cumpleaños", "directorio", "contacto", "eliminar", "borrar", "desactivar", "inactivo", "reactivar"],
+    keywords: ["cliente", "rtn", "cumpleaños", "directorio", "contacto", "eliminar", "borrar", "desactivar", "inactivo", "reactivar", "carga masiva", "importar", "plantilla", "excel", "masivo"],
   },
   {
     modulo: "Proveedores",
@@ -352,6 +362,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
     queHace: [
       "Crea y edita proveedores: nombre, RTN y datos de contacto.",
       "Se eligen al crear órdenes de compra y al registrar gastos/facturas por pagar.",
+      "Carga masiva: con 'Carga masiva' descargas una plantilla de Excel (Nombre, RTN, Contacto), la llenas y la subes para crear muchos proveedores de una vez. Muestra cuántos son nuevos y omite los que ya existen (por RTN o, si no hay RTN, por nombre).",
     ],
     queNoHace: [
       "No lleva estado de cuenta del proveedor — el saldo por pagar vive en Finanzas → Gastos (Cuentas por Pagar).",
@@ -365,6 +376,15 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "Guarda: ya aparece disponible en Compras y en Gastos.",
         ],
       },
+      {
+        titulo: "Cargar muchos proveedores desde Excel",
+        pasos: [
+          "En Configuración → Proveedores presiona 'Carga masiva'.",
+          "Descarga la plantilla y llénala (Nombre obligatorio; RTN y contacto opcionales).",
+          "Sube el archivo: verás cuántos son nuevos y cuáles se omiten por ya existir.",
+          "Presiona 'Cargar'. Se crean los nuevos; los duplicados (por RTN o nombre) se omiten.",
+        ],
+      },
     ],
     faqs: [
       {
@@ -373,7 +393,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "Revisa Finanzas → Gastos, vista de Cuentas por Pagar: ahí están las facturas pendientes por proveedor con su saldo y vencimiento.",
       },
     ],
-    keywords: ["proveedor", "suplidor", "compras", "contacto"],
+    keywords: ["proveedor", "suplidor", "compras", "contacto", "carga masiva", "importar", "plantilla", "excel", "masivo"],
   },
   {
     modulo: "Cuentas Bancarias",

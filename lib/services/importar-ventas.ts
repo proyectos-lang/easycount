@@ -8,6 +8,9 @@ import { getHondurasNowISO } from "@/lib/utils/honduras-time"
 
 // ==================== TIPOS ====================
 
+/** Método de pago de una factura importada (por fila del Excel). */
+export type MetodoImport = "Efectivo" | "Banco" | "Credito"
+
 /** Una fila del Excel (una linea de producto de una factura). */
 export interface FilaImport {
   fila: number // numero de fila en el Excel (para reportar errores)
@@ -19,6 +22,22 @@ export interface FilaImport {
   precio_unitario: number
   descuento_pct: number
   subtotal: number
+  /** Método de pago de la factura (columna opcional). "" = usar el default global. */
+  metodo_pago: MetodoImport | ""
+}
+
+/**
+ * Normaliza el texto de la columna "Metodo de Pago" a Efectivo/Banco/Credito.
+ * Acepta sinónimos comunes; devuelve "" si está vacío o no se reconoce (se usará
+ * el método global elegido en el diálogo).
+ */
+export function normalizarMetodo(v: unknown): MetodoImport | "" {
+  const s = String(v ?? "").trim().toLowerCase()
+  if (!s) return ""
+  if (/(credit|cr[eé]dito|por cobrar|fiado|pendiente)/.test(s)) return "Credito"
+  if (/(banco|tarjeta|transferen|dep[oó]sito|deposito|pos|datafono|dataf[oó]no|link)/.test(s)) return "Banco"
+  if (/(efectivo|contado|cash|caja)/.test(s)) return "Efectivo"
+  return ""
 }
 
 /** Opciones que el usuario elige en la interfaz (aplican a todo el archivo). */
@@ -26,7 +45,12 @@ export interface OpcionesImport {
   cliente_id: number
   almacen_id: number
   localizacion_id: number
-  metodo: "Efectivo" | "Banco"
+  /**
+   * Método por DEFECTO cuando una factura del Excel no trae la columna "Metodo
+   * de Pago". Cada factura puede sobreescribirlo con esa columna (por fila).
+   */
+  metodo: MetodoImport
+  /** Cuenta bancaria para las facturas con método Banco (aplica a todas). */
   cuenta_id?: number | null
   aplica_isv: boolean
 }
@@ -110,6 +134,7 @@ export async function parsearArchivoVentas(file: File): Promise<FilaImport[]> {
       precio_unitario: num(col(row, ["Precio Unitario", "Precio Unit", "Precio Unit.", "Precio"])),
       descuento_pct: num(col(row, ["Descuento (%)", "Descuento", "Desc (%)", "Desc"])),
       subtotal: num(col(row, ["Subtotal", "Total Linea", "Total Línea"])),
+      metodo_pago: normalizarMetodo(col(row, ["Metodo de Pago", "Método de Pago", "Metodo Pago", "Metodo", "Método", "Forma de Pago", "Pago"])),
     })
   })
   return filas
@@ -235,22 +260,30 @@ export async function importarVentas(
 ): Promise<{ data: ResultadoImport | null; error: string | null }> {
   if (filas.length === 0) return { data: null, error: "El archivo no tiene filas válidas" }
 
+  const grupos = agruparPorFactura(filas)
+
+  // Método efectivo de cada factura: su columna (primera línea) o el default global.
+  const metodoDeFactura = (lineas: FilaImport[]): MetodoImport =>
+    (lineas[0]?.metodo_pago || opciones.metodo) as MetodoImport
+
+  // ¿Qué métodos aparecen realmente? Para validar caja/cuenta solo si hacen falta.
+  const metodos = new Set<MetodoImport>()
+  for (const [, lineas] of grupos) metodos.add(metodoDeFactura(lineas))
+
   // Efectivo requiere caja abierta (misma regla que Nueva Venta).
-  if (opciones.metodo === "Efectivo") {
+  if (metodos.has("Efectivo")) {
     const { data: sesion } = await getSesionAbierta()
     if (!sesion) {
-      return { data: null, error: "Debes abrir la caja chica para importar ventas en efectivo, o elige una cuenta bancaria." }
+      return { data: null, error: "Hay ventas en efectivo: debes abrir la caja chica, o cambiar su método a Crédito/Banco." }
     }
   }
-  if (opciones.metodo === "Banco" && !opciones.cuenta_id) {
-    return { data: null, error: "Selecciona la cuenta bancaria de destino." }
+  if (metodos.has("Banco") && !opciones.cuenta_id) {
+    return { data: null, error: "Hay ventas con método Banco: selecciona la cuenta bancaria de destino." }
   }
 
   const { porCodigo, porNombre, cuentas, facturasExistentes } = await cargarContexto()
   const cuenta = cuentas.find((c) => c.id === opciones.cuenta_id)
-  const comision = opciones.metodo === "Banco" ? Number(cuenta?.porcentaje_comision || 0) : 0
-
-  const grupos = agruparPorFactura(filas)
+  const comisionBanco = Number(cuenta?.porcentaje_comision || 0)
   const resultado: ResultadoImport = { creadas: 0, omitidas: 0, errores: 0, totalImportado: 0, facturas: [] }
 
   for (const [numero, lineas] of grupos) {
@@ -299,13 +332,29 @@ export async function importarVentas(
     subtotal = +subtotal.toFixed(2)
     const impuesto = opciones.aplica_isv ? +(subtotal * 0.15).toFixed(2) : 0
     const totalBruto = +(subtotal + impuesto).toFixed(2)
+
+    // Método de ESTA factura (columna del Excel o default global).
+    const metodo = metodoDeFactura(lineas)
+    const comision = metodo === "Banco" ? comisionBanco : 0
     const totalNeto = +(totalBruto * (1 - comision / 100)).toFixed(2)
 
-    const pagos_detalle: PagoVentaDetalleInput[] = [
-      opciones.metodo === "Banco"
-        ? { metodo_pago: "Banco", cuenta_id: opciones.cuenta_id, monto_bruto: totalBruto, porcentaje_comision: comision, monto_neto: totalNeto }
-        : { metodo_pago: "Efectivo", monto_bruto: totalBruto, porcentaje_comision: 0, monto_neto: totalBruto },
-    ]
+    // Crédito: SIN pago (queda como cuenta por cobrar). Efectivo/Banco: pagada.
+    let pagos_detalle: PagoVentaDetalleInput[]
+    let estadoPago: "Pendiente" | "Pagado"
+    let valorPago: number
+    if (metodo === "Credito") {
+      pagos_detalle = []
+      estadoPago = "Pendiente"
+      valorPago = 0
+    } else if (metodo === "Banco") {
+      pagos_detalle = [{ metodo_pago: "Banco", cuenta_id: opciones.cuenta_id, monto_bruto: totalBruto, porcentaje_comision: comision, monto_neto: totalNeto }]
+      estadoPago = "Pagado"
+      valorPago = totalBruto
+    } else {
+      pagos_detalle = [{ metodo_pago: "Efectivo", monto_bruto: totalBruto, porcentaje_comision: 0, monto_neto: totalBruto }]
+      estadoPago = "Pagado"
+      valorPago = totalBruto
+    }
 
     // 3) Crear la venta con la MISMA logica que Nueva Venta (inventario,
     //    kardex, ventas_pagos_detalle, caja/bancos).
@@ -323,8 +372,8 @@ export async function importarVentas(
         // BRUTO (lo que paga el cliente). La comision es costo aparte; el
         // neto real recibido se refleja en el movimiento de banco.
         total_venta: totalBruto,
-        estado_pago: "Pagado",
-        valorpago: totalBruto,
+        estado_pago: estadoPago,
+        valorpago: valorPago,
       },
       detalles,
       almacen_id: opciones.almacen_id,
@@ -365,6 +414,7 @@ export function descargarPlantillaVentas(): void {
       "Precio Unitario": 1505.4,
       "Descuento (%)": 0,
       Subtotal: 1505.4,
+      "Metodo de Pago": "Efectivo",
     },
     {
       Fecha: "18/06/2026",
@@ -375,10 +425,11 @@ export function descargarPlantillaVentas(): void {
       "Precio Unitario": 2267.75,
       "Descuento (%)": 0,
       Subtotal: 2267.75,
+      "Metodo de Pago": "Credito",
     },
   ]
   const ws = XLSX.utils.json_to_sheet(ejemplo)
-  ws["!cols"] = [{ wch: 12 }, { wch: 12 }, { wch: 28 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 14 }]
+  ws["!cols"] = [{ wch: 12 }, { wch: 12 }, { wch: 28 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 16 }]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, "Ventas")
   XLSX.writeFile(wb, "Plantilla_Importar_Ventas.xlsx")

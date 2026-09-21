@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Plus, Users, Pencil, Trash2, Loader2, Cake, RotateCcw } from "lucide-react"
+import { ImportarClientesDialog } from "./importar-clientes-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -231,10 +232,13 @@ export default function ClientesConfigPage() {
           <h1 className="text-xl md:text-2xl font-bold text-foreground">Configuracion de Clientes</h1>
           <p className="text-sm md:text-base text-muted-foreground">Gestiona el catalogo de clientes</p>
         </div>
-        <Button onClick={openNewDialog} size="sm" className="w-full sm:w-auto">
-          <Plus className="h-4 w-4 mr-1" />
-          Nuevo Cliente
-        </Button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <ImportarClientesDialog onImported={loadClientes} />
+          <Button onClick={openNewDialog} size="sm" className="w-full sm:w-auto">
+            <Plus className="h-4 w-4 mr-1" />
+            Nuevo Cliente
+          </Button>
+        </div>
       </div>
 
       <Card>

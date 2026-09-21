@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Plus, Truck, Pencil, Trash2, Loader2 } from "lucide-react"
+import { ImportarProveedoresDialog } from "./importar-proveedores-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -161,10 +162,13 @@ export default function ProveedoresConfigPage() {
           <h1 className="text-xl md:text-2xl font-bold text-foreground">Configuracion de Proveedores</h1>
           <p className="text-sm md:text-base text-muted-foreground">Gestiona el catalogo de proveedores</p>
         </div>
-        <Button onClick={openNewDialog} size="sm" className="w-full sm:w-auto">
-          <Plus className="h-4 w-4 mr-1" />
-          Nuevo Proveedor
-        </Button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <ImportarProveedoresDialog onImported={loadProveedores} />
+          <Button onClick={openNewDialog} size="sm" className="w-full sm:w-auto">
+            <Plus className="h-4 w-4 mr-1" />
+            Nuevo Proveedor
+          </Button>
+        </div>
       </div>
 
       <Card>

@@ -46,7 +46,7 @@ export function ImportarVentasDialog({ onImported }: { onImported: () => void })
   const [clienteId, setClienteId] = React.useState("")
   const [almacenId, setAlmacenId] = React.useState("")
   const [localizacionId, setLocalizacionId] = React.useState("")
-  const [metodo, setMetodo] = React.useState<"Efectivo" | "Banco">("Banco")
+  const [metodo, setMetodo] = React.useState<"Efectivo" | "Banco" | "Credito">("Banco")
   const [cuentaId, setCuentaId] = React.useState("")
   const [aplicaIsv, setAplicaIsv] = React.useState(false)
 
@@ -128,7 +128,9 @@ export function ImportarVentasDialog({ onImported }: { onImported: () => void })
   const nuevas = preview ? preview.facturas - preview.duplicadas.length : 0
   const listoParaImportar =
     !!clienteId && !!almacenId && !!localizacionId &&
-    (metodo === "Efectivo" ? !!cajaSesion : !!cuentaId) &&
+    // El método por defecto exige su recurso (caja/cuenta) solo si aplica; el
+    // servicio revalida por factura (una fila puede traer su propio método).
+    (metodo === "Efectivo" ? !!cajaSesion : metodo === "Banco" ? !!cuentaId : true) &&
     filas.length > 0 && !!preview && preview.productosNoEncontrados.length === 0
 
   async function ejecutar() {
@@ -140,7 +142,9 @@ export function ImportarVentasDialog({ onImported }: { onImported: () => void })
         almacen_id: Number(almacenId),
         localizacion_id: Number(localizacionId),
         metodo,
-        cuenta_id: metodo === "Banco" ? Number(cuentaId) : null,
+        // La cuenta se pasa si hay una elegida: la usan las facturas con método
+        // Banco (sea el default global o el de su columna en el Excel).
+        cuenta_id: cuentaId ? Number(cuentaId) : null,
         aplica_isv: aplicaIsv,
       })
       if (res.error || !res.data) {
@@ -248,20 +252,24 @@ export function ImportarVentasDialog({ onImported }: { onImported: () => void })
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                <Label>Método de pago</Label>
-                <Select value={metodo} onValueChange={(v) => setMetodo(v as "Efectivo" | "Banco")}>
+                <Label>Método de pago por defecto</Label>
+                <Select value={metodo} onValueChange={(v) => setMetodo(v as "Efectivo" | "Banco" | "Credito")}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Banco">Banco / Tarjeta</SelectItem>
                     <SelectItem value="Efectivo" disabled={!cajaSesion}>
                       Efectivo{!cajaSesion ? " (caja cerrada)" : ""}
                     </SelectItem>
+                    <SelectItem value="Credito">Crédito (cuenta por cobrar)</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Se usa cuando la fila del Excel no trae la columna «Metodo de Pago». Cada factura puede indicar el suyo (Efectivo, Banco o Credito).
+                </p>
               </div>
-              {metodo === "Banco" && (
+              {(metodo === "Banco" || cuentas.length > 0) && (
                 <div className="grid gap-1.5">
-                  <Label>Cuenta de destino</Label>
+                  <Label>Cuenta para ventas con Banco</Label>
                   <Select value={cuentaId} onValueChange={setCuentaId}>
                     <SelectTrigger><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
                     <SelectContent>
