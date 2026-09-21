@@ -42,6 +42,7 @@ import {
 import { useTenant } from "@/lib/hooks/use-tenant"
 import { useAuth } from "@/lib/contexts/auth-context"
 import { getAlertaCumple } from "@/lib/utils/cumpleanos"
+import { formatCurrency } from "@/lib/utils/format"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
@@ -292,6 +293,9 @@ export default function ClientesConfigPage() {
                             {cliente.fecha_nacimiento && (
                               <span>Nac: {formatBirthDate(cliente.fecha_nacimiento)}</span>
                             )}
+                            {cliente.limite_credito != null && cliente.limite_credito > 0 && (
+                              <span>Límite: {formatCurrency(cliente.limite_credito)}</span>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-1 ml-2">
@@ -323,6 +327,7 @@ export default function ClientesConfigPage() {
                     <TableHead>Telefono</TableHead>
                     <TableHead>Fecha Nacimiento</TableHead>
                     <TableHead>Direccion</TableHead>
+                    <TableHead className="text-right">Límite Crédito</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead className="w-24"></TableHead>
                   </TableRow>
@@ -349,6 +354,11 @@ export default function ClientesConfigPage() {
                             : "-"}
                         </TableCell>
                         <TableCell>{cliente.direccion || "-"}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {cliente.limite_credito && cliente.limite_credito > 0
+                            ? formatCurrency(cliente.limite_credito)
+                            : <span className="text-stone-400">Sin límite</span>}
+                        </TableCell>
                         <TableCell>
                           {inactivo ? (
                             <Badge variant="outline" className="border-stone-300 bg-stone-100 text-stone-500">Inactivo</Badge>

@@ -65,7 +65,7 @@ import {
 } from "@/lib/services/caja-chica"
 import { useCajaSesion } from "@/lib/hooks/use-caja-sesion"
 import { getCuentas, type CuentaConfig } from "@/lib/services/cuentas"
-import { getHondurasTodayISODate } from "@/lib/utils/honduras-time"
+import { getHondurasTodayISODate, getHondurasYesterdayISODate } from "@/lib/utils/honduras-time"
 import { ConteoEfectivo, conteoTotal } from "./conteo-efectivo"
 
 const ALERTA_SALDO = 5000
@@ -399,6 +399,15 @@ export default function CajaChicaPage() {
   }
 
   async function handleCierre() {
+    // Solo se permite retroceder UN día (ayer). Nada más antiguo.
+    if (cierreFecha < getHondurasYesterdayISODate()) {
+      toast({
+        title: "Fecha no permitida",
+        description: "El cierre solo puede fecharse hoy o ayer.",
+        variant: "destructive",
+      })
+      return
+    }
     // Cierre re-fechado (dia anterior): SOLO se permite con una caja abierta.
     // `sesion` proviene de getSesionAbierta (ya filtra estado "Abierta"), asi
     // que si no hay sesion abierta, no se puede cuadrar una fecha pasada.
@@ -1261,6 +1270,7 @@ export default function CajaChicaPage() {
                 id="cierre-fecha"
                 type="date"
                 value={cierreFecha}
+                min={getHondurasYesterdayISODate()}
                 max={getHondurasTodayISODate()}
                 onChange={(e) =>
                   setCierreFecha(e.target.value || getHondurasTodayISODate())

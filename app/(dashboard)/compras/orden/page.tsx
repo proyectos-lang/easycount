@@ -12,7 +12,6 @@ import {
   Package,
   Eye,
   ChevronsUpDown,
-  Check,
   Download,
   ArrowLeft
 } from "lucide-react"
@@ -580,21 +579,19 @@ export default function OrdenCompraPage() {
                     <CommandList>
                       <CommandEmpty>No se encontraron productos.</CommandEmpty>
                       <CommandGroup heading="Productos disponibles">
-                        {productos.map((p) => {
-                          const yaAgregado = detalles.some(d => d.producto_id === p.id)
-                          return (
+                        {/* Se OCULTAN los ya agregados (en vez de dejarlos como
+                            items deshabilitados): así el resaltado de cmdk queda
+                            siempre en el primer resultado de arriba y al dar Enter
+                            no salta al fondo de la lista. */}
+                        {productos.filter((p) => !detalles.some(d => d.producto_id === p.id)).map((p) => (
                             <CommandItem
                               key={p.id}
                               value={`${p.nombre} ${p.codigo_barras}`}
                               onSelect={() => handleAddProduct(p)}
-                              disabled={yaAgregado}
                               className="flex items-center justify-between gap-2"
                             >
                               <div className="flex items-center gap-2 min-w-0">
-                                {yaAgregado
-                                  ? <Check className="h-4 w-4 shrink-0 text-primary" />
-                                  : <span className="h-4 w-4 shrink-0" />
-                                }
+                                <span className="h-4 w-4 shrink-0" />
                                 <div className="min-w-0">
                                   <p className="truncate font-medium text-sm">{p.nombre}</p>
                                   {p.codigo_barras && (
@@ -606,8 +603,7 @@ export default function OrdenCompraPage() {
                                 {formatCurrency(p.costo_promedio || 0)}
                               </span>
                             </CommandItem>
-                          )
-                        })}
+                        ))}
                       </CommandGroup>
                     </CommandList>
                   </Command>

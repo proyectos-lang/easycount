@@ -539,16 +539,23 @@ export async function getHistoricoSesiones(
     return { data: [], error: SESION_INVALIDA_ERROR }
   }
 
-  // Intento principal: lee la vista (con totales agregados).
+  // Intento principal: lee la vista (con totales agregados). La vista expone la
+  // apertura como columna `fecha` (NO `fecha_apertura`): ordenar por el nombre
+  // equivocado daba 42703 y caia al fallback -> Ingresos/Egresos en 0. Ordenamos
+  // por `fecha` y mapeamos `fecha` -> `fecha_apertura` para la UI.
   const { data, error } = await supabase
     .from("vista_historico_caja_chica")
     .select("*")
     .eq("razon_social_id", stamp.razon_social_id)
-    .order("fecha_apertura", { ascending: false })
+    .order("fecha", { ascending: false })
     .limit(limit)
 
   if (!error) {
-    return { data: (data as CajaSesionHistorico[]) || [], error: null }
+    const rows = ((data || []) as Array<Record<string, unknown>>).map((r) => ({
+      ...(r as unknown as CajaSesionHistorico),
+      fecha_apertura: (r.fecha_apertura ?? r.fecha ?? "") as string,
+    }))
+    return { data: rows as CajaSesionHistorico[], error: null }
   }
 
   // Si la base de datos aun no tiene la vista 016, degradamos a un

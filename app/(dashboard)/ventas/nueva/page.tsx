@@ -1842,15 +1842,30 @@ export default function NuevaVentaPage() {
                           (() => {
                             const recibido = Number(efectivoRecibido[linea._id]) || 0
                             const vuelto = +(recibido - monto).toFixed(2)
+                            const falta = vuelto < 0
                             return (
-                              <p
-                                className={`text-xs flex justify-between font-semibold ${
-                                  vuelto < 0 ? "text-destructive" : "text-emerald-600"
+                              <div
+                                className={`mt-1 flex items-center justify-between rounded-lg border px-3 py-2 ${
+                                  falta
+                                    ? "border-destructive/30 bg-destructive/5"
+                                    : "border-emerald-300 bg-emerald-50"
                                 }`}
                               >
-                                <span>{vuelto < 0 ? "Falta" : "Vuelto"}</span>
-                                <span>L {Math.abs(vuelto).toFixed(2)}</span>
-                              </p>
+                                <span
+                                  className={`text-sm font-semibold ${
+                                    falta ? "text-destructive" : "text-emerald-700"
+                                  }`}
+                                >
+                                  {falta ? "Falta" : "Vuelto"}
+                                </span>
+                                <span
+                                  className={`text-2xl font-extrabold tabular-nums ${
+                                    falta ? "text-destructive" : "text-emerald-700"
+                                  }`}
+                                >
+                                  L {Math.abs(vuelto).toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              </div>
                             )
                           })()}
                       </div>

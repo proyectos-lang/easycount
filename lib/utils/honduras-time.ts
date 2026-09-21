@@ -109,6 +109,19 @@ export function getHondurasTodayISODate(): string {
 }
 
 /**
+ * Fecha de AYER en Honduras (YYYY-MM-DD). Útil como `min` en inputs de fecha que
+ * solo permiten retroceder un día (p.ej. cierre de caja).
+ */
+export function getHondurasYesterdayISODate(): string {
+  const [y, m, d] = getHondurasTodayISODate().split("-").map((n) => parseInt(n, 10))
+  const ayer = new Date(Date.UTC(y, m - 1, d - 1))
+  const yy = ayer.getUTCFullYear()
+  const mm = String(ayer.getUTCMonth() + 1).padStart(2, "0")
+  const dd = String(ayer.getUTCDate()).padStart(2, "0")
+  return `${yy}-${mm}-${dd}`
+}
+
+/**
  * Timestamp HN-as-UTC que representa un MOMENTO dentro del dia operativo
  * `fechaISO` (YYYY-MM-DD).
  *

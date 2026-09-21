@@ -852,9 +852,8 @@ export default function ProductosConfigPage() {
     if (!formData.precio_venta_sugerido || formData.precio_venta_sugerido <= 0) {
       errors.precio_venta_sugerido = "El precio de venta debe ser mayor a 0"
     }
-    if (!formData.marca_id) {
-      errors.marca_id = "La marca es requerida"
-    }
+    // La marca NO es obligatoria: si no se elige, se usa "Genérico" (se crea al
+    // vuelo en guardarUnProducto). Ver ensureMarcaGenerica.
     if (!formData.categoria_id) {
       errors.categoria_id = "La categoria es requerida"
     }
@@ -891,10 +890,26 @@ export default function ProductosConfigPage() {
    * o null. `codigoBarras` puede diferir del formulario cuando se crean varias
    * tallas (cada una necesita su propio codigo unico).
    */
+  /**
+   * Devuelve el id de la marca "Genérico" (la busca en el catálogo; si no
+   * existe, la crea). Se usa cuando el usuario no elige marca (ya no es
+   * obligatoria). Devuelve null solo si no se pudo crear (no bloquea el guardado).
+   */
+  async function ensureMarcaGenerica(): Promise<number | null> {
+    const existente = marcas.find((m) => (m.nombre || "").trim().toLowerCase() === "genérico")
+      || marcas.find((m) => (m.nombre || "").trim().toLowerCase() === "generico")
+    if (existente?.id != null) return existente.id
+    const { data, error } = await createMarca("Genérico")
+    if (error || !data?.id) return null
+    setMarcas((prev) => [...prev, data])
+    return data.id
+  }
+
   async function guardarUnProducto(
     talla: string | null,
     codigoBarras: string,
     cantidadOverride?: number,
+    marcaIdOverride?: number | null,
   ): Promise<{ error: string | null; id: number | null }> {
     const productoData: Producto = {
       ...editingProducto,
@@ -903,7 +918,8 @@ export default function ProductosConfigPage() {
       precio_venta_sugerido: Number(formData.precio_venta_sugerido) || 0,
       costo_promedio: Number(formData.costo_promedio) || 0,
       foto_url: formData.foto_url || "",
-      marca_id: formData.marca_id ?? null,
+      // Marca: la elegida, o la resuelta a "Genérico" si no se eligió.
+      marca_id: formData.marca_id ?? marcaIdOverride ?? null,
       categoria_id: formData.categoria_id ?? null,
       // Subcategoria es opcional. Si no hay categoria, no puede haber subcat.
       subcategoria_id: formData.categoria_id
@@ -951,6 +967,9 @@ export default function ProductosConfigPage() {
 
     setSaving(true)
 
+    // Si no se eligió marca, resolver "Genérico" una sola vez (crear si falta).
+    const marcaFallback = formData.marca_id == null ? await ensureMarcaGenerica() : null
+
     // Camino "por tallas": crea un producto independiente por cada linea de
     // talla, con la cantidad inicial propia de esa talla. Solo al crear. Precio
     // y costo son unicos (del formulario); cada talla lleva su propio codigo
@@ -965,7 +984,7 @@ export default function ProductosConfigPage() {
       const idsCreados: number[] = []
       for (const { talla, cantidad } of lineasValidas) {
         const codigoTalla = `${baseCodigo}-${talla}`
-        const { error: err, id } = await guardarUnProducto(talla, codigoTalla, cantidad)
+        const { error: err, id } = await guardarUnProducto(talla, codigoTalla, cantidad, marcaFallback)
         if (err) errores.push(`${talla}: ${err}`)
         else creados++
         if (id) idsCreados.push(id)
@@ -1006,6 +1025,8 @@ export default function ProductosConfigPage() {
     const { error: err, id: prodId } = await guardarUnProducto(
       (formData.talla ?? "").toString().trim() || null,
       formData.codigo_barras!,
+      undefined,
+      marcaFallback,
     )
     // Marca "producto fabricado" (tabla mapa). Solo si Producción está activa.
     const idParaFabricado = prodId ?? editingProducto?.id ?? null
@@ -1690,7 +1711,7 @@ export default function ProductosConfigPage() {
             {/* Marca */}
             <div className="grid gap-2">
               <Label htmlFor="marca">
-                Marca <span className="text-destructive">*</span>
+                Marca <span className="text-xs font-normal text-muted-foreground">(opcional — si la dejas vacía queda «Genérico»)</span>
               </Label>
               <div className="flex gap-2">
                 <Select

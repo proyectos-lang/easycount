@@ -172,7 +172,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
         titulo: "Crear un producto (con inventario inicial opcional)",
         pasos: [
           "Abre Configuración → Productos y presiona Nuevo Producto.",
-          "Nombre, código de barras (puedes escanearlo), marca y categoría.",
+          "Nombre, código de barras (puedes escanearlo) y categoría. La marca es OPCIONAL: si la dejas vacía, el producto queda con la marca «Genérico».",
           "Define el precio de venta sugerido y agrega la foto: súbela desde tu dispositivo, o usa 'Buscar en Google Imágenes' (copia la dirección de la imagen y pégala) o pega directamente una URL, y presiona 'Usar' (se descarga a tu almacenamiento).",
           "En 'Inventario inicial (opcional)' indica la cantidad y el costo unitario con que arranca; elige almacén y localización.",
           "Guarda: se crea el producto y, si pusiste cantidad, se genera el ingreso al inventario automáticamente. Déjalo en 0 si aún no tienes existencias (las cargas luego por Compras o Ingreso Manual).",
