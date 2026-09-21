@@ -139,10 +139,11 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
       "Al crear un material puedes ingresar su CARGA INICIAL: stock inicial y costo promedio. Si pones stock, eliges almacén y localización y se registra un movimiento 'Carga Inicial' en el kardex del material.",
       "Carga masiva por Excel: descarga la plantilla (Nombre, Código, Unidad, Stock Inicial, Costo Promedio), llénala y súbela para crear muchos materiales de una vez (con su stock inicial).",
       "Muestra el costo promedio y el stock de cada material, que luego se actualizan con las compras de material.",
+      "Al EDITAR un material puedes ajustar su costo promedio a mano: escribes el nuevo valor y se registra un movimiento 'Ajuste de Costo' en el kardex del material (deja rastro; no mueve stock).",
       "Es un catálogo SEPARADO de los productos que vendes: la materia prima no aparece en el punto de venta.",
     ],
     queNoHace: [
-      "Al EDITAR un material no se cambia el stock ni el costo a mano: eso se mueve con la carga inicial (al crear), las compras o el consumo en producción.",
+      "Al EDITAR un material NO se cambia el stock a mano: eso se mueve con la carga inicial (al crear), las compras o el consumo en producción. El costo promedio SÍ es editable (ajuste manual).",
       "No se vende: los materiales no aparecen en Nueva Venta ni en el catálogo de productos.",
     ],
     operaciones: [
@@ -153,6 +154,14 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
           "Escribe el nombre (ej. 'Tela algodón'), un código opcional y la unidad de medida.",
           "Si ya tienes existencias, en 'Carga inicial' pon el stock inicial y el costo promedio, y elige almacén y localización.",
           "Guarda. Si dejas el stock en 0, el material se crea sin existencias (las cargas después con una compra).",
+        ],
+      },
+      {
+        titulo: "Ajustar el costo promedio de un material",
+        pasos: [
+          "En Producción → Materiales, presiona el ícono de editar del material.",
+          "Cambia el campo 'Costo promedio' al valor correcto.",
+          "Guarda: el nuevo costo queda vigente y se registra un movimiento 'Ajuste de Costo' en el kardex (no cambia el stock).",
         ],
       },
       {
@@ -182,7 +191,7 @@ export const TUTORIALES_PRODUCCION: TutorialModulo[] = [
           "Solo cuando hay materiales con Stock Inicial mayor a 0: la carga inicial debe entrar a una ubicación para que el kardex y el stock por localización queden bien. Los materiales con stock 0 se crean sin pedir ubicación.",
       },
     ],
-    keywords: ["material", "materia prima", "insumo", "produccion", "fabricacion", "unidad de medida", "kg", "metro", "carga inicial", "stock inicial", "costo promedio", "importar", "excel", "plantilla", "carga masiva"],
+    keywords: ["material", "materia prima", "insumo", "produccion", "fabricacion", "unidad de medida", "kg", "metro", "carga inicial", "stock inicial", "costo promedio", "editar costo", "ajuste de costo", "ajustar costo", "importar", "excel", "plantilla", "carga masiva"],
   },
   {
     modulo: "Compra de Materiales",

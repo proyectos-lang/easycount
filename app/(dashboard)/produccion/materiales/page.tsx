@@ -44,6 +44,8 @@ export default function MaterialesPage() {
   const [form, setForm] = React.useState({
     nombre: "", codigo: "", unidad_medida: "unidad",
     stock_inicial: "", costo_inicial: "", almacen_id: "", localizacion_id: "",
+    // Costo promedio: solo editable al EDITAR (ajuste manual con rastro en kardex).
+    costo_promedio: "",
   })
 
   // Almacenes/localizaciones para la carga inicial y la importación.
@@ -92,13 +94,13 @@ export default function MaterialesPage() {
 
   function abrirNuevo() {
     setEditando(null)
-    setForm({ nombre: "", codigo: "", unidad_medida: "unidad", stock_inicial: "", costo_inicial: "", almacen_id: "", localizacion_id: "" })
+    setForm({ nombre: "", codigo: "", unidad_medida: "unidad", stock_inicial: "", costo_inicial: "", almacen_id: "", localizacion_id: "", costo_promedio: "" })
     setDialogOpen(true)
   }
 
   function abrirEditar(m: Material) {
     setEditando(m)
-    setForm({ nombre: m.nombre, codigo: m.codigo || "", unidad_medida: m.unidad_medida, stock_inicial: "", costo_inicial: "", almacen_id: "", localizacion_id: "" })
+    setForm({ nombre: m.nombre, codigo: m.codigo || "", unidad_medida: m.unidad_medida, stock_inicial: "", costo_inicial: "", almacen_id: "", localizacion_id: "", costo_promedio: String(m.costo_promedio ?? 0) })
     setDialogOpen(true)
   }
 
@@ -119,7 +121,13 @@ export default function MaterialesPage() {
     }
     setSaving(true)
     const res = editando?.id
-      ? await updateMaterial(editando.id, { nombre: form.nombre, codigo: form.codigo, unidad_medida: form.unidad_medida })
+      ? await updateMaterial(editando.id, {
+          nombre: form.nombre,
+          codigo: form.codigo,
+          unidad_medida: form.unidad_medida,
+          // Costo promedio editado (ajuste manual con rastro en el kardex).
+          costo_promedio: form.costo_promedio.trim() === "" ? undefined : Number(form.costo_promedio),
+        })
       : await createMaterial({
           nombre: form.nombre,
           codigo: form.codigo,
@@ -280,7 +288,7 @@ export default function MaterialesPage() {
             <DialogTitle>{editando ? "Editar material" : "Nuevo material"}</DialogTitle>
             <DialogDescription>
               {editando
-                ? "El costo y el stock se manejan con las compras/cargas; aquí editas nombre, código y unidad."
+                ? "El stock se maneja con las compras/cargas; aquí editas nombre, código, unidad y el costo promedio (ajuste manual)."
                 : "Define el material y, si quieres, su carga inicial de stock y costo."}
             </DialogDescription>
           </DialogHeader>
@@ -302,6 +310,25 @@ export default function MaterialesPage() {
                 </datalist>
               </div>
             </div>
+
+            {/* Costo promedio: editable SOLO al editar (ajuste manual). */}
+            {editando && (
+              <div className="grid gap-2">
+                <Label htmlFor="mat-costo">Costo promedio</Label>
+                <Input
+                  id="mat-costo"
+                  type="number"
+                  min="0"
+                  step="0.0001"
+                  value={form.costo_promedio}
+                  onChange={(e) => setForm({ ...form, costo_promedio: e.target.value })}
+                  placeholder="0.00"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Ajuste manual del costo. Se registra un movimiento «Ajuste de Costo» en el kardex (no mueve stock).
+                </p>
+              </div>
+            )}
 
             {/* Carga inicial: SOLO al crear (editar no toca stock). */}
             {!editando && (

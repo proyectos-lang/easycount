@@ -127,6 +127,41 @@ export async function matAplicarEntrada(
   return { error: updErr ? updErr.message : null }
 }
 
+/**
+ * Fija (SET absoluto) el costo promedio de un material, ajuste manual. NO mueve
+ * stock: escribe un movimiento 'Ajuste de Costo' (cantidad 0) en el kardex para
+ * dejar rastro (quién/cuándo/nuevo costo) y actualiza `costo_promedio`. Mismo
+ * criterio que `fijarCostoPromedio` de productos, pero contra `materiales`.
+ */
+export async function matFijarCosto(
+  supabase: SupabaseClient,
+  materialId: number,
+  nuevoCosto: number,
+  stamp: TenantStamp,
+): Promise<{ error: string | null }> {
+  const costo = Math.max(0, Number(nuevoCosto) || 0)
+  // Rastro en el kardex (cantidad 0 = no altera stock). Best-effort: si la
+  // tabla de movimientos no existe, igual seguimos con el SET del costo.
+  const { error: movErr } = await supabase.from("materiales_movimientos").insert({
+    material_id: materialId,
+    almacen_id: null,
+    localizacion_id: null,
+    tipo_movimiento: "Ajuste de Costo",
+    cantidad: 0,
+    costo_unitario: costo,
+    referencia_id: null,
+    fecha: getHondurasNowISO(),
+    ...stamp,
+  })
+  if (movErr && !isMissingTable(movErr)) return { error: movErr.message }
+
+  const { error: updErr } = await supabase
+    .from("materiales")
+    .update({ costo_promedio: costo, updated_at: new Date().toISOString() })
+    .eq("id", materialId)
+  return { error: updErr ? updErr.message : null }
+}
+
 // ==================== CATÁLOGO ====================
 
 export async function getMateriales(
@@ -248,7 +283,15 @@ async function cargarStockInicialMaterial(
 
 export async function updateMaterial(
   id: number,
-  input: { nombre: string; codigo?: string | null; unidad_medida: string; activo?: boolean },
+  input: {
+    nombre: string
+    codigo?: string | null
+    unidad_medida: string
+    activo?: boolean
+    /** Nuevo costo promedio (ajuste manual). Si viene y difiere del actual, se
+     *  aplica con `matFijarCosto` (deja rastro 'Ajuste de Costo' en el kardex). */
+    costo_promedio?: number
+  },
 ): Promise<{ error: string | null }> {
   const supabase = createClient()
   if (!supabase) return { error: "Cliente no disponible" }
@@ -263,6 +306,24 @@ export async function updateMaterial(
     })
     .eq("id", id)
   if (error) return { error: error.message }
+
+  // Ajuste de costo promedio (opcional): solo si viene y cambia el valor actual.
+  if (input.costo_promedio != null) {
+    const nuevo = Math.max(0, Number(input.costo_promedio) || 0)
+    const { data: actual } = await supabase
+      .from("materiales")
+      .select("costo_promedio")
+      .eq("id", id)
+      .single()
+    const costoActual = Number(actual?.costo_promedio || 0)
+    if (Math.abs(costoActual - nuevo) > 0.0001) {
+      const stamp = await getTenantStamp(supabase)
+      if (!isValidStamp(stamp)) return { error: SESION_INVALIDA_ERROR }
+      const fij = await matFijarCosto(supabase, id, nuevo, stamp)
+      if (fij.error) return { error: fij.error }
+    }
+  }
+
   return { error: null }
 }
 
