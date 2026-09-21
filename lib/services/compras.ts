@@ -1,7 +1,8 @@
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from '@/lib/services/tenant-stamp'
 import { aplicarEntradaCompra } from '@/lib/services/stock'
-import { getHondurasNowISO } from '@/lib/utils/honduras-time'
+import { getHondurasNowISO, getHondurasTodayISODate } from '@/lib/utils/honduras-time'
+import { createGasto, getConceptosGasto, createConceptoGasto } from '@/lib/services/gastos'
 
 // ==================== INTERFACES ====================
 
@@ -310,7 +311,21 @@ interface RecepcionData {
     producto_id: number
     cantidad_recibida: number
     costo_final_local: number
+    /** Nuevo precio de venta del producto (opcional). Si > 0, actualiza
+     *  `productos.precio_venta_sugerido` al recibir. */
+    precio_venta?: number | null
   }[]
+  /**
+   * Pago de la recepción (opcional). Registra un gasto con el total recibido:
+   *   - Efectivo / Banco: gasto pagado (sale de caja chica o de la cuenta).
+   *   - Credito (cuenta por pagar): gasto pendiente al proveedor.
+   * Si no se envía, la recepción NO toca tesorería (comportamiento anterior).
+   */
+  pago?: {
+    metodo: 'Efectivo' | 'Banco' | 'Credito'
+    cuenta_id?: number | null
+    proveedor_id?: number | null
+  } | null
 }
 
 export async function procesarRecepcion(data: RecepcionData): Promise<{ success: boolean; error: string | null }> {
@@ -452,6 +467,17 @@ export async function procesarRecepcion(data: RecepcionData): Promise<{ success:
       )
       if (entrada.error) return { success: false, error: entrada.error }
 
+      // Precio de venta: si se envió uno nuevo (> 0), actualiza el precio de
+      // lista del producto (acotado por tenant). No toca costo_promedio.
+      if (item.precio_venta != null && item.precio_venta > 0) {
+        const { error: precioErr } = await supabase
+          .from('productos')
+          .update({ precio_venta_sugerido: item.precio_venta, updated_at: new Date().toISOString() })
+          .eq('id', item.producto_id)
+          .eq('razon_social_id', stamp.razon_social_id)
+        if (precioErr) console.warn('[procesarRecepcion] no se actualizo el precio de venta:', precioErr.message)
+      }
+
       // Insert inventory transaction (sello completo: empresa + usuario
       // que procesa la recepcion, que puede diferir de quien creo la orden)
       const { error: transError } = await supabase
@@ -472,11 +498,56 @@ export async function procesarRecepcion(data: RecepcionData): Promise<{ success:
       if (transError) return { success: false, error: transError.message }
     }
 
+    // 3. Pago de la recepción (opcional): registra un gasto con el total. Al
+    //    reutilizar createGasto, "Credito" = gasto pendiente (cuenta por pagar);
+    //    Efectivo/Banco = gasto pagado (sale de caja o de la cuenta elegida).
+    if (data.pago) {
+      const conceptoId = await ensureConceptoCompra(supabase, stamp.razon_social_id!)
+      if (conceptoId == null) {
+        // La mercancía ya entró al inventario; no bloqueamos por el pago.
+        return { success: true, error: 'Recepción hecha, pero no se pudo registrar el pago (concepto). Regístralo manualmente en Gastos.' }
+      }
+      const esCredito = data.pago.metodo === 'Credito'
+      const { error: gastoErr } = await createGasto({
+        concepto_id: conceptoId,
+        fecha_gasto: getHondurasTodayISODate(),
+        monto: +totalCompraLocal.toFixed(2),
+        // metodo_pago es un rótulo informativo del gasto (no la vía de pago).
+        metodo_pago: data.pago.metodo === 'Banco' ? 'Transferencia' : 'Efectivo',
+        descripcion: `Recepción de compra #${data.compraId}`,
+        proveedor_id: data.pago.proveedor_id ?? null,
+        pagar_ahora: !esCredito,
+        pago_metodo: data.pago.metodo === 'Banco' ? 'Banco' : 'Efectivo',
+        pago_cuenta_id: data.pago.metodo === 'Banco' ? (data.pago.cuenta_id ?? null) : null,
+      })
+      if (gastoErr) {
+        return { success: true, error: `Recepción hecha, pero el pago falló: ${gastoErr}. Regístralo en Gastos.` }
+      }
+    }
+
     return { success: true, error: null }
   } catch (err) {
     console.error('[Supabase] Error procesando recepcion:', err)
     return { success: false, error: 'Error de conexion' }
   }
+}
+
+/**
+ * Devuelve el id del concepto de gasto "Compra de mercadería" del tenant (lo
+ * busca; si no existe, lo crea). Null si no se pudo resolver.
+ */
+async function ensureConceptoCompra(
+  supabase: NonNullable<ReturnType<typeof createClient>>,
+  _razonSocialId: number,
+): Promise<number | null> {
+  const { data: conceptos } = await getConceptosGasto()
+  const existente = (conceptos || []).find(
+    (c) => (c.nombre || '').trim().toLowerCase() === 'compra de mercadería'
+      || (c.nombre || '').trim().toLowerCase() === 'compra de mercaderia',
+  )
+  if (existente?.id != null) return existente.id
+  const { data: creado } = await createConceptoGasto({ nombre: 'Compra de mercadería', categoria_macro: 'Suministros' })
+  return creado?.id ?? null
 }
 
 // ==================== HELPERS: PRORRATEO ====================

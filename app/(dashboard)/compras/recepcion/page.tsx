@@ -51,10 +51,11 @@ import {
   getCompraById
 } from "@/lib/services/compras"
 import { DesgloseProrrateo } from "@/components/recepcion/desglose-prorrateo"
-import { type Proveedor, getProveedores } from "@/lib/services/catalogos"
+import { type Proveedor, getProveedores, type Producto, getProductos } from "@/lib/services/catalogos"
 import { getRazonSocialForPdf } from "@/lib/services/ventas"
 import { hoyISO } from "@/lib/utils/fecha"
 import { type Almacen, type Localizacion, getAlmacenes, getLocalizaciones } from "@/lib/services/catalogos"
+import { type CuentaConfig, getCuentas } from "@/lib/services/cuentas"
 
 export default function RecepcionPage() {
   const [comprasPendientes, setComprasPendientes] = useState<CompraEncabezado[]>([])
@@ -89,23 +90,39 @@ export default function RecepcionPage() {
   }[]>([])
   // Desglose detallado del prorrateo (para mostrarlo explicitamente).
   const [prorrateo, setProrrateo] = useState<ProrrateoResultado | null>(null)
-  
+
+  // Productos por id (para costo/precio ANTERIOR y precio de venta editable).
+  const [productosById, setProductosById] = useState<Map<number, Producto>>(new Map())
+  // Overrides editables por detalle_id: cantidad, costo final y precio de venta.
+  const [overrides, setOverrides] = useState<Record<number, { cantidad?: number; costo?: number; precio?: number }>>({})
+
+  // Pago de la recepción.
+  const [cuentas, setCuentas] = useState<CuentaConfig[]>([])
+  const [pagoMetodo, setPagoMetodo] = useState<'Efectivo' | 'Banco' | 'Credito'>('Credito')
+  const [pagoCuentaId, setPagoCuentaId] = useState<number | null>(null)
+
   const { toast } = useToast()
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    const [comprasRes, almRes, provRes] = await Promise.all([
+    const [comprasRes, almRes, provRes, prodRes, cuentasRes] = await Promise.all([
       getCompras('Pendiente'),
       getAlmacenes(),
-      getProveedores()
+      getProveedores(),
+      getProductos(),
+      getCuentas(),
     ])
-    
+
     if (comprasRes.error) {
       toast({ title: "Error", description: comprasRes.error, variant: "destructive" })
     }
     setComprasPendientes(comprasRes.data)
     setAlmacenes(almRes.data)
     setProveedores(provRes.data)
+    const mapa = new Map<number, Producto>()
+    for (const p of prodRes.data || []) if (p.id != null) mapa.set(p.id, p)
+    setProductosById(mapa)
+    setCuentas(cuentasRes.data || [])
     setLoading(false)
   }, [toast])
 
@@ -164,7 +181,10 @@ export default function RecepcionPage() {
       almacen_id: 0,
       localizacion_id: 0
     })
-    
+    setOverrides({})
+    setPagoMetodo('Credito')
+    setPagoCuentaId(null)
+
     const { data, error } = await getDetallesCompra(compra.id!)
     if (error) {
       toast({ title: "Error", description: error, variant: "destructive" })
@@ -186,8 +206,13 @@ export default function RecepcionPage() {
       return
     }
 
+    if (pagoMetodo === 'Banco' && !pagoCuentaId) {
+      toast({ title: "Falta la cuenta", description: "Elige la cuenta bancaria del pago.", variant: "destructive" })
+      return
+    }
+
     setProcessing(true)
-    
+
     const recepcionData = {
       compraId: selectedCompra.id!,
       costos_importacion: formData.costos_importacion,
@@ -196,12 +221,21 @@ export default function RecepcionPage() {
       tasa_cambio: formData.tasa_cambio,
       almacen_id: formData.almacen_id,
       localizacion_id: formData.localizacion_id,
-      detalles: costosCalculados.map(c => ({
-        detalle_id: c.detalle_id,
-        producto_id: c.producto_id,
-        cantidad_recibida: c.cantidad,
-        costo_final_local: c.costo_final_local
-      }))
+      detalles: costosCalculados.map(c => {
+        const ov = overrides[c.detalle_id] || {}
+        return {
+          detalle_id: c.detalle_id,
+          producto_id: c.producto_id,
+          cantidad_recibida: ov.cantidad != null ? ov.cantidad : c.cantidad,
+          costo_final_local: ov.costo != null ? ov.costo : c.costo_final_local,
+          precio_venta: ov.precio != null && ov.precio > 0 ? ov.precio : null,
+        }
+      }),
+      pago: {
+        metodo: pagoMetodo,
+        cuenta_id: pagoMetodo === 'Banco' ? pagoCuentaId : null,
+        proveedor_id: selectedCompra.proveedor_id ?? null,
+      },
     }
 
     const { success, error } = await procesarRecepcion(recepcionData)
@@ -387,6 +421,27 @@ export default function RecepcionPage() {
     return prefix + value.toLocaleString("es-HN", { minimumFractionDigits: 2 })
   }
 
+  // Valores efectivos por línea (con overrides) + derivados (margen, utilidad,
+  // costo/precio anteriores). costoFinalCalc = prorrateo por defecto.
+  function calcLinea(d: CompraDetalle, idx: number) {
+    const prod = d.producto_id != null ? productosById.get(d.producto_id) : undefined
+    const ov = d.id != null ? overrides[d.id] : undefined
+    const costoDefault = costosCalculados[idx]?.costo_final_local
+      ?? d.costo_unitario_moneda_origen * (selectedCompra?.moneda === "USD" ? formData.tasa_cambio : 1)
+    const cantidad = ov?.cantidad != null ? ov.cantidad : d.cantidad
+    const costo = ov?.costo != null ? ov.costo : +costoDefault.toFixed(4)
+    const precioAnterior = prod?.precio_venta_sugerido ?? 0
+    const precio = ov?.precio != null ? ov.precio : precioAnterior
+    const costoAnterior = prod?.costo_promedio ?? 0
+    const utilidad = +(precio - costo).toFixed(2)
+    const margen = precio > 0 ? +(((precio - costo) / precio) * 100).toFixed(1) : 0
+    return { cantidad, costo, precio, precioAnterior, costoAnterior, utilidad, margen }
+  }
+
+  function setOverride(detalleId: number, patch: { cantidad?: number; costo?: number; precio?: number }) {
+    setOverrides((prev) => ({ ...prev, [detalleId]: { ...prev[detalleId], ...patch } }))
+  }
+
   const formatDate = (date?: string | null) => {
     if (!date) return "—"
     return new Date(date).toLocaleDateString("es-HN", {
@@ -519,28 +574,41 @@ export default function RecepcionPage() {
 
                   {/* Mobile */}
                   <div className="block md:hidden space-y-2">
-                    {detalles.map((d, idx) => (
+                    {detalles.map((d, idx) => {
+                      const lc = calcLinea(d, idx)
+                      return (
                       <div key={d.id} className="border rounded-lg p-3 bg-card text-sm">
                         <p className="font-medium">{d.producto_nombre}</p>
                         <p className="text-xs text-muted-foreground font-mono mb-2">{d.producto_codigo}</p>
                         <div className="grid grid-cols-3 gap-2 text-xs">
                           <div>
                             <p className="text-muted-foreground">Cant.</p>
-                            <p className="font-medium">{d.cantidad}</p>
+                            <Input type="number" min="0" step="1" value={lc.cantidad}
+                              onChange={(e) => d.id != null && setOverride(d.id, { cantidad: parseFloat(e.target.value) || 0 })}
+                              className="h-8" />
                           </div>
                           <div>
-                            <p className="text-muted-foreground">Costo orig.</p>
-                            <p className="font-medium">{formatCurrency(d.costo_unitario_moneda_origen, selectedCompra!.moneda)}</p>
+                            <p className="text-muted-foreground">Costo (LPS)</p>
+                            <Input type="number" min="0" step="0.01" value={lc.costo}
+                              onChange={(e) => d.id != null && setOverride(d.id, { costo: parseFloat(e.target.value) || 0 })}
+                              className="h-8" />
                           </div>
                           <div>
-                            <p className="text-muted-foreground">Costo final</p>
-                            <p className="font-medium text-primary">
-                              {formatCurrency(costosCalculados[idx]?.costo_final_local ?? (d.costo_unitario_moneda_origen * (selectedCompra!.moneda === 'USD' ? formData.tasa_cambio : 1)), 'LPS')}
-                            </p>
+                            <p className="text-muted-foreground">Precio venta</p>
+                            <Input type="number" min="0" step="0.01" value={lc.precio}
+                              onChange={(e) => d.id != null && setOverride(d.id, { precio: parseFloat(e.target.value) || 0 })}
+                              className="h-8" />
                           </div>
                         </div>
+                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                          <span className={lc.margen < 0 ? "text-destructive" : "text-emerald-600"}>Margen: {lc.precio > 0 ? `${lc.margen}%` : "—"}</span>
+                          <span>Utilidad u.: {lc.precio > 0 ? formatCurrency(lc.utilidad, "LPS") : "—"}</span>
+                          <span>Costo ant.: {formatCurrency(lc.costoAnterior, "LPS")}</span>
+                          <span>Precio ant.: {lc.precioAnterior > 0 ? formatCurrency(lc.precioAnterior, "LPS") : "—"}</span>
+                        </div>
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
 
                   {/* Desktop */}
@@ -548,13 +616,19 @@ export default function RecepcionPage() {
                     <TableHeader sticky>
                       <TableRow>
                         <TableHead>Producto</TableHead>
-                        <TableHead className="text-right">Cant.</TableHead>
-                        <TableHead className="text-right">Costo Original</TableHead>
-                        <TableHead className="text-right">Costo Final (LPS)</TableHead>
+                        <TableHead className="text-right w-20">Cant.</TableHead>
+                        <TableHead className="text-right w-28">Costo (LPS)</TableHead>
+                        <TableHead className="text-right w-28">Precio venta</TableHead>
+                        <TableHead className="text-right w-24">Margen</TableHead>
+                        <TableHead className="text-right w-24">Utilidad u.</TableHead>
+                        <TableHead className="text-right w-28">Costo ant.</TableHead>
+                        <TableHead className="text-right w-28">Precio ant.</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {detalles.map((d, idx) => (
+                      {detalles.map((d, idx) => {
+                        const lc = calcLinea(d, idx)
+                        return (
                         <TableRow key={d.id}>
                           <TableCell>
                             <div>
@@ -562,15 +636,41 @@ export default function RecepcionPage() {
                               <p className="text-xs text-muted-foreground">{d.producto_codigo}</p>
                             </div>
                           </TableCell>
-                          <TableCell className="text-right">{d.cantidad}</TableCell>
                           <TableCell className="text-right">
-                            {formatCurrency(d.costo_unitario_moneda_origen, selectedCompra!.moneda)}
+                            <Input
+                              type="number" min="0" step="1"
+                              value={lc.cantidad}
+                              onChange={(e) => d.id != null && setOverride(d.id, { cantidad: parseFloat(e.target.value) || 0 })}
+                              className="h-8 w-16 text-right ml-auto"
+                            />
                           </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatCurrency(costosCalculados[idx]?.costo_final_local ?? (d.costo_unitario_moneda_origen * (selectedCompra!.moneda === 'USD' ? formData.tasa_cambio : 1)), 'LPS')}
+                          <TableCell className="text-right">
+                            <Input
+                              type="number" min="0" step="0.01"
+                              value={lc.costo}
+                              onChange={(e) => d.id != null && setOverride(d.id, { costo: parseFloat(e.target.value) || 0 })}
+                              className="h-8 w-24 text-right ml-auto"
+                            />
                           </TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              type="number" min="0" step="0.01"
+                              value={lc.precio}
+                              onChange={(e) => d.id != null && setOverride(d.id, { precio: parseFloat(e.target.value) || 0 })}
+                              className="h-8 w-24 text-right ml-auto"
+                            />
+                          </TableCell>
+                          <TableCell className={`text-right font-medium ${lc.margen < 0 ? "text-destructive" : lc.margen > 0 ? "text-emerald-600" : ""}`}>
+                            {lc.precio > 0 ? `${lc.margen}%` : "—"}
+                          </TableCell>
+                          <TableCell className={`text-right ${lc.utilidad < 0 ? "text-destructive" : ""}`}>
+                            {lc.precio > 0 ? formatCurrency(lc.utilidad, "LPS") : "—"}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">{formatCurrency(lc.costoAnterior, "LPS")}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">{lc.precioAnterior > 0 ? formatCurrency(lc.precioAnterior, "LPS") : "—"}</TableCell>
                         </TableRow>
-                      ))}
+                        )
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -681,6 +781,45 @@ export default function RecepcionPage() {
                       </Select>
                     </div>
                   </div>
+                </div>
+
+                <Separator />
+
+                {/* Pago de la recepción */}
+                <div>
+                  <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <DollarSign className="h-4 w-4" />
+                    Pago
+                  </h4>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-2">
+                      <Label className="text-xs">Cómo se paga</Label>
+                      <Select value={pagoMetodo} onValueChange={(v) => setPagoMetodo(v as 'Efectivo' | 'Banco' | 'Credito')}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Credito">Cuenta por pagar (queda pendiente)</SelectItem>
+                          <SelectItem value="Efectivo">Efectivo (sale de caja chica)</SelectItem>
+                          <SelectItem value="Banco">Banco (sale de una cuenta)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {pagoMetodo === 'Banco' && (
+                      <div className="grid gap-2">
+                        <Label className="text-xs">Cuenta de destino</Label>
+                        <Select value={pagoCuentaId ? String(pagoCuentaId) : ""} onValueChange={(v) => setPagoCuentaId(Number(v))}>
+                          <SelectTrigger><SelectValue placeholder="Seleccione cuenta" /></SelectTrigger>
+                          <SelectContent>
+                            {cuentas.map((c) => (
+                              <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Se registra un gasto por el total recibido. En «Cuenta por pagar» queda pendiente al proveedor (Finanzas → Gastos); en Efectivo/Banco se paga y sale del saldo.
+                  </p>
                 </div>
 
                 <Separator />

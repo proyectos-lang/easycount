@@ -59,15 +59,17 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
       "Recibir la mercancía de una orden de compra: ingresa el stock al almacén y actualiza el costo promedio de cada producto.",
     queHace: [
       "Lista las órdenes pendientes y permite recibirlas total o parcialmente (cantidad recibida por línea).",
+      "Puedes EDITAR por línea la cantidad, el costo final y el precio de venta. Ves en vivo el margen, la utilidad por unidad, el costo anterior y el precio anterior del producto para decidir.",
+      "El precio de venta que pongas ACTUALIZA el precio de lista del producto en el catálogo.",
       "Ingresa las unidades al almacén y localización que elijas.",
       "Recalcula el costo promedio ponderado del producto con el costo final de la compra.",
+      "Método de pago: eliges cómo se paga la recepción — Efectivo (sale de caja chica), Banco (sale de una cuenta) o Cuenta por pagar (queda pendiente al proveedor). Se registra un gasto por el total, así tu balance refleja la salida real.",
       "Deja rastro en el kardex como 'Entrada Compra' vinculada a la orden.",
       "Marca la orden como Recibida cuando se completa.",
       "Muestra un desglose explícito del prorrateo: cuánto de los costos de importación/impuestos/otros se asigna a cada producto (según su valor) y cómo se forma el costo final unitario, con total de control.",
     ],
     queNoHace: [
       "No crea órdenes (eso es Orden de Compra) ni recibe mercancía sin orden — para eso está Recepción por Factura o Ingreso Manual.",
-      "No registra el pago al proveedor.",
     ],
     operaciones: [
       {
@@ -76,8 +78,9 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
           "Abre Compras → Recepción por OC.",
           "Selecciona la orden pendiente.",
           "Elige el almacén y la localización donde entra la mercancía.",
-          "Confirma las cantidades recibidas (por defecto, las ordenadas).",
-          "Guarda: el stock sube, el costo promedio se actualiza y la orden queda Recibida.",
+          "Revisa/edita por línea la cantidad, el costo y el precio de venta (ves margen, utilidad, costo y precio anteriores).",
+          "Elige el método de pago: Efectivo, Banco (con su cuenta) o Cuenta por pagar.",
+          "Guarda: el stock sube, el costo promedio y el precio se actualizan, se registra el pago/gasto y la orden queda Recibida.",
         ],
       },
       {
@@ -109,7 +112,7 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
           "Usa Inventario → Traslados para mover las unidades al almacén correcto. El kardex conserva ambos movimientos para auditoría.",
       },
     ],
-    keywords: ["recibir", "mercancia", "entrada", "costo promedio", "parcial", "almacen"],
+    keywords: ["recibir", "mercancia", "entrada", "costo promedio", "parcial", "almacen", "precio de venta", "margen", "utilidad", "metodo de pago", "cuenta por pagar", "pago proveedor"],
   },
   {
     modulo: "Recepcion por Factura",
@@ -120,7 +123,9 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
       "Acepta foto o PDF de la factura del proveedor.",
       "La IA (Gemini) lee la factura y extrae cada línea: nombre del producto, cantidad y costo unitario.",
       "Permite mapear cada línea extraída con un producto del catálogo (o crear el producto al vuelo).",
+      "Editas por línea la cantidad, el costo y el precio de venta; ves el margen, la utilidad por unidad, el costo anterior y el precio anterior. El precio que pongas actualiza el precio de lista del producto.",
       "Ingresa el stock y actualiza el costo promedio, igual que una recepción normal.",
+      "Método de pago: Efectivo (caja chica), Banco (una cuenta) o Cuenta por pagar (pendiente al proveedor). Se registra un gasto por el total.",
       "Con costos de importación/impuestos/otros, muestra el mismo desglose explícito del prorrateo que la Recepción por OC.",
       "Detección de tallas (si tu empresa usa tallas): cuando la factura desglosa una referencia por talla (S/M/L… o 6/8/10…), la IA la agrupa en una sola línea y marca las tallas detectadas. Al crear ese producto, el diálogo llega precargado con las tallas y sus cantidades; al guardarlo se crean los productos hermanos agrupados y la línea de factura se reemplaza por una línea por talla (cada una entra a inventario con su cantidad).",
     ],
@@ -128,7 +133,6 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
       "No es infalible: la IA puede leer mal cantidades o precios en facturas borrosas — siempre revisa antes de confirmar.",
       "No asocia productos automáticamente: el mapeo línea → producto del catálogo lo confirmas tú.",
       "La detección de tallas depende de que la factura las liste legibles; siempre puedes corregir/agregar tallas y cantidades a mano en el diálogo.",
-      "No registra el pago de la factura (usa Finanzas → Gastos).",
     ],
     operaciones: [
       {
@@ -137,9 +141,9 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
           "Abre Compras → Recepción por Factura.",
           "Arrastra o sube la imagen/PDF de la factura (JPG, PNG o PDF).",
           "Presiona 'Procesar con IA' y espera unos segundos.",
-          "Revisa las líneas extraídas: corrige cantidades o costos si la lectura falló.",
+          "Revisa las líneas extraídas: corrige cantidad, costo y precio de venta si hace falta (ves margen y utilidad).",
           "Asocia cada línea con su producto del catálogo (o créalo con el botón rápido).",
-          "Elige almacén/localización y confirma el ingreso.",
+          "Elige almacén/localización, el método de pago (Efectivo/Banco/Cuenta por pagar) y confirma el ingreso.",
         ],
       },
       {
@@ -165,7 +169,7 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
           "En este módulo la imagen solo se usa para la extracción. Si quieres guardar el comprobante, adjúntalo al gasto correspondiente en Finanzas → Gastos.",
       },
     ],
-    keywords: ["ia", "inteligencia artificial", "foto", "escanear", "gemini", "factura proveedor", "ocr", "tallas", "talla", "tallado", "detectar tallas"],
+    keywords: ["ia", "inteligencia artificial", "foto", "escanear", "gemini", "factura proveedor", "ocr", "tallas", "talla", "tallado", "detectar tallas", "precio de venta", "margen", "utilidad", "metodo de pago", "cuenta por pagar", "pago proveedor"],
   },
   {
     modulo: "Recalcular Recepcion",

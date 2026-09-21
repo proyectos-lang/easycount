@@ -64,6 +64,7 @@ import {
 import { DesgloseProrrateo } from "@/components/recepcion/desglose-prorrateo"
 import { type Proveedor, type Producto, getProveedores, getProductos } from "@/lib/services/catalogos"
 import { type Almacen, type Localizacion, getAlmacenes, getLocalizaciones } from "@/lib/services/catalogos"
+import { type CuentaConfig, getCuentas } from "@/lib/services/cuentas"
 import { QuickCreateProductoDialog } from "@/components/recepcion/quick-create-producto-dialog"
 import { useAuth } from "@/lib/contexts/auth-context"
 
@@ -90,6 +91,8 @@ interface LineaFactura {
   cantidad: number
   costoOriginal: number
   costoFinalLocal: number
+  /** Precio de venta editable (opcional). Si > 0, actualiza el precio del producto. */
+  precioVenta?: number
   comboboxOpen: boolean
   /**
    * Tallas detectadas por la IA para esta referencia (si aplica y la empresa
@@ -133,20 +136,26 @@ export default function RecepcionIAPage() {
   const [otrosCostos, setOtrosCostos] = useState(0)
   const [almacenId, setAlmacenId] = useState(0)
   const [localizacionId, setLocalizacionId] = useState(0)
-  
+  // Pago de la recepción.
+  const [cuentas, setCuentas] = useState<CuentaConfig[]>([])
+  const [pagoMetodo, setPagoMetodo] = useState<'Efectivo' | 'Banco' | 'Credito'>('Credito')
+  const [pagoCuentaId, setPagoCuentaId] = useState<number | null>(null)
+
   const { toast } = useToast()
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    const [prodRes, almRes, provRes] = await Promise.all([
+    const [prodRes, almRes, provRes, cuentasRes] = await Promise.all([
       getProductos(),
       getAlmacenes(),
-      getProveedores()
+      getProveedores(),
+      getCuentas(),
     ])
-    
+
     setProductos(prodRes.data)
     setAlmacenes(almRes.data)
     setProveedores(provRes.data)
+    setCuentas(cuentasRes.data || [])
     setLoading(false)
   }, [])
 
@@ -423,11 +432,15 @@ export default function RecepcionIAPage() {
   }
 
   // Update line values
-  const updateLinea = (lineaId: number, field: 'cantidad' | 'costoOriginal', value: number) => {
-    setLineas(prev => prev.map(l => 
+  const updateLinea = (lineaId: number, field: 'cantidad' | 'costoOriginal' | 'precioVenta', value: number) => {
+    setLineas(prev => prev.map(l =>
       l.id === lineaId ? { ...l, [field]: value } : l
     ))
   }
+
+  /** Producto actual de una línea (para costo/precio anteriores). */
+  const prodDeLinea = (l: LineaFactura): Producto | undefined =>
+    l.productoId != null ? productos.find((p) => p.id === l.productoId) : undefined
 
   // Remove line
   const removeLinea = (lineaId: number) => {
@@ -465,6 +478,11 @@ export default function RecepcionIAPage() {
       return
     }
 
+    if (pagoMetodo === 'Banco' && !pagoCuentaId) {
+      toast({ title: "Falta la cuenta", description: "Elige la cuenta bancaria del pago.", variant: "destructive" })
+      return
+    }
+
     setProcessing(true)
     
     try {
@@ -484,8 +502,14 @@ export default function RecepcionIAPage() {
           detalle_id: l.id,
           producto_id: l.productoId!,
           cantidad_recibida: l.cantidad,
-          costo_final_local: l.costoFinalLocal
-        }))
+          costo_final_local: l.costoFinalLocal,
+          precio_venta: l.precioVenta != null && l.precioVenta > 0 ? l.precioVenta : null,
+        })),
+        pago: {
+          metodo: pagoMetodo,
+          cuenta_id: pagoMetodo === 'Banco' ? pagoCuentaId : null,
+          proveedor_id: proveedorId ? Number(proveedorId) : null,
+        },
       }
 
       const { success, error } = await procesarRecepcion(recepcionData)
@@ -703,6 +727,7 @@ export default function RecepcionIAPage() {
                         <TableHead className="text-center w-20">Cant.</TableHead>
                         <TableHead className="text-right w-28">Costo Orig.</TableHead>
                         <TableHead className="text-right w-28">Costo Final</TableHead>
+                        <TableHead className="text-right w-28">Precio venta</TableHead>
                         <TableHead className="w-12"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -845,6 +870,34 @@ export default function RecepcionIAPage() {
                             <Badge variant="secondary" className="font-mono">
                               L {linea.costoFinalLocal.toFixed(2)}
                             </Badge>
+                            {(() => {
+                              const prod = prodDeLinea(linea)
+                              const precio = linea.precioVenta ?? prod?.precio_venta_sugerido ?? 0
+                              const util = +(precio - linea.costoFinalLocal).toFixed(2)
+                              const margen = precio > 0 ? +(((precio - linea.costoFinalLocal) / precio) * 100).toFixed(1) : 0
+                              if (precio <= 0) return null
+                              return (
+                                <p className={`mt-1 text-[10px] ${util < 0 ? "text-destructive" : "text-emerald-600"}`}>
+                                  Margen {margen}% · Util. L {util.toFixed(2)}
+                                </p>
+                              )
+                            })()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              type="number" min="0" step="0.01"
+                              value={linea.precioVenta ?? (prodDeLinea(linea)?.precio_venta_sugerido ?? 0)}
+                              onChange={(e) => updateLinea(linea.id, 'precioVenta', parseFloat(e.target.value) || 0)}
+                              className="w-24 text-right ml-auto"
+                            />
+                            {(() => {
+                              const prod = prodDeLinea(linea)
+                              return (
+                                <p className="mt-1 text-[10px] text-muted-foreground">
+                                  Ant.: L {(prod?.precio_venta_sugerido ?? 0).toFixed(2)} · Costo ant.: L {(prod?.costo_promedio ?? 0).toFixed(2)}
+                                </p>
+                              )
+                            })()}
                           </TableCell>
                           <TableCell>
                             <Button
@@ -945,6 +998,34 @@ export default function RecepcionIAPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+
+                {/* Pago de la recepción */}
+                <div>
+                  <Label className="text-xs mb-1 block">Pago</Label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Select value={pagoMetodo} onValueChange={(v) => setPagoMetodo(v as 'Efectivo' | 'Banco' | 'Credito')}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Credito">Cuenta por pagar (queda pendiente)</SelectItem>
+                        <SelectItem value="Efectivo">Efectivo (sale de caja chica)</SelectItem>
+                        <SelectItem value="Banco">Banco (sale de una cuenta)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {pagoMetodo === 'Banco' && (
+                      <Select value={pagoCuentaId ? String(pagoCuentaId) : ""} onValueChange={(v) => setPagoCuentaId(Number(v))}>
+                        <SelectTrigger><SelectValue placeholder="Seleccione cuenta" /></SelectTrigger>
+                        <SelectContent>
+                          {cuentas.map((c) => (
+                            <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Se registra un gasto por el total. «Cuenta por pagar» queda pendiente al proveedor; Efectivo/Banco se paga y sale del saldo.
+                  </p>
                 </div>
 
                 {/* Totals */}
