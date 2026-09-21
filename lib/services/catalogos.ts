@@ -80,6 +80,12 @@ export interface Cliente {
    */
   fecha_nacimiento?: string
   /**
+   * Limite de credito acumulado del cliente (Lempiras). 0 o null = SIN limite
+   * (credito libre). Si > 0, una venta a credito que haga que su saldo pendiente
+   * total supere este monto se bloquea. Columna del script 064.
+   */
+  limite_credito?: number | null
+  /**
    * Virtual (no es columna): true si el cliente esta activo. Un cliente con
    * ventas no se borra, se DESACTIVA (tabla `clientes_inactivos`, script 044) y
    * deja de aparecer en los selectores, pero sigue en el historial de ventas.
@@ -1277,6 +1283,11 @@ function sanitizeClientePayload(
     // Critico: si viene "" lo convertimos a null antes de tocar la
     // columna DATE. Mantenemos el valor original si ya es null/undefined.
     fecha_nacimiento: blank(raw.fecha_nacimiento) as Cliente["fecha_nacimiento"],
+    // Limite de credito: numero valido >= 0, o null (sin limite).
+    limite_credito:
+      raw.limite_credito == null || Number.isNaN(Number(raw.limite_credito))
+        ? null
+        : Math.max(0, Number(raw.limite_credito)),
   }
 }
 
@@ -1328,12 +1339,12 @@ export async function saveCliente(
       // existen (migracion 010 pendiente), reintentamos sin esos campos
       // para no bloquear la creacion del cliente. El stamp con
       // razon_social_id se mantiene intacto.
-      if (error && /telefono|fecha_nacimiento/i.test(error.message || '')) {
+      if (error && /telefono|fecha_nacimiento|limite_credito/i.test(error.message || '')) {
         console.warn(
-          '[saveCliente] Columnas telefono/fecha_nacimiento ausentes. ' +
-          'Aplica scripts/010-add-cliente-telefono-fecha-nacimiento.sql.'
+          '[saveCliente] Columnas telefono/fecha_nacimiento/limite_credito ausentes. ' +
+          'Aplica scripts/010 y scripts/064.'
         )
-        const { telefono: _t, fecha_nacimiento: _f, ...clienteSinCRM } =
+        const { telefono: _t, fecha_nacimiento: _f, limite_credito: _l, ...clienteSinCRM } =
           clienteData
         const retry = await supabase
           .from('clientes')
@@ -1359,11 +1370,11 @@ export async function saveCliente(
         .single()
 
       // Mismo fallback que en insert.
-      if (error && /telefono|fecha_nacimiento/i.test(error.message || '')) {
+      if (error && /telefono|fecha_nacimiento|limite_credito/i.test(error.message || '')) {
         console.warn(
-          '[saveCliente] Columnas telefono/fecha_nacimiento ausentes (update).'
+          '[saveCliente] Columnas telefono/fecha_nacimiento/limite_credito ausentes (update).'
         )
-        const { telefono: _t, fecha_nacimiento: _f, ...clienteSinCRM } =
+        const { telefono: _t, fecha_nacimiento: _f, limite_credito: _l, ...clienteSinCRM } =
           clienteData
         const retry = await supabase
           .from('clientes')

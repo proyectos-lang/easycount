@@ -127,6 +127,7 @@ Catálogos simples: `id` (PK), `nombre` (NOT NULL), `razon_social_id` (FK tenant
 | `rtn` | text | RTN para factura |
 | `telefono`, `direccion` | text | |
 | `fecha_nacimiento` | date | usado para alertas de cumpleaños |
+| `limite_credito` | numeric | **(script 064, nullable)** tope de crédito acumulado (Lempiras). 0/NULL = sin límite. Si > 0, una venta a crédito que haga que el saldo pendiente total del cliente supere este monto se bloquea (Nueva Venta) u omite (carga masiva). |
 | `razon_social_id` | bigint | FK tenant |
 
 ### `proveedores`

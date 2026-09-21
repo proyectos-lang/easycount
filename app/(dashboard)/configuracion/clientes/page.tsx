@@ -163,6 +163,12 @@ export default function ClientesConfigPage() {
       // fecha_nacimiento: cadena vacia -> undefined para no enviar "" a una
       // columna DATE (Postgres lanzaria error de tipo).
       fecha_nacimiento: formData.fecha_nacimiento || undefined,
+      // Limite de credito: "" o invalido -> null (sin limite); el servicio
+      // sanea a numero >= 0.
+      limite_credito:
+        formData.limite_credito == null || String(formData.limite_credito).trim() === ""
+          ? null
+          : Number(formData.limite_credito),
     }
 
     const { data: guardado, error } = await saveCliente(clienteData, !editingCliente)
@@ -470,6 +476,30 @@ export default function ClientesConfigPage() {
                     setFormData({ ...formData, fecha_nacimiento: e.target.value })
                   }
                 />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="limite-credito">
+                  Límite de Crédito
+                  <span className="ml-1 text-xs font-normal text-muted-foreground">
+                    (opcional)
+                  </span>
+                </Label>
+                <Input
+                  id="limite-credito"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={formData.limite_credito ?? ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, limite_credito: e.target.value === "" ? null : Number(e.target.value) })
+                  }
+                  placeholder="0 = sin límite"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Máximo que puede deber a crédito. Déjalo en 0 o vacío para no limitar.
+                </p>
               </div>
             </div>
 

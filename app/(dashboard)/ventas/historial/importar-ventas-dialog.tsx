@@ -220,13 +220,16 @@ export function ImportarVentasDialog({ onImported }: { onImported: () => void })
             {/* Paso 1: opciones */}
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-1.5">
-                <Label>Cliente</Label>
+                <Label>Cliente por defecto</Label>
                 <Select value={clienteId} onValueChange={setClienteId}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar cliente" /></SelectTrigger>
                   <SelectContent>
                     {clientes.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Se usa para las filas sin columna «Cliente». Si el Excel trae un cliente que no existe, se crea automáticamente.
+                </p>
                 {!clientes.some((c) => c.nombre.trim().toLowerCase() === CLIENTE_GENERICO.toLowerCase()) && (
                   <Button variant="link" size="sm" className="h-auto p-0 justify-start text-xs" onClick={crearClienteGenerico}>
                     + Crear cliente &quot;{CLIENTE_GENERICO}&quot;

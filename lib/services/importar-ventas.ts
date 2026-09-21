@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx"
-import { crearVenta, type PagoVentaDetalleInput } from "@/lib/services/ventas"
-import { getProductos, type Producto } from "@/lib/services/catalogos"
+import { crearVenta, getSaldoPendienteCliente, excedeLimiteCredito, type PagoVentaDetalleInput } from "@/lib/services/ventas"
+import { getProductos, getClientes, saveCliente, type Producto, type Cliente } from "@/lib/services/catalogos"
 import { getCuentas, type CuentaConfig } from "@/lib/services/cuentas"
 import { getSesionAbierta } from "@/lib/services/caja-chica"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
@@ -24,6 +24,10 @@ export interface FilaImport {
   subtotal: number
   /** Método de pago de la factura (columna opcional). "" = usar el default global. */
   metodo_pago: MetodoImport | ""
+  /** Nombre del cliente de la factura (columna opcional). "" = usar el default. */
+  cliente: string
+  /** Límite de crédito del cliente (columna opcional). Se usa al CREAR uno nuevo. */
+  limite_credito: number
 }
 
 /**
@@ -135,6 +139,8 @@ export async function parsearArchivoVentas(file: File): Promise<FilaImport[]> {
       descuento_pct: num(col(row, ["Descuento (%)", "Descuento", "Desc (%)", "Desc"])),
       subtotal: num(col(row, ["Subtotal", "Total Linea", "Total Línea"])),
       metodo_pago: normalizarMetodo(col(row, ["Metodo de Pago", "Método de Pago", "Metodo Pago", "Metodo", "Método", "Forma de Pago", "Pago"])),
+      cliente: str(col(row, ["Cliente", "Nombre Cliente", "Nombre del Cliente"])),
+      limite_credito: num(col(row, ["Limite Credito", "Límite Crédito", "Limite de Credito", "Límite de Crédito", "Limite"])),
     })
   })
   return filas
@@ -196,13 +202,19 @@ async function cargarContexto(): Promise<{
   porNombre: Map<string, Producto>
   cuentas: CuentaConfig[]
   facturasExistentes: Set<string>
+  clientesPorNombre: Map<string, Cliente>
 }> {
-  const [prodRes, cuentasRes] = await Promise.all([getProductos(), getCuentas()])
+  const [prodRes, cuentasRes, clientesRes] = await Promise.all([getProductos(), getCuentas(), getClientes()])
   const porCodigo = new Map<string, Producto>()
   const porNombre = new Map<string, Producto>()
   for (const p of prodRes.data || []) {
     if (p.codigo_barras) porCodigo.set(p.codigo_barras.trim().toLowerCase(), p)
     if (p.nombre) porNombre.set(p.nombre.trim().toLowerCase(), p)
+  }
+
+  const clientesPorNombre = new Map<string, Cliente>()
+  for (const c of clientesRes.data || []) {
+    if (c.nombre) clientesPorNombre.set(c.nombre.trim().toLowerCase(), c)
   }
 
   const facturasExistentes = new Set<string>()
@@ -216,7 +228,7 @@ async function cargarContexto(): Promise<{
     }
   }
 
-  return { porCodigo, porNombre, cuentas: cuentasRes.data || [], facturasExistentes }
+  return { porCodigo, porNombre, cuentas: cuentasRes.data || [], facturasExistentes, clientesPorNombre }
 }
 
 // ==================== PREVIEW ====================
@@ -281,16 +293,50 @@ export async function importarVentas(
     return { data: null, error: "Hay ventas con método Banco: selecciona la cuenta bancaria de destino." }
   }
 
-  const { porCodigo, porNombre, cuentas, facturasExistentes } = await cargarContexto()
+  const { porCodigo, porNombre, cuentas, facturasExistentes, clientesPorNombre } = await cargarContexto()
   const cuenta = cuentas.find((c) => c.id === opciones.cuenta_id)
   const comisionBanco = Number(cuenta?.porcentaje_comision || 0)
   const resultado: ResultadoImport = { creadas: 0, omitidas: 0, errores: 0, totalImportado: 0, facturas: [] }
+
+  // Saldo pendiente acumulado por cliente durante ESTA importación (para que el
+  // límite de crédito considere también las facturas del mismo archivo).
+  const saldoAcumEnArchivo = new Map<number, number>()
+
+  /**
+   * Resuelve el cliente de una factura: por el nombre de su columna (si viene)
+   * o el cliente por defecto del diálogo. Si el nombre no existe, lo CREA.
+   * Devuelve { id, limite } o null si no se pudo resolver/crear.
+   */
+  async function resolverCliente(nombre: string, limiteFila: number): Promise<{ id: number; limite: number } | null> {
+    const n = nombre.trim()
+    if (!n) {
+      const def = (opciones.cliente_id)
+      return def ? { id: def, limite: 0 } : null
+    }
+    const existente = clientesPorNombre.get(n.toLowerCase())
+    if (existente?.id != null) return { id: existente.id, limite: Number(existente.limite_credito || 0) }
+    // No existe: crear con el nombre y, si viene, su límite de crédito.
+    const nuevo: Cliente = { nombre: n }
+    if (limiteFila > 0) nuevo.limite_credito = limiteFila
+    const { data: creado, error } = await saveCliente(nuevo, true)
+    if (error || !creado?.id) return null
+    clientesPorNombre.set(n.toLowerCase(), creado)
+    return { id: creado.id, limite: Number(creado.limite_credito ?? limiteFila ?? 0) }
+  }
 
   for (const [numero, lineas] of grupos) {
     // 1) Duplicada: no re-importar.
     if (facturasExistentes.has(numero.trim())) {
       resultado.omitidas++
       resultado.facturas.push({ numero, estado: "omitida", detalle: "Ya existe una factura con este número" })
+      continue
+    }
+
+    // 1b) Cliente de la factura (columna del Excel o el default; se crea si no existe).
+    const cli = await resolverCliente(lineas[0]?.cliente || "", lineas[0]?.limite_credito || 0)
+    if (!cli) {
+      resultado.errores++
+      resultado.facturas.push({ numero, estado: "error", detalle: "No se pudo determinar/crear el cliente" })
       continue
     }
 
@@ -356,12 +402,26 @@ export async function importarVentas(
       valorPago = totalBruto
     }
 
+    // 2b) Límite de crédito: si la factura es a crédito y el cliente tiene un
+    //     límite > 0, se OMITE cuando el saldo acumulado (deuda previa + lo ya
+    //     importado en este archivo + esta factura) supera su límite.
+    const saldoNuevo = +Math.max(0, totalBruto - valorPago).toFixed(2)
+    if (saldoNuevo > 0 && cli.limite > 0) {
+      const saldoBD = await getSaldoPendienteCliente(cli.id)
+      const saldoArchivo = saldoAcumEnArchivo.get(cli.id) || 0
+      if (excedeLimiteCredito(saldoBD + saldoArchivo, saldoNuevo, cli.limite)) {
+        resultado.omitidas++
+        resultado.facturas.push({ numero, estado: "omitida", detalle: `Excede el límite de crédito del cliente (L ${cli.limite.toFixed(2)})` })
+        continue
+      }
+    }
+
     // 3) Crear la venta con la MISMA logica que Nueva Venta (inventario,
     //    kardex, ventas_pagos_detalle, caja/bancos).
     const res = await crearVenta({
       encabezado: {
         numero_factura: numero,
-        cliente_id: opciones.cliente_id,
+        cliente_id: cli.id,
         almacen_id: opciones.almacen_id,
         fecha_venta: fechaAISO(lineas[0].fecha),
         aplica_impuesto: opciones.aplica_isv,
@@ -393,6 +453,8 @@ export async function importarVentas(
       resultado.facturas.push({ numero, estado: "creada", total: totalNeto })
       // Evita duplicar si la misma factura apareciera dos veces en el archivo.
       facturasExistentes.add(numero.trim())
+      // Acumula el saldo a crédito de este cliente dentro del archivo.
+      if (saldoNuevo > 0) saldoAcumEnArchivo.set(cli.id, (saldoAcumEnArchivo.get(cli.id) || 0) + saldoNuevo)
     }
   }
 
@@ -408,6 +470,7 @@ export function descargarPlantillaVentas(): void {
     {
       Fecha: "27/06/2026",
       Factura: "FC-0247",
+      Cliente: "Juan Pérez",
       Producto: "MARSELLA ROJA",
       "Codigo de Barras": "CB-012",
       Cantidad: 1,
@@ -415,10 +478,12 @@ export function descargarPlantillaVentas(): void {
       "Descuento (%)": 0,
       Subtotal: 1505.4,
       "Metodo de Pago": "Efectivo",
+      "Limite Credito": 0,
     },
     {
       Fecha: "18/06/2026",
       Factura: "FC-0033",
+      Cliente: "María López",
       Producto: "PETIT CUFRA",
       "Codigo de Barras": "CB-070",
       Cantidad: 1,
@@ -426,10 +491,11 @@ export function descargarPlantillaVentas(): void {
       "Descuento (%)": 0,
       Subtotal: 2267.75,
       "Metodo de Pago": "Credito",
+      "Limite Credito": 50000,
     },
   ]
   const ws = XLSX.utils.json_to_sheet(ejemplo)
-  ws["!cols"] = [{ wch: 12 }, { wch: 12 }, { wch: 28 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 16 }]
+  ws["!cols"] = [{ wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 14 }]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, "Ventas")
   XLSX.writeFile(wb, "Plantilla_Importar_Ventas.xlsx")

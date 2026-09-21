@@ -300,16 +300,17 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
     descripcion:
       "El directorio de clientes: datos de contacto, RTN para factura y fecha de nacimiento para felicitarlos.",
     queHace: [
-      "Crea y edita clientes: nombre, RTN, teléfono, dirección y fecha de nacimiento.",
+      "Crea y edita clientes: nombre, RTN, teléfono, dirección, fecha de nacimiento y límite de crédito.",
       "El RTN aparece en la factura del cliente.",
       "La fecha de nacimiento alimenta las alertas de cumpleaños.",
+      "Límite de crédito: el máximo que el cliente puede deber a crédito. Si es mayor que 0 y una venta a crédito haría que su deuda total (lo que ya debe + esta venta) supere ese límite, la venta se bloquea en Nueva Venta (y se omite en la carga masiva). 0 o vacío = sin límite (crédito libre).",
       "Los clientes se eligen en Nueva Venta y alimentan el ranking del Dashboard de Ventas.",
       "Carga masiva: con 'Carga masiva' descargas una plantilla de Excel (Nombre, RTN, Dirección, Teléfono, Fecha de Nacimiento), la llenas y la subes para crear muchos clientes de una vez. Antes de cargar muestra cuántos son nuevos y cuáles se omiten por ya existir (por RTN o, si no hay RTN, por nombre).",
       "Eliminar un cliente: si NO tiene ventas registradas, se borra del catálogo. Si SÍ tiene ventas, no se borra (rompería el historial): se DESACTIVA y deja de aparecer en el punto de venta y demás listas, pero se conserva en el registro/historial de ventas. Un cliente inactivo se puede reactivar con el botón de reactivar.",
       "Marca el estado de cada cliente (Activo / Inactivo) en la lista.",
     ],
     queNoHace: [
-      "No controla límites de crédito ni bloquea clientes morosos (la cartera se ve en Cuentas por Cobrar).",
+      "No lleva el estado de cuenta detallado del cliente — la cartera y los abonos se ven en Cuentas por Cobrar; aquí solo se define el tope de crédito.",
       "No borra un cliente con ventas: para preservar el historial, se desactiva en lugar de eliminarse.",
     ],
     operaciones: [
@@ -319,6 +320,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "Abre Configuración → Clientes y presiona Nuevo Cliente.",
           "Nombre (obligatorio), RTN si pedirá factura con datos fiscales, teléfono y dirección.",
           "Agrega la fecha de nacimiento si quieres la alerta de cumpleaños.",
+          "Opcional: pon un Límite de Crédito para topar cuánto puede deber a crédito (0 o vacío = sin límite).",
           "Guarda. También puedes crear clientes al vuelo desde Nueva Venta.",
         ],
       },
@@ -353,7 +355,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "Es lo correcto. Un cliente con ventas no se elimina: se desactiva para que no aparezca en el punto de venta ni en las listas, pero se conserva en el registro de ventas para no perder la trazabilidad de esas facturas. Si ya no debería verse en ningún selector, verifica que aparezca como 'Inactivo' en Clientes.",
       },
     ],
-    keywords: ["cliente", "rtn", "cumpleaños", "directorio", "contacto", "eliminar", "borrar", "desactivar", "inactivo", "reactivar", "carga masiva", "importar", "plantilla", "excel", "masivo"],
+    keywords: ["cliente", "rtn", "cumpleaños", "directorio", "contacto", "eliminar", "borrar", "desactivar", "inactivo", "reactivar", "carga masiva", "importar", "plantilla", "excel", "masivo", "limite de credito", "credito", "cupo", "por cobrar", "cartera"],
   },
   {
     modulo: "Proveedores",

@@ -51,9 +51,11 @@ import { getClientes, getProductos, buscarProductos, getAlmacenes, getLocalizaci
 import { ProductCatalog } from "./product-catalog"
 import { getStockMultipleProducts } from "@/lib/services/inventario"
 import { 
-  getNextCorrelativo, 
-  crearVenta, 
+  getNextCorrelativo,
+  crearVenta,
   getRazonSocialForPdf,
+  getSaldoPendienteCliente,
+  excedeLimiteCredito,
   type VentaEncabezado,
   type VentaDetalle,
   type PagoVentaDetalleInput,
@@ -953,6 +955,24 @@ export default function NuevaVentaPage() {
         : valorpago >= total - 0.005
           ? "Pagado"
           : "Parcial"
+
+    // Límite de crédito: si la venta deja saldo (crédito) y el cliente tiene un
+    // límite > 0, se bloquea cuando el saldo ACUMULADO (lo que ya debe + este
+    // nuevo saldo) supera el límite. Límite 0/vacío = sin restricción.
+    const saldoNuevo = +Math.max(0, total - valorpago).toFixed(2)
+    const limiteCliente = Number(selectedCliente?.limite_credito || 0)
+    if (saldoNuevo > 0 && limiteCliente > 0) {
+      const saldoActual = await getSaldoPendienteCliente(parseInt(clienteId))
+      if (excedeLimiteCredito(saldoActual, saldoNuevo, limiteCliente)) {
+        const money = (n: number) => `L ${n.toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        toast({
+          title: "Excede el límite de crédito",
+          description: `${selectedCliente?.nombre ?? "El cliente"} debe ${money(saldoActual)} y esta venta a crédito lo llevaría a ${money(saldoActual + saldoNuevo)}, sobre su límite de ${money(limiteCliente)}. Cobra parte de contado o aumenta su límite.`,
+          variant: "destructive",
+        })
+        return
+      }
+    }
 
     setSaving(true)
     try {

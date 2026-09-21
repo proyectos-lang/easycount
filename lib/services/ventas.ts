@@ -614,6 +614,46 @@ export function derivarEstadoPago(
   return { valorpago, estado_pago }
 }
 
+/**
+ * Saldo pendiente TOTAL de un cliente = Σ (total_venta − valorpago) de todas sus
+ * ventas con saldo (ambos brutos). Es el "crédito acumulado" actual. Acotado por
+ * tenant vía RLS. Devuelve 0 si no hay Supabase o ante cualquier error (no
+ * bloquear una venta por un fallo de lectura del saldo).
+ */
+export async function getSaldoPendienteCliente(clienteId: number): Promise<number> {
+  if (!isSupabaseConfigured()) return 0
+  const supabase = createClient()
+  if (!supabase) return 0
+  try {
+    const { data, error } = await supabase
+      .from('ventas_encabezado')
+      .select('total_venta, valorpago')
+      .eq('cliente_id', clienteId)
+    if (error) return 0
+    return +(data || [])
+      .reduce((a, v) => a + Math.max(0, Number(v.total_venta || 0) - Number(v.valorpago || 0)), 0)
+      .toFixed(2)
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Regla de límite de crédito (pura). Devuelve true si la venta a crédito debe
+ * BLOQUEARSE porque el saldo acumulado del cliente superaría su límite.
+ *   limite <= 0 o null  -> sin límite (nunca bloquea).
+ *   saldoActual + saldoNuevo > limite (con tolerancia de centavo) -> bloquea.
+ */
+export function excedeLimiteCredito(
+  saldoActual: number,
+  saldoNuevaVenta: number,
+  limite: number | null | undefined
+): boolean {
+  const lim = Number(limite || 0)
+  if (lim <= 0) return false
+  return saldoActual + saldoNuevaVenta > lim + 0.005
+}
+
 export async function crearVenta(
   data: CrearVentaData
 ): Promise<{ data: VentaEncabezado | null; error: string | null }> {
