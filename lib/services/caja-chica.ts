@@ -5,7 +5,7 @@ import {
   SESION_INVALIDA_ERROR,
 } from "@/lib/services/tenant-stamp"
 import { registrarMovimientoCuenta } from "@/lib/services/cuentas"
-import { getHondurasNowISO, getHondurasCierreISO } from "@/lib/utils/honduras-time"
+import { getHondurasNowISO, getHondurasCierreISO, getHondurasTodayISODate } from "@/lib/utils/honduras-time"
 
 // ==================== INTERFACES ====================
 
@@ -226,6 +226,27 @@ export async function cerrarSesion(input: {
   const stamp = await getTenantStamp(supabase)
   if (!isValidStamp(stamp)) {
     return { data: null, error: SESION_INVALIDA_ERROR }
+  }
+
+  // Guarda para cierres RE-FECHADOS (dia anterior): solo se permiten si la
+  // sesion sigue ABIERTA. Evita "cerrar" un dia pasado sobre una sesion ya
+  // cerrada (UI obsoleta, doble submit, o llamada directa). Un cierre del dia
+  // de hoy sobre la sesion abierta actual no necesita esta verificacion extra.
+  const hoyHN = getHondurasTodayISODate()
+  const esDiaAnterior = !!input.fecha_cierre && input.fecha_cierre < hoyHN
+  if (esDiaAnterior) {
+    const { data: ses } = await supabase
+      .from("caja_chica_sesiones")
+      .select("estado")
+      .eq("id", input.sesion_id)
+      .eq("razon_social_id", stamp.razon_social_id)
+      .maybeSingle()
+    if (!ses || ses.estado !== "Abierta") {
+      return {
+        data: null,
+        error: "Solo puedes cerrar una fecha anterior si hay una caja abierta. Esta sesión no existe o ya está cerrada.",
+      }
+    }
   }
 
   // Saldo calculado = ultimo saldo_resultante de la sesion.

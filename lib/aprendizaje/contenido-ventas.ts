@@ -49,7 +49,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Descuento porcentual sobre el subtotal e impuesto ISV (15 %). El ISV viene DESACTIVADO por defecto: actívalo por venta cuando aplique.",
       "El cliente 'Consumidor Final' queda seleccionado por defecto; cámbialo si la venta es a un cliente registrado.",
       "Botón 'Pantalla completa' (arriba a la derecha): expande el módulo al 100% de la pantalla para usarlo como caja/POS físico; se sale con el mismo botón o con ESC.",
-      "Pago multi-método en una misma venta: efectivo, banco/tarjeta, link de pago, crédito. Ej.: 500 en efectivo + 1,000 con tarjeta.",
+      "Pago multi-método en una misma venta: efectivo, banco/tarjeta, link de pago, crédito. Ej.: 500 en efectivo + 1,000 con tarjeta. Al agregar una línea de pago viene Efectivo preseleccionado por defecto (si la caja está disponible).",
       "Aplica la comisión bancaria configurada en cada cuenta: registra el monto bruto que paga el cliente y el neto que entra al banco.",
       "El efectivo entra automáticamente a la caja chica abierta; lo de banco entra a la cuenta elegida.",
       "En pagos en efectivo puedes escribir con cuánto paga el cliente (efectivo recibido) y el sistema calcula el vuelto; se registra el monto de la venta, no el recibido. Ej.: venta L 800, recibido L 1,000 → vuelto L 200 (se registran L 800).",
@@ -60,6 +60,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
     queNoHace: [
       "No permite vender en efectivo sin una sesión de caja chica abierta (el sistema lo bloquea).",
       "No deja cerrar una venta a crédito que supere el límite de crédito del cliente (0 o vacío = sin límite).",
+      "No permite dejar a crédito una venta al cliente 'Consumidor Final': debe pagarse completa. Para vender a crédito, elige un cliente identificado.",
       "No permite editar una venta ya guardada: se corrige con una Devolución (parcial) o eliminándola desde Historial (total).",
       "No modifica el precio de lista del producto: el precio se puede cambiar por línea solo para esa venta.",
     ],

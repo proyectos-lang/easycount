@@ -667,22 +667,18 @@ export default function NuevaVentaPage() {
   }
 
   function agregarPagoLinea() {
-    // Default Banco si hay cuentas configuradas; sino Efectivo (si la caja
-    // esta abierta o la migracion esta pendiente). Como ultimo recurso, Otro.
+    // Default EFECTIVO siempre que la caja este disponible (abierta o migracion
+    // pendiente). Si no hay caja, cae a Banco (si hay cuentas) y por ultimo Otro.
     let metodo: PagoVentaDetalleInput["metodo_pago"] = "Otro"
     let cuentaIdDefault: number | null = null
     let comisionDefault = 0
     const efectivoDisponible = cajaFeaturePending || !!cajaSesion
-    // Pedido puntual: la razon social 14 prefiere Efectivo como metodo por
-    // defecto (aun teniendo cuentas bancarias configuradas).
-    if (user?.razon_social_id === 14 && efectivoDisponible) {
+    if (efectivoDisponible) {
       metodo = "Efectivo"
     } else if (cuentas.length > 0) {
       metodo = "Banco"
       cuentaIdDefault = cuentas[0].id ?? null
       comisionDefault = cuentas[0].porcentaje_comision ?? 0
-    } else if (efectivoDisponible) {
-      metodo = "Efectivo"
     }
     // Pre-completar con el saldo restante para acelerar el flujo comun
     // de "un solo metodo cubre todo el total".
@@ -956,10 +952,25 @@ export default function NuevaVentaPage() {
           ? "Pagado"
           : "Parcial"
 
+    const saldoNuevo = +Math.max(0, total - valorpago).toFixed(2)
+
+    // Consumidor Final NO puede quedar a crédito: es un genérico de mostrador,
+    // no un cliente identificable a quien cobrar después. Si deja saldo, se
+    // bloquea (debe pagarse completa).
+    const esConsumidorFinalCliente =
+      (selectedCliente?.nombre || "").trim().toLowerCase() === "consumidor final"
+    if (saldoNuevo > 0 && esConsumidorFinalCliente) {
+      toast({
+        title: "Consumidor Final no admite crédito",
+        description: "Una venta a 'Consumidor Final' debe pagarse completa. Registra el pago total, o elige un cliente identificado para venderle a crédito.",
+        variant: "destructive",
+      })
+      return
+    }
+
     // Límite de crédito: si la venta deja saldo (crédito) y el cliente tiene un
     // límite > 0, se bloquea cuando el saldo ACUMULADO (lo que ya debe + este
     // nuevo saldo) supera el límite. Límite 0/vacío = sin restricción.
-    const saldoNuevo = +Math.max(0, total - valorpago).toFixed(2)
     const limiteCliente = Number(selectedCliente?.limite_credito || 0)
     if (saldoNuevo > 0 && limiteCliente > 0) {
       const saldoActual = await getSaldoPendienteCliente(parseInt(clienteId))

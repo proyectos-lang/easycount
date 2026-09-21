@@ -399,6 +399,17 @@ export default function CajaChicaPage() {
   }
 
   async function handleCierre() {
+    // Cierre re-fechado (dia anterior): SOLO se permite con una caja abierta.
+    // `sesion` proviene de getSesionAbierta (ya filtra estado "Abierta"), asi
+    // que si no hay sesion abierta, no se puede cuadrar una fecha pasada.
+    if (cierreEsDiaAnterior && (!sesion || sesion.estado !== "Abierta")) {
+      toast({
+        title: "No hay caja abierta",
+        description: "Solo puedes cerrar una fecha anterior si hay una caja abierta. Abre la caja del día para poder cuadrar la jornada anterior.",
+        variant: "destructive",
+      })
+      return
+    }
     if (!sesion?.id) return
     const real = Number(cierreSaldoReal)
     if (Number.isNaN(real) || real < 0) {

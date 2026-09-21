@@ -213,7 +213,7 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
       "Registra ingresos manuales y salidas de efectivo con su concepto.",
       "Transfiere efectivo de la caja a una cuenta bancaria (depósito), reflejándose en ambos lados.",
       "Al cerrar, cuentas el efectivo en una cuadrícula por denominación (billetes y monedas): escribes cuántos hay de cada una y el saldo real se calcula solo, luego se compara con el calculado y registra la diferencia (faltante/sobrante).",
-      "Elige la fecha del cierre: por defecto es hoy, pero puedes retroceder a un día anterior para cuadrar la jornada de ayer con SU fecha (útil cuando cierras a la mañana siguiente).",
+      "Elige la fecha del cierre: por defecto es hoy, pero puedes retroceder a un día anterior para cuadrar la jornada de ayer con SU fecha (útil cuando cierras a la mañana siguiente). Fechar un cierre en un día anterior solo se permite si hay una caja abierta; si no hay caja abierta o ya está cerrada, no se puede.",
       "Historial de sesiones anteriores con sus movimientos.",
     ],
     queNoHace: [
@@ -271,7 +271,7 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
       {
         pregunta: "Estoy cerrando hoy la caja de ayer y sale con la fecha de hoy, ¿cómo lo corrijo?",
         respuesta:
-          "En el diálogo 'Cerrar Caja' cambia la 'Fecha del cierre' al día anterior antes de confirmar. El cierre quedará fechado en esa jornada, así que aparecerá en el reporte de Cierre Diario y en el Historial de Sesiones del día que corresponde, no en el de hoy. Solo cambia la fecha del cierre; los saldos y la diferencia no se alteran.",
+          "En el diálogo 'Cerrar Caja' cambia la 'Fecha del cierre' al día anterior antes de confirmar. El cierre quedará fechado en esa jornada, así que aparecerá en el reporte de Cierre Diario y en el Historial de Sesiones del día que corresponde, no en el de hoy. Solo cambia la fecha del cierre; los saldos y la diferencia no se alteran. Nota: fechar el cierre en un día anterior requiere una caja abierta; si no hay ninguna abierta, primero abre la caja.",
       },
     ],
     keywords: ["efectivo", "caja", "abrir caja", "cerrar caja", "arqueo", "deposito", "faltante", "sobrante", "denominaciones", "billetes", "monedas", "conteo", "fecha cierre", "dia anterior", "cerrar ayer", "jornada anterior"],
