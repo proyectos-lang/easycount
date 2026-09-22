@@ -1,8 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { jsPDF } from "jspdf"
-import autoTable from "jspdf-autotable"
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -168,6 +166,9 @@ export default function EstadoResultadosPage() {
       return
     }
 
+    // jsPDF + autoTable dinámicos: solo al exportar el PDF.
+    const { jsPDF } = await import("jspdf")
+    const autoTable = (await import("jspdf-autotable")).default
     const doc = new jsPDF()
     const pageWidth = doc.internal.pageSize.getWidth()
     const pageHeight = doc.internal.pageSize.getHeight()

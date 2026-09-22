@@ -14,8 +14,6 @@ import {
   Download,
   Trash2
 } from "lucide-react"
-import { jsPDF } from "jspdf"
-import autoTable from "jspdf-autotable"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -273,7 +271,10 @@ export default function RecepcionPage() {
     const compra = compraRes.data
     const detallesCompra = detallesRes.data
     const proveedor = proveedores.find(p => p.id === compra.proveedor_id)
-    
+
+    // jsPDF + autoTable dinámicos: solo al generar el PDF.
+    const { jsPDF } = await import("jspdf")
+    const autoTable = (await import("jspdf-autotable")).default
     const doc = new jsPDF()
     const pageWidth = doc.internal.pageSize.getWidth()
     
@@ -355,7 +356,7 @@ export default function RecepcionPage() {
       margin: { left: 15, right: 15 }
     })
     
-    const finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10
+    const finalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10
     doc.setDrawColor(200, 200, 200)
     doc.line(pageWidth - 80, finalY - 5, pageWidth - 15, finalY - 5)
     doc.setFontSize(10)

@@ -9,7 +9,6 @@
  * Solo cliente (usa `new Image()` y descarga por blob). No hace toasts: el
  * llamador decide el mensaje segun `{ ok, error }`.
  */
-import { jsPDF } from "jspdf"
 
 export interface FacturaPdfEmpresa {
   nombre_empresa?: string | null
@@ -109,6 +108,9 @@ export async function generarFacturaPdf(
   const esDevolucion = tipo === "devolucion"
   const esFiscal = !esDevolucion && !!fiscal
 
+  // jsPDF se carga dinámicamente (solo al generar el PDF) para no engordar el
+  // bundle inicial de Nueva Venta / Devoluciones.
+  const { jsPDF } = await import("jspdf")
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()

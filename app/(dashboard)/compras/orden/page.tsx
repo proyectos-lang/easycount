@@ -15,8 +15,6 @@ import {
   Download,
   ArrowLeft
 } from "lucide-react"
-import { jsPDF } from "jspdf"
-import autoTable from "jspdf-autotable"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -251,7 +249,9 @@ export default function OrdenCompraPage() {
     const compra = compraRes.data
     const detallesCompra = detallesRes.data
     const proveedor = proveedores.find(p => p.id === compra.proveedor_id)
-    
+
+    // jsPDF dinámico: solo al generar el PDF.
+    const { jsPDF } = await import("jspdf")
     const doc = new jsPDF()
     const pageWidth = doc.internal.pageSize.getWidth()
     const pageHeight = doc.internal.pageSize.getHeight()

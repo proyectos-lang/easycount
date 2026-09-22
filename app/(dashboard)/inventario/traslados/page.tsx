@@ -1,8 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { jsPDF } from "jspdf"
-import autoTable from "jspdf-autotable"
 import { 
   ArrowLeftRight, 
   Package, 
@@ -305,7 +303,10 @@ export default function TrasladosPage() {
   async function generatePDF() {
     const razonSocialRes = await getRazonSocial()
     const razonSocial = razonSocialRes.data
-    
+
+    // jsPDF + autoTable dinámicos: solo al generar el PDF.
+    const { jsPDF } = await import("jspdf")
+    const autoTable = (await import("jspdf-autotable")).default
     const doc = new jsPDF()
     const pageWidth = doc.internal.pageSize.getWidth()
     
@@ -414,7 +415,7 @@ export default function TrasladosPage() {
     })
     
     // Get final Y position after table
-    const finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || 150
+    const finalY = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || 150
     
     // Totals Box
     doc.setFillColor(245, 240, 230)

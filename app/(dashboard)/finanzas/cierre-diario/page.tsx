@@ -13,8 +13,6 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { jsPDF } from "jspdf"
-import autoTable from "jspdf-autotable"
 import {
   ClipboardCheck,
   CalendarIcon,
@@ -194,6 +192,9 @@ export default function CierreDiarioPage() {
   async function imprimirCierre() {
     if (!data) return
     try {
+      // jsPDF + autoTable dinámicos: solo al imprimir el cierre.
+      const { jsPDF } = await import("jspdf")
+      const autoTable = (await import("jspdf-autotable")).default
       const pdf = new jsPDF({ unit: "mm", format: "a4" })
       const pageWidth = pdf.internal.pageSize.getWidth()
       const left = 15

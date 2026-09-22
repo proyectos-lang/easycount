@@ -3,8 +3,6 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { Eye, CreditCard, Download, FileSpreadsheet, CalendarIcon, Banknote, Wallet, Shuffle, Trash2, Loader2, Pencil, Printer } from "lucide-react"
-import { jsPDF } from "jspdf"
-import autoTable from "jspdf-autotable"
 import { exportToXlsx } from "@/lib/utils/export"
 import { formatCurrency, formatNumber } from "@/lib/utils/format"
 import { TablePaginator } from "@/components/ui/table-paginator"
@@ -583,6 +581,8 @@ export default function HistorialVentasPage() {
     ])
     const detallesVenta = detallesRes.data
     const cliente = clientes.find(c => c.id === venta.cliente_id)
+    // jsPDF dinámico: solo se descarga al generar el PDF (aligera el bundle).
+    const { jsPDF } = await import("jspdf")
     const doc = new jsPDF()
     const pageWidth = doc.internal.pageSize.getWidth()
     const pageHeight = doc.internal.pageSize.getHeight()
