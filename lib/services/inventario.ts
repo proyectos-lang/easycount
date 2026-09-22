@@ -231,6 +231,85 @@ export interface ProductoValoracionExtendida {
   stock_por_almacen: { almacen_id: number; almacen_nombre: string; stock: number; valor_costo: number; valor_comercial: number }[]
 }
 
+type ProdValRow = { id: number; nombre: string; codigo_barras: string | null; talla: string | null; stock_total: number | null; costo_promedio: number | null; precio_venta_sugerido: number | null }
+
+/**
+ * Camino rápido de la valoración: usa las vistas SQL del script 067
+ * (`vista_stock_producto_almacen` y `vista_ultima_venta_producto`) para obtener
+ * el stock por almacén y la última venta ya AGREGADOS en la base, evitando traer
+ * todo el kardex al navegador. Devuelve el MISMO shape que el cálculo en JS.
+ *
+ * Devuelve `null` si alguna vista no existe (script sin correr) o falla → el
+ * llamador cae al camino en JS. Best-effort en la resolución de nombres.
+ */
+async function valoracionDesdeVistas(
+  supabase: NonNullable<ReturnType<typeof createClient>>,
+  productos: ProdValRow[],
+): Promise<ProductoValoracionExtendida[] | null> {
+  try {
+    const [stockRes, ventaRes, almRes] = await Promise.all([
+      fetchAllRows<{ producto_id: number; almacen_id: number; stock: number | null }>(() =>
+        supabase.from('vista_stock_producto_almacen').select('producto_id, almacen_id, stock')
+      ),
+      supabase.from('vista_ultima_venta_producto').select('producto_id, ultima_venta'),
+      supabase.from('almacenes').select('id, nombre'),
+    ])
+    // Si una vista no existe / falla, abortamos el camino rápido (fallback JS).
+    if (stockRes.error || ventaRes.error) return null
+
+    const almNombre = new Map<number, string>()
+    for (const a of (almRes.data || []) as { id: number; nombre: string }[]) almNombre.set(a.id, a.nombre)
+
+    // Stock por almacén agrupado por producto.
+    const stockPorProd = new Map<number, { almacen_id: number; stock: number }[]>()
+    for (const r of stockRes.data || []) {
+      const s = Number(r.stock || 0)
+      if (s === 0) continue // el JS actual filtra stock !== 0
+      const arr = stockPorProd.get(r.producto_id) ?? []
+      arr.push({ almacen_id: r.almacen_id, stock: s })
+      stockPorProd.set(r.producto_id, arr)
+    }
+
+    const ultimaVentaProd = new Map<number, string | null>()
+    for (const r of (ventaRes.data || []) as { producto_id: number; ultima_venta: string | null }[]) {
+      ultimaVentaProd.set(r.producto_id, r.ultima_venta ?? null)
+    }
+
+    const now = new Date()
+    return productos.map((p) => {
+      const stockPorAlmacen = (stockPorProd.get(p.id) ?? []).map((s) => ({
+        almacen_id: s.almacen_id,
+        almacen_nombre: almNombre.get(s.almacen_id) || `Almacen ${s.almacen_id}`,
+        stock: s.stock,
+        valor_costo: s.stock * (p.costo_promedio || 0),
+        valor_comercial: s.stock * (p.precio_venta_sugerido || 0),
+      }))
+      const ultimaVenta = ultimaVentaProd.get(p.id) ?? null
+      let diasSinVenta: number | null = null
+      if (ultimaVenta) {
+        diasSinVenta = Math.floor((now.getTime() - new Date(ultimaVenta).getTime()) / (1000 * 60 * 60 * 24))
+      }
+      return {
+        id: p.id,
+        nombre: p.nombre,
+        codigo_barras: p.codigo_barras || '',
+        talla: p.talla ?? null,
+        stock_total: p.stock_total || 0,
+        costo_promedio: p.costo_promedio || 0,
+        precio_venta: p.precio_venta_sugerido || 0,
+        valor_costo: (p.stock_total || 0) * (p.costo_promedio || 0),
+        valor_comercial: (p.stock_total || 0) * (p.precio_venta_sugerido || 0),
+        margen_potencial: ((p.stock_total || 0) * (p.precio_venta_sugerido || 0)) - ((p.stock_total || 0) * (p.costo_promedio || 0)),
+        dias_sin_venta: diasSinVenta,
+        ultima_venta: ultimaVenta,
+        stock_por_almacen: stockPorAlmacen,
+      }
+    })
+  } catch {
+    return null
+  }
+}
+
 export async function getValoracionInventarioExtendida(): Promise<{ data: ProductoValoracionExtendida[]; error: string | null }> {
   if (!isSupabaseConfigured()) {
     const savedProds = localStorage.getItem('productos')
@@ -304,6 +383,13 @@ export async function getValoracionInventarioExtendida(): Promise<{ data: Produc
         .order('nombre', { ascending: true })
     )
     if (prodError) return { data: [], error: prodError }
+
+    // CAMINO RÁPIDO (script 067): las dos agregaciones costosas (stock por almacén
+    // y última venta por producto) se leen de vistas SQL ya agregadas, en vez de
+    // traer TODO el kardex y hacer un bucle O(productos × transacciones) en JS.
+    // Si alguna vista no existe (script sin correr), se cae al camino de abajo.
+    const rapido = await valoracionDesdeVistas(supabase, productos || [])
+    if (rapido) return { data: rapido, error: null }
 
     const { data: transacciones, error: transError } = await fetchAllRows<TransRow>(() =>
       supabase

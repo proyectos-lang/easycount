@@ -446,6 +446,9 @@ Gastos con `estado_pago <> 'Pagado'` join proveedor: `monto_total`, `monto_pagad
 ### `vista_estado_resultados_mensual`
 P&L por mes: `ventas`, `cmv` (Σ `costo_promedio_momento × cantidad` de `ventas_detalle`), `utilidad_bruta`, gastos por categoría macro (`gastos_servicios`, `gastos_publicidad`, `gastos_nomina`, `gastos_arriendo`, `gastos_otros`), `total_gastos`, `utilidad_neta` y `porcentaje_margen_neta`.
 
+### `vista_stock_producto_almacen` / `vista_ultima_venta_producto` (script 067)
+Agregación para la Valoración de Inventario, `security_invoker` (respetan la RLS de `transacciones_inventario`). La primera: `SUM(cantidad)` por `(razon_social_id, producto_id, almacen_id)` = stock por almacén. La segunda: `MAX(fecha)` de los movimientos `'Salida Venta'` por `(razon_social_id, producto_id)` = última venta. `getValoracionInventarioExtendida` las lee para no traer todo el kardex y agregar en JS; si no existen, cae al cálculo en JS (fallback).
+
 ---
 
 ## Storage
