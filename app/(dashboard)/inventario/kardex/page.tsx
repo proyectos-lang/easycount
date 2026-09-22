@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { TablePaginator } from "@/components/ui/table-paginator"
 import {
   Select,
   SelectContent,
@@ -108,6 +109,20 @@ export default function KardexPage() {
       return matchFechaInicio && matchFechaFin && matchProducto && matchAlmacen && matchLocalizacion && matchTipo
     })
   }, [transacciones, filtroFechaInicio, filtroFechaFin, filtroProductoId, filtroAlmacenId, filtroLocalizacionId, filtroTipoMovimiento])
+
+  // Paginación del Historial general (evita montar cientos de filas de una).
+  const [pageSize, setPageSize] = React.useState(100)
+  const [pageIndex, setPageIndex] = React.useState(0)
+  const transaccionesPaginadas = React.useMemo(
+    () => transaccionesFiltradas.slice(pageIndex * pageSize, pageIndex * pageSize + pageSize),
+    [transaccionesFiltradas, pageIndex, pageSize]
+  )
+  // Vuelve a la primera página al cambiar filtros, tamaño o pestaña.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  React.useEffect(() => { setPageIndex(0) }, [
+    filtroFechaInicio, filtroFechaFin, filtroProductoId, filtroAlmacenId,
+    filtroLocalizacionId, filtroTipoMovimiento, pageSize, vista,
+  ])
 
   // Modo "Kardex por producto" segun la pestana activa (necesita un producto).
   const esKardex = vista === "kardex"
@@ -621,7 +636,7 @@ export default function KardexPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transaccionesFiltradas.map((t) => (
+                  {transaccionesPaginadas.map((t) => (
                     <TableRow key={t.id}>
                       <TableCell className="whitespace-nowrap">
                         <div>
@@ -651,6 +666,14 @@ export default function KardexPage() {
                   ))}
                 </TableBody>
               </Table>
+              <TablePaginator
+                pageIndex={pageIndex}
+                pageSize={pageSize}
+                totalItems={transaccionesFiltradas.length}
+                onPageIndexChange={setPageIndex}
+                onPageSizeChange={setPageSize}
+                className="border-t"
+              />
             </div>
           )}
         </CardContent>

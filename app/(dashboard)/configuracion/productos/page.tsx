@@ -44,6 +44,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { TablePaginator } from "@/components/ui/table-paginator"
 import {
   Select,
   SelectContent,
@@ -487,6 +488,19 @@ export default function ProductosConfigPage() {
     }
     return out
   }, [filteredProductos, gruposTallas, tallasActivo])
+
+  // Paginación de la lista: se renderiza por páginas para no montar miles de
+  // filas de golpe (mismo patrón que Inventario → Valoración). El contador
+  // "N de M productos" sigue sobre la lista completa filtrada.
+  const [pageSize, setPageSize] = useState(100)
+  const [pageIndex, setPageIndex] = useState(0)
+  const filasPaginadas = useMemo(
+    () => filas.slice(pageIndex * pageSize, pageIndex * pageSize + pageSize),
+    [filas, pageIndex, pageSize]
+  )
+  // Al cambiar la búsqueda o el tamaño de página, vuelve a la primera página.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setPageIndex(0) }, [searchTerm, pageSize])
 
   function toggleGrupo(grupoId: number) {
     setGruposExpandidos((prev) => {
@@ -1257,7 +1271,7 @@ export default function ProductosConfigPage() {
             <>
               {/* Mobile Card View */}
               <div className="block md:hidden space-y-3">
-                {filas.map((fila) => {
+                {filasPaginadas.map((fila) => {
                   if (fila.tipo === "single") {
                     return renderProductoCard(fila.producto)
                   }
@@ -1334,7 +1348,7 @@ export default function ProductosConfigPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filas.map((fila) => {
+                    {filasPaginadas.map((fila) => {
                       if (fila.tipo === "single") {
                         return renderProductoRow(fila.producto, false)
                       }
@@ -1429,6 +1443,15 @@ export default function ProductosConfigPage() {
                   </TableBody>
                 </Table>
               </div>
+
+              <TablePaginator
+                pageIndex={pageIndex}
+                pageSize={pageSize}
+                totalItems={filas.length}
+                onPageIndexChange={setPageIndex}
+                onPageSizeChange={setPageSize}
+                className="border-t"
+              />
             </>
           )}
         </CardContent>

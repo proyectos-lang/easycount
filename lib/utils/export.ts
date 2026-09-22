@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx"
 import { getHondurasTodayISODate } from "./honduras-time"
 
 /**
@@ -6,6 +5,12 @@ import { getHondurasTodayISODate } from "./honduras-time"
  * separadas. Fuente unica para todos los exports de la app — reemplaza el
  * codigo duplicado inline y elimina la generacion manual de CSV (que tenia
  * bugs de comillas con comas/comillas en los datos).
+ *
+ * La libreria `xlsx` (pesada) se carga DINAMICAMENTE dentro de la funcion, solo
+ * cuando el usuario exporta. Asi no engorda el bundle inicial de las paginas que
+ * la importan (historial de ventas, valoracion, kardex, etc.). Por eso la
+ * funcion es `async`; los llamadores no necesitan `await` (es fire-and-forget:
+ * solo descarga un archivo), pero pueden hacerlo si quieren saber cuando termino.
  *
  * Las llaves de cada objeto en `rows` se vuelven los encabezados de columna,
  * en el orden del primer objeto.
@@ -16,7 +21,7 @@ import { getHondurasTodayISODate } from "./honduras-time"
  * @param opts.colWidths Anchos de columna opcionales (en caracteres), en orden.
  * @param opts.appendDate Si true (default), agrega _YYYY-MM-DD al nombre.
  */
-export function exportToXlsx(
+export async function exportToXlsx(
   rows: Record<string, unknown>[],
   opts: {
     sheetName?: string
@@ -24,8 +29,10 @@ export function exportToXlsx(
     colWidths?: number[]
     appendDate?: boolean
   }
-): void {
+): Promise<void> {
   const { sheetName = "Datos", filename, colWidths, appendDate = true } = opts
+
+  const XLSX = await import("xlsx")
 
   const ws = XLSX.utils.json_to_sheet(rows)
   if (colWidths && colWidths.length > 0) {
