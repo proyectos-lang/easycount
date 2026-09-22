@@ -1436,14 +1436,17 @@ export default function ProductosConfigPage() {
 
       {/* Product Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingProducto ? "Editar Producto" : "Nuevo Producto"}</DialogTitle>
             <DialogDescription>
               Complete los datos del producto. Los campos marcados con * son requeridos.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
+          {/* Bloque de campos: crece y hace scroll dentro de la altura del
+              diálogo (max-h-[90vh]), dejando el footer con Guardar siempre
+              visible aunque la pantalla sea baja. */}
+          <div className="grid gap-4 py-4 flex-1 min-h-0 overflow-y-auto pr-2">
             {/* Image Upload Section */}
             <div className="grid gap-2">
               <Label htmlFor="imagen">
@@ -2180,7 +2183,7 @@ export default function ProductosConfigPage() {
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleSave} disabled={saving || uploadingImage}>
               {saving && <Spinner className="mr-2 h-4 w-4" />}
