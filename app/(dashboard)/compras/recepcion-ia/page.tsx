@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, useMemo } from "react"
+import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { 
   PackageCheck, 
   Upload,
@@ -69,8 +69,11 @@ import { type Proveedor, type Producto, getProveedores, getProductos } from "@/l
 import { type Almacen, type Localizacion, getAlmacenes, getLocalizaciones } from "@/lib/services/catalogos"
 import { type CuentaConfig, getCuentas } from "@/lib/services/cuentas"
 import { QuickCreateProductoDialog } from "@/components/recepcion/quick-create-producto-dialog"
+import { AgregarTallasDialog } from "@/components/recepcion/agregar-tallas-dialog"
+import { getGruposTallas } from "@/lib/services/grupos-tallas"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useAuth } from "@/lib/contexts/auth-context"
+import { usePersistentDraft } from "@/lib/hooks/use-persistent-draft"
 
 // Interface for AI extracted data
 interface TallaExtraida {
@@ -106,6 +109,27 @@ interface LineaFactura {
   tallasDetectadas?: TallaExtraida[]
 }
 
+/**
+ * Forma del BORRADOR que se persiste en localStorage (todo lo serializable de
+ * la recepción, menos la imagen). Al volver a abrir la página se rehidrata para
+ * no perder lo capturado si el sistema se cerró a mitad de una recepción.
+ */
+interface RecepcionIADraft {
+  lineas: LineaFactura[]
+  proveedorId: string
+  moneda: 'LPS' | 'USD'
+  tasaCambio: number
+  costosImportacion: number
+  impuestosCompra: number
+  otrosCostos: number
+  almacenId: number
+  localizacionId: number
+  pagoMetodo: 'Efectivo' | 'Banco' | 'Credito'
+  pagoCuentaId: number | null
+  modo: 'digitalizar' | 'manual' | 'historial'
+  numeroFactura: string
+}
+
 export default function RecepcionIAPage() {
   const { user } = useAuth()
   // La empresa usa tallas: habilita la detección/creación tallada desde factura.
@@ -130,6 +154,13 @@ export default function RecepcionIAPage() {
   // id de la linea activa para auto-mapear el producto recien creado.
   const [quickCreateLineaId, setQuickCreateLineaId] = useState<number | null>(null)
   const quickCreateLinea = lineas.find((l) => l.id === quickCreateLineaId) || null
+
+  // Ids de productos que YA son tallados (pertenecen a un grupo de tallas). Se
+  // usa para no ofrecer "Agregar tallas" en un producto que ya lo es.
+  const [productosTallados, setProductosTallados] = useState<Set<number>>(new Set())
+  // Línea sobre la que se está convirtiendo el producto asociado a tallado.
+  const [agregarTallasLineaId, setAgregarTallasLineaId] = useState<number | null>(null)
+  const agregarTallasLinea = lineas.find((l) => l.id === agregarTallasLineaId) || null
 
   // Reception form
   const [proveedorId, setProveedorId] = useState<string>("")
@@ -158,14 +189,20 @@ export default function RecepcionIAPage() {
 
   const { toast } = useToast()
 
+  // Borrador persistente: si el sistema se cierra a mitad de una recepción, al
+  // volver retomamos donde íbamos (todo menos la imagen; ver `useEffect` abajo).
+  const draft = usePersistentDraft<RecepcionIADraft>("recepcion-ia")
+  const draftRestored = useRef(false)
+
   const fetchData = useCallback(async () => {
     setLoading(true)
-    const [prodRes, almRes, provRes, cuentasRes, comprasRes] = await Promise.all([
+    const [prodRes, almRes, provRes, cuentasRes, comprasRes, gruposRes] = await Promise.all([
       getProductos(),
       getAlmacenes(),
       getProveedores(),
       getCuentas(),
       getCompras('Recibida'),
+      getGruposTallas(),
     ])
 
     setProductos(prodRes.data)
@@ -173,6 +210,8 @@ export default function RecepcionIAPage() {
     setProveedores(provRes.data)
     setCuentas(cuentasRes.data || [])
     setHistorial(comprasRes.data || [])
+    // Productos que ya son tallados (para no ofrecer "Agregar tallas" en ellos).
+    setProductosTallados(new Set(gruposRes.data.keys()))
     setLoading(false)
   }, [])
 
@@ -189,17 +228,73 @@ export default function RecepcionIAPage() {
     fetchData()
   }, [fetchData])
 
+  // Al rehidratar un borrador, la localización elegida se restaura DESPUÉS de que
+  // cargan las localizaciones del almacén (el efecto de abajo pone localización en
+  // 0 al cambiar de almacén). Este ref lleva la localización pendiente por aplicar.
+  const pendingLocalizacionId = useRef<number | null>(null)
+
   // Fetch locations when warehouse changes
   useEffect(() => {
     if (almacenId) {
       getLocalizaciones(almacenId).then(res => {
         setLocalizaciones(res.data)
-        setLocalizacionId(0)
+        // Si venimos de restaurar un borrador, conserva la localización guardada;
+        // si no, arranca en "sin seleccionar".
+        const pend = pendingLocalizacionId.current
+        pendingLocalizacionId.current = null
+        setLocalizacionId(pend != null && res.data.some(l => l.id === pend) ? pend : 0)
       })
     } else {
       setLocalizaciones([])
     }
   }, [almacenId])
+
+  // Rehidratación del borrador (una sola vez). Restaura todo lo capturado menos
+  // la imagen; la localización se difiere vía `pendingLocalizacionId`.
+  useEffect(() => {
+    if (draftRestored.current || !draft.ready) return
+    draftRestored.current = true
+    const d = draft.value
+    // Solo restauramos si hay algo sustancial (líneas capturadas).
+    if (!d || !Array.isArray(d.lineas) || d.lineas.length === 0) return
+    setLineas(d.lineas)
+    setProveedorId(d.proveedorId ?? "")
+    setMoneda(d.moneda ?? 'USD')
+    setTasaCambio(d.tasaCambio ?? 24.5)
+    setCostosImportacion(d.costosImportacion ?? 0)
+    setImpuestosCompra(d.impuestosCompra ?? 0)
+    setOtrosCostos(d.otrosCostos ?? 0)
+    setPagoMetodo(d.pagoMetodo ?? 'Credito')
+    setPagoCuentaId(d.pagoCuentaId ?? null)
+    setNumeroFactura(d.numeroFactura ?? "")
+    setModo(d.modo === 'historial' ? 'digitalizar' : (d.modo ?? 'digitalizar'))
+    if (d.almacenId) {
+      pendingLocalizacionId.current = d.localizacionId || null
+      setAlmacenId(d.almacenId)
+    }
+    toast({
+      title: "Recepción retomada",
+      description: "Recuperamos lo que estabas capturando antes de cerrar. Puedes continuar o descartarlo.",
+    })
+  }, [draft.ready, draft.value, toast])
+
+  // Guarda el borrador ante cualquier cambio relevante (debounced dentro del hook).
+  // Solo guardamos si hay líneas capturadas; NO limpiamos aquí en caso contrario
+  // (el borrado explícito ocurre al confirmar o descartar), para no pisar un
+  // borrador válido durante la rehidratación inicial.
+  useEffect(() => {
+    if (!draft.ready || !draftRestored.current) return
+    if (lineas.length === 0) return
+    draft.save({
+      lineas, proveedorId, moneda, tasaCambio, costosImportacion, impuestosCompra,
+      otrosCostos, almacenId, localizacionId, pagoMetodo, pagoCuentaId, modo, numeroFactura,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    draft.ready, lineas, proveedorId, moneda, tasaCambio, costosImportacion,
+    impuestosCompra, otrosCostos, almacenId, localizacionId, pagoMetodo,
+    pagoCuentaId, modo, numeroFactura,
+  ])
 
   // Firma de las lineas (solo los campos que afectan el costo). Se usa como
   // dependencia del efecto de abajo para que el costo final se recalcule TAMBIEN
@@ -442,6 +537,47 @@ export default function RecepcionIAPage() {
     setQuickCreateLineaId(null)
   }
 
+  /**
+   * "Agregar tallas" sobre una línea YA asociada a un producto: ese producto se
+   * convirtió en tallado (con sus hermanas) y ahora la línea se reemplaza por
+   * una línea por talla, conservando el costo de la línea original.
+   */
+  const handleTallasAgregadas = (items: { producto: Producto; cantidad: number }[]) => {
+    // Agrega los productos nuevos (y el original ya con talla) al catálogo local.
+    setProductos((prev) => {
+      const map = new Map(prev.map((p) => [p.id, p]))
+      for (const it of items) if (it.producto.id != null) map.set(it.producto.id, it.producto)
+      return Array.from(map.values())
+    })
+    // Marca todos los productos involucrados como tallados.
+    setProductosTallados((prev) => {
+      const next = new Set(prev)
+      for (const it of items) if (it.producto.id != null) next.add(it.producto.id)
+      return next
+    })
+    const lineaId = agregarTallasLineaId
+    if (lineaId != null) {
+      setLineas((prev) => {
+        const orig = prev.find((l) => l.id === lineaId)
+        if (!orig) return prev
+        const nuevasLineas: LineaFactura[] = items.map((it, i) => ({
+          id: Date.now() + i,
+          nombreExtraido: orig.nombreExtraido,
+          productoId: it.producto.id!,
+          productoNombre: it.producto.nombre,
+          productoCodigo: it.producto.codigo_barras || "",
+          cantidad: it.cantidad,
+          costoOriginal: orig.costoOriginal,
+          costoFinalLocal: 0,
+          precioVenta: orig.precioVenta,
+          comboboxOpen: false,
+        }))
+        return prev.flatMap((l) => (l.id === lineaId ? nuevasLineas : [l]))
+      })
+    }
+    setAgregarTallasLineaId(null)
+  }
+
   // Map extracted product to system product
   const mapProducto = (lineaId: number, producto: Producto) => {
     setLineas(prev => prev.map(l => 
@@ -506,6 +642,20 @@ export default function RecepcionIAPage() {
     setLineas(prev => prev.map(l => 
       l.id === lineaId ? { ...l, comboboxOpen: open } : l
     ))
+  }
+
+  // Descarta el borrador en curso (limpia lo capturado y el localStorage).
+  const descartarBorrador = () => {
+    setLineas([])
+    setUploadedFile(null)
+    setFilePreview("")
+    setProveedorId("")
+    setNumeroFactura("")
+    setCostosImportacion(0)
+    setImpuestosCompra(0)
+    setOtrosCostos(0)
+    draft.clear()
+    toast({ title: "Borrador descartado", description: "Empieza una recepción nueva cuando quieras." })
   }
 
   // Process reception
@@ -583,6 +733,8 @@ export default function RecepcionIAPage() {
         setImpuestosCompra(0)
         setOtrosCostos(0)
         setNumeroFactura("")
+        // La recepción se confirmó: el borrador ya no aplica.
+        draft.clear()
         // Recarga productos (costo/precio nuevos) y el historial.
         fetchData()
       }
@@ -930,6 +1082,22 @@ export default function RecepcionIAPage() {
                                 {linea.tallasDetectadas && linea.tallasDetectadas.length >= 2 ? "Crear producto tallado" : "Crear producto"}
                               </button>
                             )}
+                            {/*
+                              Atajo "Agregar tallas": solo si la línea YA está
+                              asociada, la empresa usa tallas y el producto NO es
+                              tallado aún. Lo convierte en tallado y reparte el
+                              ingreso por talla.
+                            */}
+                            {linea.productoId != null && tallasActivo && !productosTallados.has(linea.productoId) && (
+                              <button
+                                type="button"
+                                onClick={() => setAgregarTallasLineaId(linea.id)}
+                                className="mt-1 inline-flex items-center gap-1 text-xs text-sky-700 hover:text-sky-900 hover:underline"
+                              >
+                                <Layers3 className="h-3 w-3" />
+                                Agregar tallas
+                              </button>
+                            )}
                           </TableCell>
                           <TableCell>
                             <Popover 
@@ -1250,6 +1418,17 @@ export default function RecepcionIAPage() {
                     Todos los productos deben estar mapeados para continuar
                   </p>
                 )}
+
+                {lineas.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={descartarBorrador}
+                    disabled={processing}
+                    className="w-full text-center text-xs text-muted-foreground hover:text-destructive disabled:opacity-50"
+                  >
+                    Descartar y empezar de nuevo
+                  </button>
+                )}
               </div>
             )}
           </CardContent>
@@ -1324,6 +1503,21 @@ export default function RecepcionIAPage() {
         defaultTallas={quickCreateLinea?.tallasDetectadas}
         onCreated={handleProductoCreated}
         onCreatedTallas={handleProductoTalladoCreated}
+      />
+
+      {/*
+        Diálogo "Agregar tallas": convierte el producto YA asociado a la línea
+        en un producto tallado y reparte el ingreso por talla.
+      */}
+      <AgregarTallasDialog
+        open={agregarTallasLineaId !== null}
+        onOpenChange={(open) => {
+          if (!open) setAgregarTallasLineaId(null)
+        }}
+        producto={agregarTallasLinea ? prodDeLinea(agregarTallasLinea) ?? null : null}
+        cantidadActual={agregarTallasLinea?.cantidad ?? 0}
+        defaultTallas={agregarTallasLinea?.tallasDetectadas}
+        onDone={handleTallasAgregadas}
       />
     </div>
   )

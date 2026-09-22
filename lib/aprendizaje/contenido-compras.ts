@@ -67,9 +67,11 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
       "Deja rastro en el kardex como 'Entrada Compra' vinculada a la orden.",
       "Marca la orden como Recibida cuando se completa.",
       "Muestra un desglose explícito del prorrateo: cuánto de los costos de importación/impuestos/otros se asigna a cada producto (según su valor) y cómo se forma el costo final unitario, con total de control.",
+      "Guarda un borrador automático: si el sistema se cierra o refrescas la página a mitad de una recepción, al volver retoma la orden y lo que habías capturado (costos, tasa, destino, ediciones por línea y método de pago). Puedes continuar o presionar 'Descartar' para empezar de cero.",
     ],
     queNoHace: [
       "No crea órdenes (eso es Orden de Compra) ni recibe mercancía sin orden — para eso está Recepción por Factura o Ingreso Manual.",
+      "El borrador se guarda solo en ese navegador y ese usuario: no se sincroniza a otra computadora ni a otro equipo.",
     ],
     operaciones: [
       {
@@ -111,8 +113,13 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
         respuesta:
           "Usa Inventario → Traslados para mover las unidades al almacén correcto. El kardex conserva ambos movimientos para auditoría.",
       },
+      {
+        pregunta: "Se me cerró el sistema a mitad de la recepción, ¿perdí lo que había capturado?",
+        respuesta:
+          "No. La recepción se guarda como borrador en tu navegador: al volver a abrir Recepción por OC retoma la orden y lo que llevabas (costos, tasa, almacén, ediciones y método de pago). Continúa donde ibas o presiona 'Descartar' para empezar de nuevo. El borrador se borra solo al confirmar la recepción.",
+      },
     ],
-    keywords: ["recibir", "mercancia", "entrada", "costo promedio", "parcial", "almacen", "precio de venta", "margen", "utilidad", "metodo de pago", "cuenta por pagar", "pago proveedor"],
+    keywords: ["recibir", "mercancia", "entrada", "costo promedio", "parcial", "almacen", "precio de venta", "margen", "utilidad", "metodo de pago", "cuenta por pagar", "pago proveedor", "borrador", "retomar", "recuperar", "se cerro"],
   },
   {
     modulo: "Recepcion por Factura",
@@ -132,11 +139,14 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
       "Método de pago: Efectivo (caja chica), Banco (una cuenta) o Cuenta por pagar (pendiente al proveedor). Se registra un gasto por el total.",
       "Con costos de importación/impuestos/otros, muestra el mismo desglose explícito del prorrateo que la Recepción por OC.",
       "Detección de tallas (si tu empresa usa tallas): cuando la factura desglosa una referencia por talla (S/M/L… o 6/8/10…), la IA la agrupa en una sola línea y marca las tallas detectadas. Al crear ese producto, el diálogo llega precargado con las tallas y sus cantidades; al guardarlo se crean los productos hermanos agrupados y la línea de factura se reemplaza por una línea por talla (cada una entra a inventario con su cantidad).",
+      "Agregar tallas a un producto ya asociado (si tu empresa usa tallas): en una línea ya mapeada a un producto que aún NO es tallado, aparece 'Agregar tallas'. Le asignas una talla al producto asociado y agregas las demás con sus cantidades; el producto pasa a ser tallado (conserva su stock e historial), se crean sus hermanas y la línea se reparte en una por talla para el ingreso.",
+      "Guarda un borrador automático: si el sistema se cierra o refrescas la página a mitad de una recepción, al volver retoma lo que habías capturado (líneas, proveedor, número de factura, costos, destino y método de pago; la imagen no se guarda). Puedes continuar o presionar 'Descartar y empezar de nuevo'.",
     ],
     queNoHace: [
       "No es infalible: la IA puede leer mal cantidades o precios en facturas borrosas — siempre revisa antes de confirmar.",
       "No asocia productos automáticamente: el mapeo línea → producto del catálogo lo confirmas tú.",
       "La detección de tallas depende de que la factura las liste legibles; siempre puedes corregir/agregar tallas y cantidades a mano en el diálogo.",
+      "El borrador no guarda la imagen de la factura (por su tamaño) y solo vive en ese navegador y ese usuario: no se sincroniza a otro equipo.",
     ],
     operaciones: [
       {
@@ -178,6 +188,17 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
           "La línea de la factura se reemplaza por una línea por talla, cada una asociada a su producto. Confirma el ingreso: entra el stock de cada talla con el costo prorrateado.",
         ],
       },
+      {
+        titulo: "Convertir en tallado un producto ya asociado (agregar tallas)",
+        pasos: [
+          "Requiere que tu empresa use tallas.",
+          "En una línea ya asociada a un producto que aún NO tiene tallas, presiona 'Agregar tallas'.",
+          "Asigna la talla que corresponde al producto asociado y su cantidad para este ingreso.",
+          "Agrega las tallas restantes con sus cantidades (se crean como productos hermanos con el mismo costo y precio).",
+          "Presiona 'Convertir en tallado': el producto original conserva su stock e historial y se agrupa con las nuevas tallas; la línea se reparte en una por talla.",
+          "Confirma la recepción: cada talla entra con su cantidad y el costo prorrateado.",
+        ],
+      },
     ],
     faqs: [
       {
@@ -190,8 +211,18 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
         respuesta:
           "En este módulo la imagen solo se usa para la extracción. Si quieres guardar el comprobante, adjúntalo al gasto correspondiente en Finanzas → Gastos.",
       },
+      {
+        pregunta: "Se cerró el sistema mientras capturaba la factura, ¿perdí todo?",
+        respuesta:
+          "No. Lo capturado se guarda como borrador en tu navegador: al volver a abrir Recepción por Factura retoma las líneas, el proveedor, el número de factura, los costos y el destino (la imagen no se guarda; vuelve a subirla si la necesitas). Continúa donde ibas o presiona 'Descartar y empezar de nuevo'. El borrador se borra al confirmar la recepción.",
+      },
+      {
+        pregunta: "Asocié un producto y luego me di cuenta que tiene tallas, ¿tengo que borrarlo?",
+        respuesta:
+          "No. En la línea ya asociada presiona 'Agregar tallas': asigna la talla del producto y agrega las demás con sus cantidades. El producto pasa a ser tallado conservando su stock e historial, y la línea se reparte en una por talla para el ingreso. (Requiere que tu empresa use tallas.)",
+      },
     ],
-    keywords: ["ia", "inteligencia artificial", "foto", "escanear", "gemini", "factura proveedor", "ocr", "tallas", "talla", "tallado", "detectar tallas", "precio de venta", "margen", "utilidad", "metodo de pago", "cuenta por pagar", "pago proveedor"],
+    keywords: ["ia", "inteligencia artificial", "foto", "escanear", "gemini", "factura proveedor", "ocr", "tallas", "talla", "tallado", "detectar tallas", "agregar tallas", "convertir en tallado", "precio de venta", "margen", "utilidad", "metodo de pago", "cuenta por pagar", "pago proveedor", "borrador", "retomar", "recuperar", "se cerro"],
   },
   {
     modulo: "Recalcular Recepcion",

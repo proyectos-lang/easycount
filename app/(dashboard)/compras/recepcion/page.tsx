@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { 
   PackageCheck, 
   Truck,
@@ -54,6 +54,27 @@ import { getRazonSocialForPdf } from "@/lib/services/ventas"
 import { hoyISO } from "@/lib/utils/fecha"
 import { type Almacen, type Localizacion, getAlmacenes, getLocalizaciones } from "@/lib/services/catalogos"
 import { type CuentaConfig, getCuentas } from "@/lib/services/cuentas"
+import { usePersistentDraft } from "@/lib/hooks/use-persistent-draft"
+
+/**
+ * Borrador persistente de una recepción por orden de compra: la OC elegida y lo
+ * capturado (costos extra, tasa, destino, overrides y forma de pago). Sobrevive
+ * a cerrar el sistema a mitad de la recepción.
+ */
+interface RecepcionOCDraft {
+  compraId: number
+  formData: {
+    costos_importacion: number
+    impuestos_compra: number
+    otros_costos: number
+    tasa_cambio: number
+    almacen_id: number
+    localizacion_id: number
+  }
+  overrides: Record<number, { cantidad?: number; costo?: number; precio?: number }>
+  pagoMetodo: 'Efectivo' | 'Banco' | 'Credito'
+  pagoCuentaId: number | null
+}
 
 export default function RecepcionPage() {
   const [comprasPendientes, setComprasPendientes] = useState<CompraEncabezado[]>([])
@@ -101,6 +122,15 @@ export default function RecepcionPage() {
 
   const { toast } = useToast()
 
+  // Borrador persistente (retomar una recepción si se cerró el sistema).
+  const draft = usePersistentDraft<RecepcionOCDraft>("recepcion-oc")
+  const draftRestored = useRef(false)
+  // Localización pendiente por aplicar tras cargar las del almacén (el efecto de
+  // abajo pone localización en 0 al cambiar de almacén).
+  const pendingLocalizacionId = useRef<number | null>(null)
+  // Overrides/pago pendientes por aplicar cuando terminen de cargar los detalles.
+  const pendingRestore = useRef<RecepcionOCDraft | null>(null)
+
   const fetchData = useCallback(async () => {
     setLoading(true)
     const [comprasRes, almRes, provRes, prodRes, cuentasRes] = await Promise.all([
@@ -133,7 +163,11 @@ export default function RecepcionPage() {
     if (formData.almacen_id) {
       getLocalizaciones(formData.almacen_id).then(res => {
         setLocalizaciones(res.data)
-        setFormData(prev => ({ ...prev, localizacion_id: 0 }))
+        // Al restaurar un borrador, conserva la localización guardada si existe.
+        const pend = pendingLocalizacionId.current
+        pendingLocalizacionId.current = null
+        const loc = pend != null && res.data.some(l => l.id === pend) ? pend : 0
+        setFormData(prev => ({ ...prev, localizacion_id: loc }))
       })
     } else {
       setLocalizaciones([])
@@ -166,6 +200,71 @@ export default function RecepcionPage() {
     }
   }, [detalles, formData.costos_importacion, formData.impuestos_compra, formData.otros_costos, formData.tasa_cambio, selectedCompra])
 
+  // Rehidratación del borrador (una sola vez): re-selecciona la OC guardada y
+  // aplica lo capturado. Los overrides/pago se aplican cuando cargan los detalles.
+  useEffect(() => {
+    if (draftRestored.current || !draft.ready || loading) return
+    const d = draft.value
+    if (!d || !d.compraId) { draftRestored.current = true; return }
+    const compra = comprasPendientes.find(c => c.id === d.compraId)
+    // Si la OC ya no está pendiente (se recibió/eliminó), descartamos el borrador.
+    if (!compra) { draftRestored.current = true; draft.clear(); return }
+    draftRestored.current = true
+
+    setSelectedCompra(compra)
+    setLoadingDetalles(true)
+    pendingRestore.current = d
+    pendingLocalizacionId.current = d.formData?.localizacion_id || null
+    setFormData({
+      costos_importacion: d.formData?.costos_importacion ?? 0,
+      impuestos_compra: d.formData?.impuestos_compra ?? 0,
+      otros_costos: d.formData?.otros_costos ?? 0,
+      tasa_cambio: d.formData?.tasa_cambio ?? (compra.moneda === 'USD' ? 24.5 : 1),
+      almacen_id: d.formData?.almacen_id ?? 0,
+      localizacion_id: 0,
+    })
+    getDetallesCompra(compra.id!).then(({ data }) => {
+      setDetalles(data)
+      setLoadingDetalles(false)
+    })
+    toast({
+      title: "Recepción retomada",
+      description: "Recuperamos la recepción que tenías en curso. Puedes continuar o descartarla.",
+    })
+  }, [draft.ready, draft.value, loading, comprasPendientes, toast])
+
+  // Aplica overrides/pago del borrador cuando los detalles ya cargaron.
+  useEffect(() => {
+    const pend = pendingRestore.current
+    if (!pend || detalles.length === 0) return
+    pendingRestore.current = null
+    setOverrides(pend.overrides || {})
+    setPagoMetodo(pend.pagoMetodo || 'Credito')
+    setPagoCuentaId(pend.pagoCuentaId ?? null)
+  }, [detalles])
+
+  // Guarda el borrador ante cambios relevantes (debounced dentro del hook).
+  useEffect(() => {
+    // Esperamos a que la rehidratación inicial haya corrido para no pisar un
+    // borrador válido antes de restaurarlo.
+    if (!draft.ready || !draftRestored.current) return
+    if (!selectedCompra?.id) {
+      // Sin OC seleccionada no hay recepción en curso.
+      draft.clear()
+      return
+    }
+    // No guardamos mientras aún estamos rehidratando (evita pisar el borrador).
+    if (pendingRestore.current) return
+    draft.save({
+      compraId: selectedCompra.id,
+      formData,
+      overrides,
+      pagoMetodo,
+      pagoCuentaId,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.ready, selectedCompra, formData, overrides, pagoMetodo, pagoCuentaId])
+
   const handleSelectCompra = async (compra: CompraEncabezado) => {
     setSelectedCompra(compra)
     setLoadingDetalles(true)
@@ -189,6 +288,15 @@ export default function RecepcionPage() {
     }
     setDetalles(data)
     setLoadingDetalles(false)
+  }
+
+  // Descarta la recepción en curso (deselecciona la OC y borra el borrador).
+  const descartarRecepcion = () => {
+    setSelectedCompra(null)
+    setDetalles([])
+    setCostosCalculados([])
+    setOverrides({})
+    draft.clear()
   }
 
   const handleProcessRecepcion = async () => {
@@ -249,6 +357,7 @@ export default function RecepcionPage() {
       setSelectedCompra(null)
       setDetalles([])
       setCostosCalculados([])
+      draft.clear()
       fetchData()
     }
   }
@@ -412,6 +521,7 @@ export default function RecepcionPage() {
         setSelectedCompra(null)
         setDetalles([])
         setCostosCalculados([])
+        draft.clear()
       }
       fetchData()
     }
@@ -863,9 +973,17 @@ export default function RecepcionPage() {
                 </div>
 
                 {/* Action Button */}
-                <div className="flex justify-end">
-                  <Button 
-                    size="lg" 
+                <div className="flex justify-end gap-2">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={descartarRecepcion}
+                    disabled={processing}
+                  >
+                    Descartar
+                  </Button>
+                  <Button
+                    size="lg"
                     onClick={handleProcessRecepcion}
                     disabled={processing || !formData.almacen_id || !formData.localizacion_id}
                   >
