@@ -61,6 +61,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "No permite vender en efectivo sin una sesión de caja chica abierta (el sistema lo bloquea).",
       "No deja cerrar una venta a crédito que supere el límite de crédito del cliente (0 o vacío = sin límite).",
       "No permite dejar a crédito una venta al cliente 'Consumidor Final': debe pagarse completa. Para vender a crédito, elige un cliente identificado.",
+      "Si el administrador de la plataforma activó 'Bloquear precio y descuento', los usuarios que NO son admin no pueden cambiar el precio de venta por línea ni aplicar descuento (los campos quedan fijos/ocultos). El admin sí puede.",
       "No permite editar una venta ya guardada: se corrige con una Devolución (parcial) o eliminándola desde Historial (total).",
       "No modifica el precio de lista del producto: el precio se puede cambiar por línea solo para esa venta.",
     ],

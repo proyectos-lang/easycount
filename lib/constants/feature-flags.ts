@@ -36,6 +36,19 @@ export interface FeatureFlags {
    * fiscal. Si es false, el modulo avisa "funcion no activada".
    */
   facturacion_cai: boolean
+  /**
+   * Si es true, los usuarios NO admin no pueden editar el precio de venta por
+   * línea ni aplicar descuento en Nueva Venta (los campos quedan fijos/ocultos).
+   * El admin no se ve afectado. Default false (todos pueden editar).
+   */
+  ventas_bloquear_precio_descuento: boolean
+  /**
+   * Si es true, a los usuarios NO admin se les OCULTA el saldo y los montos en
+   * Caja Chica (saldo actual, montos de movimientos, historial de sesiones y el
+   * saldo/diferencia del diálogo de cierre): pueden operar y cerrar caja "a
+   * ciegas" sin ver cuánto hay. El admin ve todo. Default false.
+   */
+  caja_ocultar_saldo: boolean
 }
 
 export const DEFAULT_FLAGS: FeatureFlags = {
@@ -45,6 +58,8 @@ export const DEFAULT_FLAGS: FeatureFlags = {
   productos_por_talla: false,
   venta_rapida: false,
   facturacion_cai: false,
+  ventas_bloquear_precio_descuento: false,
+  caja_ocultar_saldo: false,
 }
 
 /** Etiquetas legibles para el portal (que flags se pueden togglear por empresa). */
@@ -55,6 +70,8 @@ export const FLAG_LABELS: Record<keyof FeatureFlags, string> = {
   productos_por_talla: "Productos por talla (tallas agrupadas)",
   venta_rapida: "Venta rápida (linea manual sin inventario)",
   facturacion_cai: "Impresión de factura CAI (SAR Honduras)",
+  ventas_bloquear_precio_descuento: "Bloquear precio y descuento en ventas (excepto admin)",
+  caja_ocultar_saldo: "Ocultar saldo de caja chica (excepto admin)",
 }
 
 /**
@@ -88,5 +105,13 @@ export function mergeFlags(config: Record<string, unknown> | null | undefined): 
       c.facturacion_cai === undefined
         ? DEFAULT_FLAGS.facturacion_cai
         : Boolean(c.facturacion_cai),
+    ventas_bloquear_precio_descuento:
+      c.ventas_bloquear_precio_descuento === undefined
+        ? DEFAULT_FLAGS.ventas_bloquear_precio_descuento
+        : Boolean(c.ventas_bloquear_precio_descuento),
+    caja_ocultar_saldo:
+      c.caja_ocultar_saldo === undefined
+        ? DEFAULT_FLAGS.caja_ocultar_saldo
+        : Boolean(c.caja_ocultar_saldo),
   }
 }

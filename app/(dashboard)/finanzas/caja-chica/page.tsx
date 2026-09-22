@@ -52,6 +52,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
 import { useTenant } from "@/lib/hooks/use-tenant"
+import { useAuth } from "@/lib/contexts/auth-context"
 import {
   abrirSesion,
   cerrarSesion,
@@ -138,8 +139,12 @@ function tipoBadgeClass(t: CajaMovimientoTipo): string {
 export default function CajaChicaPage() {
   const { toast } = useToast()
   const { ready, razonSocialId } = useTenant()
+  const { user } = useAuth()
   const { sesion, saldoActual, loading, featurePending, refetch } =
     useCajaSesion()
+  // Flag por empresa: ocultar saldo/montos de caja a los NO admin (cierre a ciegas).
+  const esAdmin = (user?.rol || "").trim().toLowerCase() === "admin"
+  const ocultarSaldo = (user?.flags?.caja_ocultar_saldo ?? false) && !esAdmin
 
   const [movimientos, setMovimientos] = useState<CajaMovimiento[]>([])
   const [loadingMovs, setLoadingMovs] = useState(false)
@@ -509,15 +514,18 @@ export default function CajaChicaPage() {
         onValueChange={(v) => setActiveTab(v as "actual" | "historial")}
         className="space-y-4 md:space-y-6"
       >
-        <TabsList className="grid grid-cols-2 w-full sm:w-auto sm:inline-flex">
+        <TabsList className={`grid w-full sm:w-auto sm:inline-flex ${ocultarSaldo ? "grid-cols-1" : "grid-cols-2"}`}>
           <TabsTrigger value="actual" className="gap-2">
             <Wallet className="h-4 w-4" />
             <span>Sesion Actual</span>
           </TabsTrigger>
-          <TabsTrigger value="historial" className="gap-2">
-            <History className="h-4 w-4" />
-            <span>Historial de Sesiones</span>
-          </TabsTrigger>
+          {/* Historial de sesiones muestra totales monetarios: oculto con el flag. */}
+          {!ocultarSaldo && (
+            <TabsTrigger value="historial" className="gap-2">
+              <History className="h-4 w-4" />
+              <span>Historial de Sesiones</span>
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="actual" className="space-y-4 md:space-y-6 mt-0">
@@ -532,7 +540,7 @@ export default function CajaChicaPage() {
                 <span className="text-xs uppercase tracking-wide">
                   Saldo Actual
                 </span>
-                {saldoExcedido && (
+                {saldoExcedido && !ocultarSaldo && (
                   <Badge
                     variant="outline"
                     className="ml-auto bg-destructive/10 text-destructive border-destructive/30 gap-1"
@@ -544,10 +552,10 @@ export default function CajaChicaPage() {
               </div>
               <p
                 className={`mt-2 text-3xl md:text-4xl font-bold tracking-tight ${
-                  saldoExcedido ? "text-destructive" : ""
+                  saldoExcedido && !ocultarSaldo ? "text-destructive" : ""
                 }`}
               >
-                {sesion ? formatCurrency(saldoActual) : "Sin sesion"}
+                {!sesion ? "Sin sesion" : ocultarSaldo ? "••••••" : formatCurrency(saldoActual)}
               </p>
               {sesion ? (
                 <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -557,16 +565,18 @@ export default function CajaChicaPage() {
                   {sesion.usuario_apertura && (
                     <span>Por: {sesion.usuario_apertura}</span>
                   )}
-                  <span>
-                    Inicial: {formatCurrency(sesion.saldo_inicial)}
-                  </span>
+                  {!ocultarSaldo && (
+                    <span>
+                      Inicial: {formatCurrency(sesion.saldo_inicial)}
+                    </span>
+                  )}
                 </div>
               ) : (
                 <p className="mt-3 text-xs text-muted-foreground">
                   No hay sesion activa. Las ventas en efectivo estan bloqueadas.
                 </p>
               )}
-              {saldoExcedido && (
+              {saldoExcedido && !ocultarSaldo && (
                 <p className="mt-3 text-xs text-destructive">
                   Supera L {ALERTA_SALDO.toLocaleString("en-HN")}. Considere
                   transferir a un banco.
@@ -615,7 +625,8 @@ export default function CajaChicaPage() {
         </CardContent>
       </Card>
 
-      {/* Historial */}
+      {/* Historial de Movimientos — oculto si el flag oculta el saldo (montos). */}
+      {!ocultarSaldo && (
       <Card>
         <CardHeader>
           <CardTitle>Historial de Movimientos</CardTitle>
@@ -738,9 +749,11 @@ export default function CajaChicaPage() {
           )}
         </CardContent>
       </Card>
+      )}
         </TabsContent>
 
-        {/* ─── Historial de sesiones ─────────────────────────────── */}
+        {/* ─── Historial de sesiones (oculto con el flag caja_ocultar_saldo) ─── */}
+        {!ocultarSaldo && (
         <TabsContent value="historial" className="space-y-4 mt-0">
           <Card>
             <CardHeader>
@@ -936,6 +949,7 @@ export default function CajaChicaPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
       </Tabs>
 
       {/* ─── Dialog: Detalle del Dia ─────���───────────────────────── */}
@@ -1286,23 +1300,27 @@ export default function CajaChicaPage() {
               )}
             </div>
 
-            <div className="rounded-lg border p-3 bg-muted/30">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">
-                  Saldo calculado:
-                </span>
-                <span className="font-mono font-semibold">
-                  {formatCurrency(cierreCalculado)}
-                </span>
+            {/* Saldo calculado y diferencia: ocultos si el flag pide cierre a
+                ciegas (el no-admin cuenta el efectivo sin ver el saldo). */}
+            {!ocultarSaldo && (
+              <div className="rounded-lg border p-3 bg-muted/30">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Saldo calculado:
+                  </span>
+                  <span className="font-mono font-semibold">
+                    {formatCurrency(cierreCalculado)}
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="grid gap-2">
               <Label>Conteo de efectivo (billetes y monedas)</Label>
               <ConteoEfectivo conteo={cierreConteo} onChange={handleConteoChange} />
             </div>
 
-            {cierreSaldoReal !== "" && (
+            {!ocultarSaldo && cierreSaldoReal !== "" && (
               <div
                 className={`rounded-lg border p-3 text-sm ${
                   Math.abs(cierreDiferencia) < 0.005

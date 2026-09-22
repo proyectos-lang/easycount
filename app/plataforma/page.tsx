@@ -170,12 +170,18 @@ export default async function PlataformaPage() {
                 <th className="px-4 py-2 font-medium" title="Facturación CAI: habilita el módulo 'Facturación CAI' en Configuración para emitir facturas oficiales del SAR (Honduras)">
                   Factura CAI
                 </th>
+                <th className="px-4 py-2 font-medium" title="Bloquea la edición del precio de venta por línea y el descuento en Nueva Venta para los usuarios NO admin (el admin sí puede)">
+                  Bloquear precio/desc.
+                </th>
+                <th className="px-4 py-2 font-medium" title="Oculta el saldo y los montos de Caja Chica a los usuarios NO admin (cierre a ciegas); el admin ve todo">
+                  Ocultar saldo caja
+                </th>
               </tr>
             </thead>
             <tbody>
               {empresas.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-stone-400">
+                  <td colSpan={11} className="px-4 py-10 text-center text-stone-400">
                     Sin empresas para mostrar.
                   </td>
                 </tr>
@@ -263,6 +269,24 @@ export default async function PlataformaPage() {
                         initial={e.flags.facturacion_cai}
                         onLabel="Activo"
                         offLabel="Inactivo"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <FlagToggle
+                        razonSocialId={e.id}
+                        flag="ventas_bloquear_precio_descuento"
+                        initial={e.flags.ventas_bloquear_precio_descuento}
+                        onLabel="Bloqueado"
+                        offLabel="Libre"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <FlagToggle
+                        razonSocialId={e.id}
+                        flag="caja_ocultar_saldo"
+                        initial={e.flags.caja_ocultar_saldo}
+                        onLabel="Oculto"
+                        offLabel="Visible"
                       />
                     </td>
                   </tr>

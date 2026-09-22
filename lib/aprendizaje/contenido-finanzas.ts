@@ -220,6 +220,7 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
       "No permite salidas que dejen el saldo negativo.",
       "No permite dos sesiones abiertas a la vez.",
       "Sin sesión abierta, la app bloquea ventas y pagos en efectivo.",
+      "Si el administrador de la plataforma activó 'Ocultar saldo de caja', los usuarios que NO son admin no ven el saldo ni los montos (movimientos, historial ni el saldo/diferencia al cerrar): pueden operar y cerrar caja 'a ciegas'. El admin ve todo.",
     ],
     operaciones: [
       {

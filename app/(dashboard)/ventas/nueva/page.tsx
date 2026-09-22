@@ -110,6 +110,9 @@ export default function NuevaVentaPage() {
   const lectorCodigoBarras = user?.flags?.ventas_lector_codigo_barras ?? false
   // Flag por empresa: habilita "Venta Rapida" (linea manual sin inventario).
   const ventaRapidaActiva = user?.flags?.venta_rapida ?? false
+  // Flag por empresa: bloquear precio de venta + descuento a los NO admin.
+  const esAdmin = (user?.rol || "").trim().toLowerCase() === "admin"
+  const bloquearPrecioDescuento = (user?.flags?.ventas_bloquear_precio_descuento ?? false) && !esAdmin
 
   // Modo pantalla completa (kiosko POS): el modulo abarca el 100% de la pantalla.
   const [fullscreen, setFullscreen] = React.useState(false)
@@ -1529,7 +1532,7 @@ export default function NuevaVentaPage() {
                         </Button>
                       </div>
 
-                      {/* Price input */}
+                      {/* Price input — bloqueado (solo lectura) si el flag lo pide y no es admin. */}
                       <div className="flex items-center gap-1 min-w-0">
                         <span className="text-xs text-muted-foreground shrink-0">L</span>
                         <Input
@@ -1538,7 +1541,10 @@ export default function NuevaVentaPage() {
                           step="0.01"
                           value={linea.precio_unitario}
                           onChange={(e) => updatePrecio(index, parseFloat(e.target.value) || 0)}
-                          className="text-right font-medium text-sm h-7 w-20 px-2"
+                          readOnly={bloquearPrecioDescuento}
+                          disabled={bloquearPrecioDescuento}
+                          title={bloquearPrecioDescuento ? "El precio no se puede editar (definido por el administrador)" : undefined}
+                          className="text-right font-medium text-sm h-7 w-20 px-2 disabled:opacity-100 disabled:cursor-not-allowed"
                         />
                       </div>
 
@@ -1649,7 +1655,8 @@ export default function NuevaVentaPage() {
         </div>
         )}
 
-        {/* Descuento */}
+        {/* Descuento — oculto si el flag bloquea precio/descuento y no es admin. */}
+        {!bloquearPrecioDescuento && (
         <div className="px-4 py-3 border-b flex items-center justify-between gap-3">
           <Label htmlFor="descuento-input" className="text-sm">Descuento (%)</Label>
           <div className="relative w-28">
@@ -1679,6 +1686,7 @@ export default function NuevaVentaPage() {
             </span>
           </div>
         </div>
+        )}
 
         {/* Desglose de Pago (multi-metodo) */}
         <div className="px-4 py-3 border-b space-y-3">
