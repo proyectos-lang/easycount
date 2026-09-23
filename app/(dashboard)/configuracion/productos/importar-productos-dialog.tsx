@@ -173,6 +173,16 @@ export function ImportarProductosDialog({ onImported }: { onImported: () => void
               {resultado.ingresosExistentes > 0 ? ` · ${resultado.ingresosExistentes} ingreso(s) a existentes` : ""}
               {resultado.sinInventario > 0 ? ` · ${resultado.sinInventario} sin inventario` : ""}
             </p>
+            {(resultado.categoriasCreadas + resultado.subcategoriasCreadas + resultado.marcasCreadas) > 0 && (
+              <p className="text-xs text-center text-sky-700">
+                Catálogos nuevos creados:{" "}
+                {[
+                  resultado.categoriasCreadas > 0 ? `${resultado.categoriasCreadas} categoría(s)` : "",
+                  resultado.subcategoriasCreadas > 0 ? `${resultado.subcategoriasCreadas} subcategoría(s)` : "",
+                  resultado.marcasCreadas > 0 ? `${resultado.marcasCreadas} marca(s)` : "",
+                ].filter(Boolean).join(" · ")}
+              </p>
+            )}
             {resultado.productos.some((p) => p.estado !== "creado" && p.estado !== "ingreso_existente") && (
               <ScrollArea className="h-40 rounded-md border">
                 <div className="p-2 space-y-1">
@@ -289,15 +299,16 @@ export function ImportarProductosDialog({ onImported }: { onImported: () => void
                       {preview.sinNombre} fila(s) sin nombre se ignorarán.
                     </p>
                   )}
-                  {(preview.categoriasNoEncontradas.length > 0 || preview.subcategoriasNoEncontradas.length > 0 || preview.marcasNoEncontradas.length > 0) && (
-                    <p className="flex items-start gap-1.5 text-xs text-amber-700">
+                  {(preview.categoriasNuevas.length > 0 || preview.subcategoriasNuevas.length > 0 || preview.marcasNuevas.length > 0) && (
+                    <p className="flex items-start gap-1.5 text-xs text-sky-700">
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                      Sin coincidencia (se crearán sin ese dato):{" "}
+                      Se crearán automáticamente:{" "}
                       {[
-                        ...preview.categoriasNoEncontradas.map((c) => `cat. ${c}`),
-                        ...preview.subcategoriasNoEncontradas.map((s) => `subcat. ${s}`),
-                        ...preview.marcasNoEncontradas.map((m) => `marca ${m}`),
+                        ...preview.categoriasNuevas.map((c) => `cat. ${c}`),
+                        ...preview.subcategoriasNuevas.map((s) => `subcat. ${s}`),
+                        ...preview.marcasNuevas.map((m) => `marca ${m}`),
                       ].slice(0, 6).join(", ")}
+                      {(preview.categoriasNuevas.length + preview.subcategoriasNuevas.length + preview.marcasNuevas.length) > 6 ? "…" : ""}
                     </p>
                   )}
                   {requiereInventario && (!almacenId || !localizacionId) && (

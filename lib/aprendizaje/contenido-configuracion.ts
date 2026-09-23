@@ -216,12 +216,12 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
         pasos: [
           "En Configuración → Productos, presiona 'Carga masiva'.",
           "Descarga la plantilla y complétala: código de barras, nombre, categoría, subcategoría (opcional), marca, talla, precio de venta, costo unitario y cantidad inicial (una fila por producto). Las columnas Categoría, Subcategoría y Marca traen una lista desplegable con los valores registrados de tu empresa (podés elegir o escribir uno nuevo). Además hay una segunda hoja «Referencias» con las categorías, marcas, subcategorías, almacenes y bodegas actuales, para usar los nombres exactos.",
-          "La subcategoría es opcional y solo se asigna si coincide con una subcategoría de la categoría que pusiste en esa fila; si no calza (o la dejas en blanco), el producto se crea sin subcategoría.",
+          "Los catálogos van por NOMBRE, no por código: si la categoría, la subcategoría o la marca que escribes no existe todavía, el sistema la CREA automáticamente y asocia el producto a ella (así no tenés que crearlas antes). La subcategoría se crea dentro de la categoría de esa fila; si dejas la subcategoría en blanco, el producto queda sin subcategoría.",
           "Elige el almacén y la bodega donde entrará el inventario inicial (solo se usan para las filas con cantidad mayor a 0).",
-          "Sube el archivo: verás un resumen (nuevos, unidades, valor del inventario) y avisos (categorías/subcategorías/marcas sin coincidencia).",
+          "Sube el archivo: verás un resumen (nuevos, unidades, valor del inventario) y un aviso con las categorías/subcategorías/marcas que se crearán automáticamente.",
           "Un producto se considera repetido cuando coincide el CÓDIGO de barras (la clave única). Si la fila no trae código, se usa el nombre como respaldo. Un mismo nombre con distinto código se toma como producto nuevo.",
           "Si algún producto del archivo YA existe, el sistema pregunta: «Este producto ya existe, ¿deseas generar el ingreso de inventario?». Activa el interruptor para sumar sus cantidades a las existencias del producto existente, o déjalo apagado para omitirlos.",
-          "Presiona 'Cargar': se crean los productos nuevos con su ingreso inicial y, si lo elegiste, se generan ingresos a los que ya existían.",
+          "Presiona 'Cargar': se crean los productos nuevos con su ingreso inicial, se crean las categorías/subcategorías/marcas que no existían y, si lo elegiste, se generan ingresos a los que ya existían. El resumen final indica cuántos catálogos nuevos se crearon.",
         ],
       },
       {
@@ -229,7 +229,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
         pasos: [
           "Usa el botón de gestión de marcas/categorías dentro del módulo.",
           "Crea las categorías y subcategorías que reflejen tu negocio (facilitan filtrar y analizar ventas).",
-          "Sugerencia: crea las categorías y marcas ANTES de la carga masiva para que se asocien por nombre; si no existen, el producto se crea igual pero sin ese dato.",
+          "Nota: en la carga masiva no necesitas crear las categorías, subcategorías ni marcas de antemano; las que no existan se crean solas por nombre. Cuida la ortografía y las mayúsculas/tildes para no crear duplicados casi iguales (ej. «Ropa» vs «ropa»).",
         ],
       },
       {

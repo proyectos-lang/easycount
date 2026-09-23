@@ -1,7 +1,7 @@
 import * as XLSX from "xlsx"
 import {
   getProductos, getCategorias, getMarcas, getSubcategorias, getAlmacenes, getLocalizaciones,
-  saveProducto, type Producto,
+  saveProducto, createCategoria, createMarca, createSubcategoria, type Producto,
 } from "@/lib/services/catalogos"
 import { procesarIngresoManual } from "@/lib/services/inventario"
 
@@ -41,10 +41,11 @@ export interface PreviewProductos {
   unidadesDuplicados: number // Σ cantidad de los duplicados
   valorDuplicados: number // Σ cantidad × costo de los duplicados
   sinNombre: number // filas sin nombre (invalidas)
-  categoriasNoEncontradas: string[]
-  /** Subcategorias escritas que no existen dentro de su categoria (se omiten). */
-  subcategoriasNoEncontradas: string[]
-  marcasNoEncontradas: string[]
+  // Catalogos que NO existen aun y que la carga CREARA automaticamente (por nombre).
+  categoriasNuevas: string[]
+  /** Subcategorias que se crearan dentro de su categoria (por par cat+subcat). */
+  subcategoriasNuevas: string[]
+  marcasNuevas: string[]
   valorInventarioInicial: number // Σ cantidad × costo (solo productos nuevos)
   unidadesIniciales: number // Σ cantidad (solo productos nuevos)
   error: string | null
@@ -63,6 +64,10 @@ export interface ResultadoImportProductos {
   conInventario: number
   sinInventario: number
   ingresosExistentes: number // ingresos generados a productos que ya existian
+  // Catalogos creados automaticamente durante la carga (por nombre).
+  categoriasCreadas: number
+  subcategoriasCreadas: number
+  marcasCreadas: number
   productos: ResultadoProducto[]
 }
 
@@ -186,7 +191,7 @@ export async function previsualizarImportProductos(filas: FilaProductoImport[]):
   const vacio: PreviewProductos = {
     total: 0, nuevos: 0, duplicados: [], duplicadosConCantidad: 0,
     unidadesDuplicados: 0, valorDuplicados: 0, sinNombre: 0,
-    categoriasNoEncontradas: [], subcategoriasNoEncontradas: [], marcasNoEncontradas: [],
+    categoriasNuevas: [], subcategoriasNuevas: [], marcasNuevas: [],
     valorInventarioInicial: 0, unidadesIniciales: 0, error: null,
   }
   if (filas.length === 0) return { ...vacio, error: "El archivo no tiene filas válidas" }
@@ -223,13 +228,14 @@ export async function previsualizarImportProductos(filas: FilaProductoImport[]):
     if (codigoKey) vistosCodigo.add(codigoKey)
     vistosNombre.add(nombreKey)
     nuevos++
+    // Catalogos que aun no existen se CREARAN automaticamente en la importacion.
     const catId = f.categoria ? ctx.catPorNombre.get(f.categoria.trim().toLowerCase()) : undefined
     if (f.categoria && catId == null) catNo.add(f.categoria)
-    // Subcategoria: se avisa si se escribió pero no existe dentro de su categoria
-    // (o la categoria no coincide). No es error: el producto se crea sin ella.
+    // Subcategoria: se creara si se escribió y aun no existe dentro de su categoria
+    // (si la categoria es nueva, la subcategoria tambien se crea con ella).
     if (f.subcategoria) {
-      const ok = catId != null && ctx.subPorCatYNombre.has(`${catId}|${f.subcategoria.trim().toLowerCase()}`)
-      if (!ok) subNo.add(f.subcategoria)
+      const existe = catId != null && ctx.subPorCatYNombre.has(`${catId}|${f.subcategoria.trim().toLowerCase()}`)
+      if (!existe) subNo.add(f.subcategoria)
     }
     if (f.marca && !ctx.marcaPorNombre.has(f.marca.trim().toLowerCase())) marcaNo.add(f.marca)
     if (f.cantidad_inicial > 0) {
@@ -246,9 +252,9 @@ export async function previsualizarImportProductos(filas: FilaProductoImport[]):
     unidadesDuplicados: unidadesDup,
     valorDuplicados: +valorDup.toFixed(2),
     sinNombre,
-    categoriasNoEncontradas: [...catNo],
-    subcategoriasNoEncontradas: [...subNo],
-    marcasNoEncontradas: [...marcaNo],
+    categoriasNuevas: [...catNo],
+    subcategoriasNuevas: [...subNo],
+    marcasNuevas: [...marcaNo],
     valorInventarioInicial: +valor.toFixed(2),
     unidadesIniciales: unidades,
     error: null,
@@ -280,7 +286,8 @@ export async function importarProductos(
   }
 
   const resultado: ResultadoImportProductos = {
-    creados: 0, omitidos: 0, errores: 0, conInventario: 0, sinInventario: 0, ingresosExistentes: 0, productos: [],
+    creados: 0, omitidos: 0, errores: 0, conInventario: 0, sinInventario: 0, ingresosExistentes: 0,
+    categoriasCreadas: 0, subcategoriasCreadas: 0, marcasCreadas: 0, productos: [],
   }
 
   const generarIngreso = (productoId: number, f: FilaProductoImport) =>
@@ -296,6 +303,46 @@ export async function importarProductos(
       nuevo_stock: f.cantidad_inicial,
       nuevo_costo: f.costo_unitario,
     })
+
+  // ── Resolver-o-crear catalogos por NOMBRE ────────────────────────────────
+  // La carga trae la categoria/subcategoria/marca por NOMBRE (no por id). Si no
+  // existe, se crea al vuelo y se registra en el contexto para reusarla en las
+  // filas siguientes (sin duplicar). Si la creacion falla, se sigue sin ese dato.
+  async function resolverCategoria(nombre: string): Promise<number | null> {
+    const key = nombre.trim().toLowerCase()
+    if (!key) return null
+    const existente = ctx.catPorNombre.get(key)
+    if (existente != null) return existente
+    const { data, error } = await createCategoria(nombre.trim())
+    if (error || !data?.id) return null
+    ctx.catPorNombre.set(key, data.id)
+    resultado.categoriasCreadas++
+    return data.id
+  }
+
+  async function resolverMarca(nombre: string): Promise<number | null> {
+    const key = nombre.trim().toLowerCase()
+    if (!key) return null
+    const existente = ctx.marcaPorNombre.get(key)
+    if (existente != null) return existente
+    const { data, error } = await createMarca(nombre.trim())
+    if (error || !data?.id) return null
+    ctx.marcaPorNombre.set(key, data.id)
+    resultado.marcasCreadas++
+    return data.id
+  }
+
+  async function resolverSubcategoria(nombre: string, categoriaId: number): Promise<number | null> {
+    const key = `${categoriaId}|${nombre.trim().toLowerCase()}`
+    if (!nombre.trim()) return null
+    const existente = ctx.subPorCatYNombre.get(key)
+    if (existente != null) return existente
+    const { data, error } = await createSubcategoria(nombre.trim(), categoriaId)
+    if (error || !data?.id) return null
+    ctx.subPorCatYNombre.set(key, data.id)
+    resultado.subcategoriasCreadas++
+    return data.id
+  }
 
   for (const f of filas) {
     const id = f.codigo || f.nombre || `fila ${f.fila}`
@@ -332,14 +379,13 @@ export async function importarProductos(
     }
 
     // ----- Producto nuevo: crear -----
-    const categoria_id = f.categoria ? ctx.catPorNombre.get(f.categoria.trim().toLowerCase()) ?? null : null
-    const marca_id = f.marca ? ctx.marcaPorNombre.get(f.marca.trim().toLowerCase()) ?? null : null
-    // Subcategoria: solo si hay categoria valida Y la subcategoria pertenece a
-    // esa categoria (evita cruzar subcategorias entre categorias distintas).
+    // Categoria/marca vienen por NOMBRE; si no existen, se crean al vuelo.
+    const categoria_id = f.categoria ? await resolverCategoria(f.categoria) : null
+    const marca_id = f.marca ? await resolverMarca(f.marca) : null
+    // Subcategoria: solo si hay categoria valida (la subcategoria SIEMPRE cuelga
+    // de una categoria). Se crea dentro de esa categoria si no existe.
     const subcategoria_id =
-      categoria_id != null && f.subcategoria
-        ? ctx.subPorCatYNombre.get(`${categoria_id}|${f.subcategoria.trim().toLowerCase()}`) ?? null
-        : null
+      categoria_id != null && f.subcategoria ? await resolverSubcategoria(f.subcategoria, categoria_id) : null
 
     const productoData: Producto = {
       nombre: f.nombre,
