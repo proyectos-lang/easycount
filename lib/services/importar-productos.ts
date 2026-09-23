@@ -13,6 +13,7 @@ export interface FilaProductoImport {
   codigo: string
   nombre: string
   categoria: string
+  subcategoria: string // opcional; solo aplica si coincide con la categoria
   marca: string
   talla: string
   precio_venta: number
@@ -41,6 +42,8 @@ export interface PreviewProductos {
   valorDuplicados: number // Σ cantidad × costo de los duplicados
   sinNombre: number // filas sin nombre (invalidas)
   categoriasNoEncontradas: string[]
+  /** Subcategorias escritas que no existen dentro de su categoria (se omiten). */
+  subcategoriasNoEncontradas: string[]
   marcasNoEncontradas: string[]
   valorInventarioInicial: number // Σ cantidad × costo (solo productos nuevos)
   unidadesIniciales: number // Σ cantidad (solo productos nuevos)
@@ -129,6 +132,7 @@ export async function parsearArchivoProductos(file: File): Promise<FilaProductoI
       codigo,
       nombre,
       categoria: str(col(row, ["Categoria", "Categoría"])),
+      subcategoria: str(col(row, ["Subcategoria", "Subcategoría", "Sub Categoria", "Sub Categoría"])),
       marca: str(col(row, ["Marca"])),
       talla: str(col(row, ["Talla"])),
       precio_venta: num(col(row, ["Precio Venta", "Precio de Venta", "Precio", "Precio Unitario"])),
@@ -146,8 +150,12 @@ async function cargarContexto(): Promise<{
   porNombre: Map<string, Producto>
   catPorNombre: Map<string, number>
   marcaPorNombre: Map<string, number>
+  /** Clave: `${categoria_id}|${nombre_subcategoria}` -> subcategoria_id. */
+  subPorCatYNombre: Map<string, number>
 }> {
-  const [prodRes, catRes, marcaRes] = await Promise.all([getProductos(), getCategorias(), getMarcas()])
+  const [prodRes, catRes, marcaRes, subRes] = await Promise.all([
+    getProductos(), getCategorias(), getMarcas(), getSubcategorias(),
+  ])
 
   const porCodigo = new Map<string, Producto>()
   const porNombre = new Map<string, Producto>()
@@ -162,7 +170,14 @@ async function cargarContexto(): Promise<{
   const marcaPorNombre = new Map<string, number>()
   for (const m of marcaRes.data || []) if (m.id != null) marcaPorNombre.set(m.nombre.trim().toLowerCase(), m.id)
 
-  return { porCodigo, porNombre, catPorNombre, marcaPorNombre }
+  // Subcategoria SIEMPRE ligada a su categoria: la clave incluye categoria_id
+  // para no asignar una subcategoria de otra categoria por nombre coincidente.
+  const subPorCatYNombre = new Map<string, number>()
+  for (const s of subRes.data || []) {
+    if (s.id != null) subPorCatYNombre.set(`${s.categoria_id}|${s.nombre.trim().toLowerCase()}`, s.id)
+  }
+
+  return { porCodigo, porNombre, catPorNombre, marcaPorNombre, subPorCatYNombre }
 }
 
 // ==================== PREVIEW ====================
@@ -171,7 +186,7 @@ export async function previsualizarImportProductos(filas: FilaProductoImport[]):
   const vacio: PreviewProductos = {
     total: 0, nuevos: 0, duplicados: [], duplicadosConCantidad: 0,
     unidadesDuplicados: 0, valorDuplicados: 0, sinNombre: 0,
-    categoriasNoEncontradas: [], marcasNoEncontradas: [],
+    categoriasNoEncontradas: [], subcategoriasNoEncontradas: [], marcasNoEncontradas: [],
     valorInventarioInicial: 0, unidadesIniciales: 0, error: null,
   }
   if (filas.length === 0) return { ...vacio, error: "El archivo no tiene filas válidas" }
@@ -179,6 +194,7 @@ export async function previsualizarImportProductos(filas: FilaProductoImport[]):
   const ctx = await cargarContexto()
   const duplicados: string[] = []
   const catNo = new Set<string>()
+  const subNo = new Set<string>()
   const marcaNo = new Set<string>()
   const vistosCodigo = new Set<string>()
   const vistosNombre = new Set<string>()
@@ -207,7 +223,14 @@ export async function previsualizarImportProductos(filas: FilaProductoImport[]):
     if (codigoKey) vistosCodigo.add(codigoKey)
     vistosNombre.add(nombreKey)
     nuevos++
-    if (f.categoria && !ctx.catPorNombre.has(f.categoria.trim().toLowerCase())) catNo.add(f.categoria)
+    const catId = f.categoria ? ctx.catPorNombre.get(f.categoria.trim().toLowerCase()) : undefined
+    if (f.categoria && catId == null) catNo.add(f.categoria)
+    // Subcategoria: se avisa si se escribió pero no existe dentro de su categoria
+    // (o la categoria no coincide). No es error: el producto se crea sin ella.
+    if (f.subcategoria) {
+      const ok = catId != null && ctx.subPorCatYNombre.has(`${catId}|${f.subcategoria.trim().toLowerCase()}`)
+      if (!ok) subNo.add(f.subcategoria)
+    }
     if (f.marca && !ctx.marcaPorNombre.has(f.marca.trim().toLowerCase())) marcaNo.add(f.marca)
     if (f.cantidad_inicial > 0) {
       unidades += f.cantidad_inicial
@@ -224,6 +247,7 @@ export async function previsualizarImportProductos(filas: FilaProductoImport[]):
     valorDuplicados: +valorDup.toFixed(2),
     sinNombre,
     categoriasNoEncontradas: [...catNo],
+    subcategoriasNoEncontradas: [...subNo],
     marcasNoEncontradas: [...marcaNo],
     valorInventarioInicial: +valor.toFixed(2),
     unidadesIniciales: unidades,
@@ -310,6 +334,12 @@ export async function importarProductos(
     // ----- Producto nuevo: crear -----
     const categoria_id = f.categoria ? ctx.catPorNombre.get(f.categoria.trim().toLowerCase()) ?? null : null
     const marca_id = f.marca ? ctx.marcaPorNombre.get(f.marca.trim().toLowerCase()) ?? null : null
+    // Subcategoria: solo si hay categoria valida Y la subcategoria pertenece a
+    // esa categoria (evita cruzar subcategorias entre categorias distintas).
+    const subcategoria_id =
+      categoria_id != null && f.subcategoria
+        ? ctx.subPorCatYNombre.get(`${categoria_id}|${f.subcategoria.trim().toLowerCase()}`) ?? null
+        : null
 
     const productoData: Producto = {
       nombre: f.nombre,
@@ -318,7 +348,7 @@ export async function importarProductos(
       costo_promedio: f.costo_unitario,
       categoria_id,
       marca_id,
-      subcategoria_id: null,
+      subcategoria_id,
       talla: f.talla || null,
       foto_url: "",
     }
@@ -408,10 +438,13 @@ export async function descargarPlantillaProductos(): Promise<void> {
   }
 
   // ----- Hoja "Productos" (creada arriba para que sea la primera) -----
+  // Subcategoria va justo despues de Categoria (es opcional: se llena solo si el
+  // producto tiene una y coincide con una subcategoria de esa categoria).
   ws.columns = [
     { header: "Codigo de Barras", width: 18 },
     { header: "Nombre", width: 28 },
     { header: "Categoria", width: 18 },
+    { header: "Subcategoria", width: 18 },
     { header: "Marca", width: 18 },
     { header: "Talla", width: 8 },
     { header: "Precio Venta", width: 14 },
@@ -419,11 +452,12 @@ export async function descargarPlantillaProductos(): Promise<void> {
     { header: "Cantidad Inicial", width: 14 },
   ]
   ws.getRow(1).font = { bold: true }
-  ws.addRow(["CB-001", "Camisa Polo Azul", categorias[0] ?? "Ropa", marcas[0] ?? "Marca X", "M", 350, 180, 20])
-  ws.addRow(["CB-002", "Pantalon Jean", categorias[0] ?? "Ropa", marcas[1] ?? marcas[0] ?? "Marca Y", "32", 650, 300, 10])
+  ws.addRow(["CB-001", "Camisa Polo Azul", categorias[0] ?? "Ropa", subcategorias[0] ?? "", marcas[0] ?? "Marca X", "M", 350, 180, 20])
+  ws.addRow(["CB-002", "Pantalon Jean", categorias[0] ?? "Ropa", "", marcas[1] ?? marcas[0] ?? "Marca Y", "32", 650, 300, 10])
 
-  // Desplegables en Categoria (col C) y Marca (col D), apuntando a Referencias.
-  // showErrorMessage:false => es una ayuda, no bloquea escribir un valor nuevo.
+  // Desplegables (apuntando a Referencias). showErrorMessage:false => es una
+  // ayuda, no bloquea escribir un valor nuevo.
+  //   C = Categoria (Referencias!A) · D = Subcategoria (Referencias!C) · E = Marca (Referencias!B)
   const FILAS = 500
   if (categorias.length > 0) {
     const rango = `Referencias!$A$2:$A$${categorias.length + 1}`
@@ -431,10 +465,16 @@ export async function descargarPlantillaProductos(): Promise<void> {
       ws.getCell(`C${r}`).dataValidation = { type: "list", allowBlank: true, formulae: [rango], showErrorMessage: false }
     }
   }
+  if (subcategorias.length > 0) {
+    const rango = `Referencias!$C$2:$C$${subcategorias.length + 1}`
+    for (let r = 2; r <= FILAS + 1; r++) {
+      ws.getCell(`D${r}`).dataValidation = { type: "list", allowBlank: true, formulae: [rango], showErrorMessage: false }
+    }
+  }
   if (marcas.length > 0) {
     const rango = `Referencias!$B$2:$B$${marcas.length + 1}`
     for (let r = 2; r <= FILAS + 1; r++) {
-      ws.getCell(`D${r}`).dataValidation = { type: "list", allowBlank: true, formulae: [rango], showErrorMessage: false }
+      ws.getCell(`E${r}`).dataValidation = { type: "list", allowBlank: true, formulae: [rango], showErrorMessage: false }
     }
   }
 

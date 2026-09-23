@@ -160,7 +160,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "Los productos tallados se AGRUPAN en la lista: la prenda aparece una sola vez con un contador de tallas y un botón para desplegar/contraer sus tallas (cada una con su stock y precio). El mismo agrupamiento se ve en Inventario → Valoración (stock y valor sumados del grupo).",
       "Editar grupo de tallas: en la fila del grupo, el botón de editar abre un panel con todas sus tallas para cambiar el precio de cada una, quitar una talla del grupo o agregar tallas nuevas (crea el producto hermano, con cantidad inicial opcional).",
       "Convertir un producto normal en tallado: al editar un producto ya creado puedes marcarlo como tallado y repartir su stock actual entre las tallas (la suma debe cuadrar con el stock). El producto original queda como una talla más; costo y precio se mantienen.",
-      "Carga masiva desde Excel: descarga una plantilla, complétala con tus productos (código, nombre, categoría, marca, precio, costo y cantidad inicial) y súbela eligiendo el almacén y la bodega; el sistema crea todos los productos y genera su inventario inicial de una sola vez.",
+      "Carga masiva desde Excel: descarga una plantilla, complétala con tus productos (código, nombre, categoría, subcategoría opcional, marca, precio, costo y cantidad inicial) y súbela eligiendo el almacén y la bodega; el sistema crea todos los productos y genera su inventario inicial de una sola vez.",
       "Elimina productos: si solo tiene movimientos de inventario, se borran en cascada junto con el producto (te avisa cuántos); si tiene ventas o compras registradas, no se borra para proteger el historial.",
     ],
     queNoHace: [
@@ -215,9 +215,10 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
         titulo: "Carga masiva de productos (Excel)",
         pasos: [
           "En Configuración → Productos, presiona 'Carga masiva'.",
-          "Descarga la plantilla y complétala: código de barras, nombre, categoría, marca, talla, precio de venta, costo unitario y cantidad inicial (una fila por producto). Las columnas Categoría y Marca traen una lista desplegable con los valores registrados de tu empresa (podés elegir o escribir uno nuevo). Además hay una segunda hoja «Referencias» con las categorías, marcas, subcategorías, almacenes y bodegas actuales, para usar los nombres exactos.",
+          "Descarga la plantilla y complétala: código de barras, nombre, categoría, subcategoría (opcional), marca, talla, precio de venta, costo unitario y cantidad inicial (una fila por producto). Las columnas Categoría, Subcategoría y Marca traen una lista desplegable con los valores registrados de tu empresa (podés elegir o escribir uno nuevo). Además hay una segunda hoja «Referencias» con las categorías, marcas, subcategorías, almacenes y bodegas actuales, para usar los nombres exactos.",
+          "La subcategoría es opcional y solo se asigna si coincide con una subcategoría de la categoría que pusiste en esa fila; si no calza (o la dejas en blanco), el producto se crea sin subcategoría.",
           "Elige el almacén y la bodega donde entrará el inventario inicial (solo se usan para las filas con cantidad mayor a 0).",
-          "Sube el archivo: verás un resumen (nuevos, unidades, valor del inventario) y avisos (categorías/marcas sin coincidencia).",
+          "Sube el archivo: verás un resumen (nuevos, unidades, valor del inventario) y avisos (categorías/subcategorías/marcas sin coincidencia).",
           "Un producto se considera repetido cuando coincide el CÓDIGO de barras (la clave única). Si la fila no trae código, se usa el nombre como respaldo. Un mismo nombre con distinto código se toma como producto nuevo.",
           "Si algún producto del archivo YA existe, el sistema pregunta: «Este producto ya existe, ¿deseas generar el ingreso de inventario?». Activa el interruptor para sumar sus cantidades a las existencias del producto existente, o déjalo apagado para omitirlos.",
           "Presiona 'Cargar': se crean los productos nuevos con su ingreso inicial y, si lo elegiste, se generan ingresos a los que ya existían.",
