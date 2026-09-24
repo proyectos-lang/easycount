@@ -116,7 +116,7 @@ Allow-list de **super-admins de la plataforma** (el dueño de la app), un nivel 
 | `usuario`, `updated_at` | text, date | auditoría |
 
 ### `marcas`, `categorias`, `subcategorias`
-Catálogos simples: `id` (PK), `nombre` (NOT NULL), `razon_social_id` (FK tenant), `usuario`, `created_at`. `subcategorias` además tiene `categoria_id` (FK → `categorias.id`) y `descripcion`.
+Catálogos simples: `id` (PK), `nombre` (NOT NULL), `razon_social_id` (FK tenant), `usuario`, `created_at`. `subcategorias` además tiene `categoria_id` (FK → `categorias.id`) y `descripcion`. **Unicidad POR EMPRESA** (script 068): `categorias` y `marcas` tienen un índice único `(razon_social_id, lower(btrim(nombre)))`, no un UNIQUE global sobre `nombre` — así dos empresas pueden repetir nombres y, dentro de una misma empresa, "Acero"/"acero"/"Acero " cuentan como el mismo (se reutiliza en la carga masiva y al crear al vuelo). `subcategorias` ya estaba aislada por empresa/categoría.
 
 ### `clientes`
 
