@@ -5,6 +5,52 @@ import { getTenantStamp, isValidStamp } from "@/lib/services/tenant-stamp"
 import { getComisionesPeriodo } from "@/lib/services/ventas-analytics"
 import { getDevolucionesDelPeriodo } from "@/lib/services/devoluciones"
 
+/**
+ * PostgREST corta cada `.select()` en 1000 filas. Este helper pagina con
+ * `.range()` hasta traer TODAS las filas — sin él, un mes con más de 1000
+ * ventas (o 1000 líneas/gastos) quedaba SUBESTIMADO. `buildQuery()` reconstruye
+ * la consulta base (sin range).
+ */
+type RangeableQuery = {
+  range: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
+}
+async function fetchAllRows<T>(buildQuery: () => RangeableQuery): Promise<{ data: T[]; error: string | null }> {
+  const PAGE = 1000
+  let from = 0
+  const acc: T[] = []
+  for (let guard = 0; guard < 100; guard++) {
+    const { data, error } = await buildQuery().range(from, from + PAGE - 1)
+    if (error) return { data: acc, error: error.message }
+    const rows = (data || []) as T[]
+    acc.push(...rows)
+    if (rows.length < PAGE) break
+    from += PAGE
+  }
+  return { data: acc, error: null }
+}
+
+/** Parte un arreglo en bloques (para `.in(...)` con muchos ids). */
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+
+/** Trae todas las filas de una consulta `.in(campo, ids)` con ids grandes. */
+async function fetchAllRowsIn<T>(
+  ids: number[],
+  buildQuery: (grupo: number[]) => RangeableQuery,
+  idChunk = 300,
+): Promise<{ data: T[]; error: string | null }> {
+  const acc: T[] = []
+  for (const grupo of chunk(ids, idChunk)) {
+    const { data, error } = await fetchAllRows<T>(() => buildQuery(grupo))
+    if (error) return { data: acc, error }
+    acc.push(...data)
+  }
+  return { data: acc, error: null }
+}
+
 // ==================== TIPOS ====================
 
 export interface EstadoResultadosMensual {
@@ -269,30 +315,37 @@ async function getEstadoResultadosCalculado(supabase: ReturnType<typeof createCl
   const tenantId = stamp.razon_social_id
 
   try {
-    // Get ventas del mes (filtradas por razon_social_id)
+    // Get ventas del mes (filtradas por razon_social_id). Paginado: sin esto,
+    // un mes con más de 1000 facturas quedaba SUBESTIMADO (solo las primeras 1000).
     let ventasQuery = supabase
       .from('ventas_encabezado')
       .select('id, total_venta')
       .gte('fecha_venta', primerDia)
       .lte('fecha_venta', ultimoDia)
     if (tenantId != null) ventasQuery = ventasQuery.eq('razon_social_id', tenantId)
-    const { data: ventasData } = await ventasQuery
+    const { data: ventasData } = await fetchAllRows<{ id: number; total_venta: number }>(
+      () => ventasQuery as unknown as RangeableQuery
+    )
 
     const ventasTotales = (ventasData || []).reduce((acc, v) => acc + (v.total_venta || 0), 0)
     const ventaIds = (ventasData || []).map(v => v.id)
 
-    // Get detalles for CMV calculation
+    // Get detalles for CMV calculation (chunked + paginado por >1000 líneas/ids)
     let cmv = 0
     if (ventaIds.length > 0) {
-      const { data: detallesData } = await supabase
-        .from('ventas_detalle')
-        .select('cantidad, costo_promedio_momento')
-        .in('venta_id', ventaIds)
+      const { data: detallesData } = await fetchAllRowsIn<{ cantidad: number; costo_promedio_momento: number }>(
+        ventaIds,
+        (grupo) =>
+          supabase
+            .from('ventas_detalle')
+            .select('cantidad, costo_promedio_momento')
+            .in('venta_id', grupo) as unknown as RangeableQuery
+      )
 
       cmv = (detallesData || []).reduce((acc, d) => acc + ((d.cantidad || 0) * (d.costo_promedio_momento || 0)), 0)
     }
 
-    // Get gastos del mes (filtrados por razon_social_id)
+    // Get gastos del mes (filtrados por razon_social_id). Paginado por >1000.
     let gastosQuery = supabase
       .from('gastos')
       .select(`
@@ -302,7 +355,9 @@ async function getEstadoResultadosCalculado(supabase: ReturnType<typeof createCl
       .gte('fecha_gasto', primerDia)
       .lte('fecha_gasto', ultimoDia)
     if (tenantId != null) gastosQuery = gastosQuery.eq('razon_social_id', tenantId)
-    const { data: gastosData } = await gastosQuery
+    const { data: gastosData } = await fetchAllRows<{ monto: number; conceptos_gastos: { categoria_macro?: string } | { categoria_macro?: string }[] | null }>(
+      () => gastosQuery as unknown as RangeableQuery
+    )
 
     const gastosPorCategoria: Record<string, number> = {
       'Servicios': 0,

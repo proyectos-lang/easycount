@@ -44,6 +44,34 @@ async function fetchAllRows<T>(buildQuery: () => RangeableQuery): Promise<{ data
   return { data: acc, error: null }
 }
 
+/** Parte un arreglo en bloques de `size` (para `.in(...)` con muchos ids). */
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+
+/**
+ * Trae TODAS las filas de una consulta con `.in(campo, ids)` cuando `ids` es
+ * grande: parte los ids en bloques (para no exceder el límite de PostgREST por
+ * lista) y pagina cada bloque a 1000 filas. `buildQuery(grupo)` reconstruye la
+ * consulta base para un subconjunto de ids. Evita el truncado silencioso en
+ * dashboards/reportes con más de 1000 líneas o ids.
+ */
+async function fetchAllRowsIn<T>(
+  ids: number[],
+  buildQuery: (grupo: number[]) => RangeableQuery,
+  idChunk = 300,
+): Promise<{ data: T[]; error: string | null }> {
+  const acc: T[] = []
+  for (const grupo of chunk(ids, idChunk)) {
+    const { data, error } = await fetchAllRows<T>(() => buildQuery(grupo))
+    if (error) return { data: acc, error }
+    acc.push(...data)
+  }
+  return { data: acc, error: null }
+}
+
 // ==================== INTERFACES ====================
 
 export interface VentaEncabezado {
@@ -1782,30 +1810,40 @@ export async function getVentasDashboard(anio?: number, mes?: number): Promise<{
         : `${anio}-12-31T23:59:59`
       ventasQuery = ventasQuery.gte('fecha_venta', startDate).lte('fecha_venta', endDate)
     }
-    
-    const { data: ventasData, error: ventasError } = await ventasQuery
-    if (ventasError) return { data: null, error: ventasError.message }
-    
+
+    // Paginado: PostgREST corta cada select en 1000 filas. Sin esto, un mes con
+    // más de 1000 facturas quedaba SUBESTIMADO (solo sumaba las primeras 1000).
+    const { data: ventasData, error: ventasError } = await fetchAllRows<
+      { id: number; total_venta: number; cliente_id: number; fecha_venta: string; clientes?: { nombre?: string } | null }
+    >(() => ventasQuery as unknown as RangeableQuery)
+    if (ventasError) return { data: null, error: ventasError }
+
     const ventaIds = (ventasData || []).map(v => v.id)
-    
-    // Get detalles
+
+    // Get detalles (chunked + paginado por si hay >1000 líneas o ids).
     let detallesData: VentaDetalle[] = []
     if (ventaIds.length > 0) {
-      const { data: dets } = await supabase
-        .from('ventas_detalle')
-        .select('*, productos(nombre, codigo_barras)')
-        .in('venta_id', ventaIds)
+      const { data: dets } = await fetchAllRowsIn<VentaDetalle>(ventaIds, (grupo) =>
+        supabase
+          .from('ventas_detalle')
+          .select('*, productos(nombre, codigo_barras)')
+          .in('venta_id', grupo) as unknown as RangeableQuery
+      )
       detallesData = dets || []
     }
-    
-    // Get transacciones for almacen data
+
+    // Get transacciones for almacen data (chunked + paginado).
     let transaccionesData: { almacen_id: number; referencia_id: number; cantidad: number; costo_o_precio_unitario: number }[] = []
     if (ventaIds.length > 0) {
-      const { data: trans } = await supabase
-        .from('transacciones_inventario')
-        .select('almacen_id, referencia_id, cantidad, costo_o_precio_unitario')
-        .eq('tipo_movimiento', 'Salida Venta')
-        .in('referencia_id', ventaIds)
+      const { data: trans } = await fetchAllRowsIn<
+        { almacen_id: number; referencia_id: number; cantidad: number; costo_o_precio_unitario: number }
+      >(ventaIds, (grupo) =>
+        supabase
+          .from('transacciones_inventario')
+          .select('almacen_id, referencia_id, cantidad, costo_o_precio_unitario')
+          .eq('tipo_movimiento', 'Salida Venta')
+          .in('referencia_id', grupo) as unknown as RangeableQuery
+      )
       transaccionesData = trans || []
     }
     
@@ -1829,8 +1867,11 @@ export async function getVentasDashboard(anio?: number, mes?: number): Promise<{
       .from('ventas_encabezado')
       .select('total_venta, fecha_venta')
     if (tenantId != null) trendQuery = trendQuery.eq('razon_social_id', tenantId)
-    const { data: ventasTrendData } = await trendQuery
-    
+    // Paginado: la tendencia toma TODO el histórico del tenant (suele pasar de 1000).
+    const { data: ventasTrendData } = await fetchAllRows<{ total_venta: number; fecha_venta: string }>(
+      () => trendQuery as unknown as RangeableQuery
+    )
+
     const ventasMesActual = (ventasTrendData || [])
       .filter(v => {
         const f = new Date(v.fecha_venta)
@@ -1903,10 +1944,14 @@ export async function getVentasDashboard(anio?: number, mes?: number): Promise<{
 
     let detsFueraData: { venta_id: number; utilidad_linea: number | null }[] = []
     if (idsFuera.length > 0) {
-      const { data: df } = await supabase
-        .from('ventas_detalle')
-        .select('venta_id, utilidad_linea')
-        .in('venta_id', idsFuera)
+      const { data: df } = await fetchAllRowsIn<{ venta_id: number; utilidad_linea: number | null }>(
+        idsFuera,
+        (grupo) =>
+          supabase
+            .from('ventas_detalle')
+            .select('venta_id, utilidad_linea')
+            .in('venta_id', grupo) as unknown as RangeableQuery
+      )
       detsFueraData = df || []
     }
 
@@ -1926,7 +1971,10 @@ export async function getVentasDashboard(anio?: number, mes?: number): Promise<{
       .from('ventas_encabezado')
       .select('id, total_venta, fecha_venta')
     if (tenantId != null) trendConIdQuery = trendConIdQuery.eq('razon_social_id', tenantId)
-    const { data: trendConId } = await trendConIdQuery
+    // Paginado: histórico completo del tenant (para el gráfico por año).
+    const { data: trendConId } = await fetchAllRows<{ id: number; total_venta: number; fecha_venta: string }>(
+      () => trendConIdQuery as unknown as RangeableQuery
+    )
 
     const ventasPorAnioMap: Record<number, { ventas: number; ganancia: number; facturas: number }> = {}
     ;(trendConId || []).forEach(v => {
