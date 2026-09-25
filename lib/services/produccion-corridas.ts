@@ -57,6 +57,28 @@ function isMissingTable(err: { message?: string; code?: string } | null): boolea
 }
 
 /**
+ * PostgREST corta cada `.select()` en 1000 filas. Pagina con `.range()` hasta
+ * traer todas (para agregar TODAS las corridas de un rango en el consolidado).
+ */
+type RangeableQuery = {
+  range: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message?: string; code?: string } | null }>
+}
+async function fetchAllRows<T>(buildQuery: () => RangeableQuery): Promise<{ data: T[]; error: { message?: string; code?: string } | null }> {
+  const PAGE = 1000
+  let from = 0
+  const acc: T[] = []
+  for (let guard = 0; guard < 100; guard++) {
+    const { data, error } = await buildQuery().range(from, from + PAGE - 1)
+    if (error) return { data: acc, error }
+    const rows = (data || []) as T[]
+    acc.push(...rows)
+    if (rows.length < PAGE) break
+    from += PAGE
+  }
+  return { data: acc, error: null }
+}
+
+/**
  * Consumo y costo de una corrida (función PURA).
  * @param lineas líneas de la receta: consumo por unidad + costo del material.
  * @param factores costos por unidad (energía/mano de obra/overhead).
@@ -471,15 +493,19 @@ async function corridasEnRango(
   start: string,
   end: string,
 ): Promise<{ data: CorridaConProducto[]; error: string | null }> {
-  const { data, error } = await supabase
-    .from("produccion_corridas")
-    .select("*")
-    .gte("created_at", start)
-    .lt("created_at", end)
-    .order("created_at", { ascending: false })
+  // Paginado: agrega TODAS las corridas del rango (getConsolidadoRango suma el
+  // conjunto completo, no solo las primeras 1000).
+  const { data, error } = await fetchAllRows<Corrida>(() =>
+    supabase
+      .from("produccion_corridas")
+      .select("*")
+      .gte("created_at", start)
+      .lt("created_at", end)
+      .order("created_at", { ascending: false }) as unknown as RangeableQuery
+  )
   if (error) {
     if (isMissingTable(error)) return { data: [], error: null }
-    return { data: [], error: error.message }
+    return { data: [], error: error.message ?? "Error de conexión" }
   }
   const filas = (data || []) as Corrida[]
   // Nombres de producto por id.

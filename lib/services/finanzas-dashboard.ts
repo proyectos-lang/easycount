@@ -6,6 +6,29 @@ import { getCuentasPorCobrar } from "@/lib/services/ventas"
 import { getCuentasPorPagar } from "@/lib/services/gastos"
 import { getEstadoResultadosMensual } from "@/lib/services/estado-resultados"
 
+/**
+ * PostgREST corta cada `.select()` en 1000 filas. Pagina con `.range()` hasta
+ * traer todas — el flujo de caja anual suma movimientos de un año completo, que
+ * en banca activa supera 1000 fácil (salía subestimado sin paginar).
+ */
+type RangeableQuery = {
+  range: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
+}
+async function fetchAllRows<T>(buildQuery: () => RangeableQuery): Promise<{ data: T[]; error: string | null }> {
+  const PAGE = 1000
+  let from = 0
+  const acc: T[] = []
+  for (let guard = 0; guard < 100; guard++) {
+    const { data, error } = await buildQuery().range(from, from + PAGE - 1)
+    if (error) return { data: acc, error: error.message }
+    const rows = (data || []) as T[]
+    acc.push(...rows)
+    if (rows.length < PAGE) break
+    from += PAGE
+  }
+  return { data: acc, error: null }
+}
+
 // ==================== TIPOS ====================
 
 export interface SaldoCuenta {
@@ -130,12 +153,14 @@ export async function getFlujoCajaMensual(
   const hasta = `${anio}-12-31T23:59:59`
 
   // --- Bancos: cuenta_movimientos (excluye transferencias internas) ---
-  const { data: bancoMovs } = await supabase
-    .from("cuenta_movimientos")
-    .select("fecha, tipo, monto, ref_tipo")
-    .eq("razon_social_id", tenantId)
-    .gte("fecha", desde)
-    .lte("fecha", hasta)
+  const { data: bancoMovs } = await fetchAllRows<{ fecha: string; tipo: string; monto: number; ref_tipo: string | null }>(() =>
+    supabase
+      .from("cuenta_movimientos")
+      .select("fecha, tipo, monto, ref_tipo")
+      .eq("razon_social_id", tenantId)
+      .gte("fecha", desde)
+      .lte("fecha", hasta) as unknown as RangeableQuery
+  )
 
   for (const m of bancoMovs || []) {
     const refTipo = (m.ref_tipo || "") as string
@@ -148,12 +173,14 @@ export async function getFlujoCajaMensual(
   }
 
   // --- Caja chica: caja_chica_movimientos (solo flujo real) ---
-  const { data: cajaMovs } = await supabase
-    .from("caja_chica_movimientos")
-    .select("fecha, created_at, tipo, monto")
-    .eq("razon_social_id", tenantId)
-    .gte("created_at", desde)
-    .lte("created_at", hasta)
+  const { data: cajaMovs } = await fetchAllRows<{ fecha: string; created_at: string; tipo: string; monto: number }>(() =>
+    supabase
+      .from("caja_chica_movimientos")
+      .select("fecha, created_at, tipo, monto")
+      .eq("razon_social_id", tenantId)
+      .gte("created_at", desde)
+      .lte("created_at", hasta) as unknown as RangeableQuery
+  )
 
   for (const m of cajaMovs || []) {
     const tipo = m.tipo as string

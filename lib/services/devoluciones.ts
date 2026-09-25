@@ -6,6 +6,28 @@ import { registrarMovimientoCuenta, recalcCadenaSaldoCuenta } from "@/lib/servic
 import { getHondurasNowISO } from "@/lib/utils/honduras-time"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+/**
+ * PostgREST corta cada `.select()` en 1000 filas. Pagina con `.range()` hasta
+ * traer todas (para agregaciones que suman el conjunto completo del período).
+ */
+type RangeableQuery = {
+  range: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string; code?: string } | null }>
+}
+async function fetchAllRows<T>(buildQuery: () => RangeableQuery): Promise<{ data: T[]; error: { message: string; code?: string } | null }> {
+  const PAGE = 1000
+  let from = 0
+  const acc: T[] = []
+  for (let guard = 0; guard < 100; guard++) {
+    const { data, error } = await buildQuery().range(from, from + PAGE - 1)
+    if (error) return { data: acc, error }
+    const rows = (data || []) as T[]
+    acc.push(...rows)
+    if (rows.length < PAGE) break
+    from += PAGE
+  }
+  return { data: acc, error: null }
+}
+
 // ==================== TIPOS ====================
 
 export interface DevolucionLineaInput {
@@ -177,11 +199,13 @@ export async function getDevolucionesDelPeriodo(
   const finMes = new Date(anio, mes, 0).getDate()
   const hasta = `${anio}-${String(mes).padStart(2, "0")}-${finMes}T23:59:59`
 
-  const { data, error } = await supabase
-    .from("devoluciones_detalle")
-    .select("cantidad_devuelta, precio_unitario, costo_promedio_momento, devoluciones_encabezado!inner(fecha)")
-    .gte("devoluciones_encabezado.fecha", desde)
-    .lte("devoluciones_encabezado.fecha", hasta)
+  const { data, error } = await fetchAllRows<{ cantidad_devuelta: number; precio_unitario: number; costo_promedio_momento: number }>(() =>
+    supabase
+      .from("devoluciones_detalle")
+      .select("cantidad_devuelta, precio_unitario, costo_promedio_momento, devoluciones_encabezado!inner(fecha)")
+      .gte("devoluciones_encabezado.fecha", desde)
+      .lte("devoluciones_encabezado.fecha", hasta) as unknown as RangeableQuery
+  )
 
   if (error) {
     if (isMissingTable(error)) return { montoVentas: 0, montoCosto: 0, error: null }

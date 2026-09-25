@@ -4,6 +4,51 @@ import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from '@/lib/servi
 import { fijarCostoPromedio } from '@/lib/services/stock'
 
 /**
+ * PostgREST corta cada `.select()` en 1000 filas. Pagina con `.range()` hasta
+ * traerlas todas. Crítico aquí: `resolverAfectados` devuelve los ids de ventas
+ * que el fallback recorre para REESCRIBIR costo/utilidad; truncar dejaría el
+ * recálculo retroactivo INCOMPLETO.
+ */
+type RangeableQuery = {
+  range: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
+}
+async function fetchAllRows<T>(buildQuery: () => RangeableQuery): Promise<{ data: T[]; error: string | null }> {
+  const PAGE = 1000
+  let from = 0
+  const acc: T[] = []
+  for (let guard = 0; guard < 100; guard++) {
+    const { data, error } = await buildQuery().range(from, from + PAGE - 1)
+    if (error) return { data: acc, error: error.message }
+    const rows = (data || []) as T[]
+    acc.push(...rows)
+    if (rows.length < PAGE) break
+    from += PAGE
+  }
+  return { data: acc, error: null }
+}
+
+function chunkIds<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+
+/** Trae todas las filas de una consulta `.in(campo, ids)` con ids grandes. */
+async function fetchAllRowsIn<T>(
+  ids: number[],
+  buildQuery: (grupo: number[]) => RangeableQuery,
+  idChunk = 300,
+): Promise<{ data: T[]; error: string | null }> {
+  const acc: T[] = []
+  for (const grupo of chunkIds(ids, idChunk)) {
+    const { data, error } = await fetchAllRows<T>(() => buildQuery(grupo))
+    if (error) return { data: acc, error }
+    acc.push(...data)
+  }
+  return { data: acc, error: null }
+}
+
+/**
  * Ajuste manual de costo unitario (`productos.costo_promedio`) con recalculo
  * retroactivo OPCIONAL del costo congelado de las ventas pasadas del producto
  * en un intervalo de fechas.
@@ -105,41 +150,51 @@ async function resolverAfectados(
   const inicio = `${desde}T00:00:00`
   const fin = `${hasta}T23:59:59`
 
-  // Ventas del rango.
-  const { data: ventas } = await supabase
-    .from('ventas_encabezado')
-    .select('id')
-    .gte('fecha_venta', inicio)
-    .lte('fecha_venta', fin)
+  // Ventas del rango (paginado: un rango amplio puede tener >1000 ventas y sus
+  // ids alimentan el recálculo retroactivo de costo).
+  const { data: ventas } = await fetchAllRows<{ id: number }>(() =>
+    supabase
+      .from('ventas_encabezado')
+      .select('id')
+      .gte('fecha_venta', inicio)
+      .lte('fecha_venta', fin) as unknown as RangeableQuery
+  )
   const ventaIds = (ventas || []).map((v) => v.id as number)
 
   let ventasAfectadas = 0
   let cantidadVendida = 0
   if (ventaIds.length > 0) {
-    const { data: detalles } = await supabase
-      .from('ventas_detalle')
-      .select('cantidad')
-      .eq('producto_id', productoId)
-      .in('venta_id', ventaIds)
+    // Chunked + paginado: >1000 ids en el .in y >1000 líneas del producto.
+    const { data: detalles } = await fetchAllRowsIn<{ cantidad: number }>(ventaIds, (grupo) =>
+      supabase
+        .from('ventas_detalle')
+        .select('cantidad')
+        .eq('producto_id', productoId)
+        .in('venta_id', grupo) as unknown as RangeableQuery
+    )
     ventasAfectadas = (detalles || []).length
     cantidadVendida = (detalles || []).reduce((acc, d) => acc + Number(d.cantidad || 0), 0)
   }
 
-  // Devoluciones del rango.
-  const { data: devs } = await supabase
-    .from('devoluciones_encabezado')
-    .select('id')
-    .gte('fecha', inicio)
-    .lte('fecha', fin)
+  // Devoluciones del rango (paginado + chunk igual que ventas).
+  const { data: devs } = await fetchAllRows<{ id: number }>(() =>
+    supabase
+      .from('devoluciones_encabezado')
+      .select('id')
+      .gte('fecha', inicio)
+      .lte('fecha', fin) as unknown as RangeableQuery
+  )
   const devolucionIds = (devs || []).map((d) => d.id as number)
 
   let cantidadDevuelta = 0
   if (devolucionIds.length > 0) {
-    const { data: devDet } = await supabase
-      .from('devoluciones_detalle')
-      .select('cantidad_devuelta')
-      .eq('producto_id', productoId)
-      .in('devolucion_id', devolucionIds)
+    const { data: devDet } = await fetchAllRowsIn<{ cantidad_devuelta: number }>(devolucionIds, (grupo) =>
+      supabase
+        .from('devoluciones_detalle')
+        .select('cantidad_devuelta')
+        .eq('producto_id', productoId)
+        .in('devolucion_id', grupo) as unknown as RangeableQuery
+    )
     cantidadDevuelta = (devDet || []).reduce((acc, d) => acc + Number(d.cantidad_devuelta || 0), 0)
   }
 
@@ -347,12 +402,17 @@ async function recalcularFallback(
   if (af.ventaIds.length === 0) return { ventasAfectadas: 0, error: null }
 
   // 1) ventas_detalle: costo + utilidad por fila (utilidad depende de precio/cantidad).
-  const { data: detalles, error: detErr } = await supabase
-    .from('ventas_detalle')
-    .select('id, precio_unitario, cantidad')
-    .eq('producto_id', productoId)
-    .in('venta_id', af.ventaIds)
-  if (detErr) return { ventasAfectadas: 0, error: detErr.message }
+  //    Lectura paginada + chunk de ids (el rango puede tener >1000 ventas).
+  const { data: detalles, error: detErr } = await fetchAllRowsIn<{ id: number; precio_unitario: number; cantidad: number }>(
+    af.ventaIds,
+    (grupo) =>
+      supabase
+        .from('ventas_detalle')
+        .select('id, precio_unitario, cantidad')
+        .eq('producto_id', productoId)
+        .in('venta_id', grupo) as unknown as RangeableQuery
+  )
+  if (detErr) return { ventasAfectadas: 0, error: detErr }
 
   for (const d of detalles || []) {
     const utilidad = (Number(d.precio_unitario || 0) - costo) * Number(d.cantidad || 0)
@@ -363,23 +423,28 @@ async function recalcularFallback(
     if (error) return { ventasAfectadas: 0, error: error.message }
   }
 
-  // 2) Kardex de las 'Salida Venta' de esas ventas.
-  const { error: kardexErr } = await supabase
-    .from('transacciones_inventario')
-    .update({ costo_o_precio_unitario: costo })
-    .eq('producto_id', productoId)
-    .eq('tipo_movimiento', 'Salida Venta')
-    .in('referencia_id', af.ventaIds)
-  if (kardexErr) return { ventasAfectadas: (detalles || []).length, error: kardexErr.message }
-
-  // 3) Devoluciones del rango.
-  if (af.devolucionIds.length > 0) {
-    const { error: devErr } = await supabase
-      .from('devoluciones_detalle')
-      .update({ costo_promedio_momento: costo })
+  // 2) Kardex de las 'Salida Venta' de esas ventas (update por chunks de ids
+  //    para no exceder el límite de PostgREST en la lista del .in).
+  for (const grupo of chunkIds(af.ventaIds, 300)) {
+    const { error: kardexErr } = await supabase
+      .from('transacciones_inventario')
+      .update({ costo_o_precio_unitario: costo })
       .eq('producto_id', productoId)
-      .in('devolucion_id', af.devolucionIds)
-    if (devErr) return { ventasAfectadas: (detalles || []).length, error: devErr.message }
+      .eq('tipo_movimiento', 'Salida Venta')
+      .in('referencia_id', grupo)
+    if (kardexErr) return { ventasAfectadas: (detalles || []).length, error: kardexErr.message }
+  }
+
+  // 3) Devoluciones del rango (update por chunks de ids).
+  if (af.devolucionIds.length > 0) {
+    for (const grupo of chunkIds(af.devolucionIds, 300)) {
+      const { error: devErr } = await supabase
+        .from('devoluciones_detalle')
+        .update({ costo_promedio_momento: costo })
+        .eq('producto_id', productoId)
+        .in('devolucion_id', grupo)
+      if (devErr) return { ventasAfectadas: (detalles || []).length, error: devErr.message }
+    }
   }
 
   return { ventasAfectadas: (detalles || []).length, error: null }

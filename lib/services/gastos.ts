@@ -5,6 +5,29 @@ import { getTenantStamp, isValidStamp, SESION_INVALIDA_ERROR } from "@/lib/servi
 import { registrarMovimientoCaja, getSesionAbierta } from "@/lib/services/caja-chica"
 import { registrarMovimientoCuenta, recalcCadenaSaldoCuenta } from "@/lib/services/cuentas"
 
+/**
+ * PostgREST corta cada `.select()` en 1000 filas. Pagina con `.range()` hasta
+ * traerlas todas — el listado de gastos alimenta el P&L y análisis de gastos
+ * (que suman todo el conjunto); sin paginar salían subestimados con >1000 gastos.
+ */
+type RangeableQuery = {
+  range: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
+}
+async function fetchAllRows<T>(buildQuery: () => RangeableQuery): Promise<{ data: T[]; error: { message: string } | null }> {
+  const PAGE = 1000
+  let from = 0
+  const acc: T[] = []
+  for (let guard = 0; guard < 100; guard++) {
+    const { data, error } = await buildQuery().range(from, from + PAGE - 1)
+    if (error) return { data: acc, error }
+    const rows = (data || []) as T[]
+    acc.push(...rows)
+    if (rows.length < PAGE) break
+    from += PAGE
+  }
+  return { data: acc, error: null }
+}
+
 // ==================== TIPOS ====================
 
 export const CATEGORIAS_MACRO = [
@@ -208,15 +231,17 @@ export async function getGastos(): Promise<{ data: Gasto[]; error: string | null
   const supabase = createClient()
   if (!supabase) return { data: [], error: 'Cliente no disponible' }
 
-  // Intento con joins completos.
-  let result = await supabase
-    .from('gastos')
-    .select(`
-      *,
-      conceptos_gastos:concepto_id (nombre, categoria_macro),
-      proveedores:proveedor_id (id, nombre)
-    `)
-    .order('fecha_gasto', { ascending: false })
+  // Intento con joins completos (paginado para no truncar en 1000).
+  let result = await fetchAllRows<Record<string, unknown>>(() =>
+    supabase
+      .from('gastos')
+      .select(`
+        *,
+        conceptos_gastos:concepto_id (nombre, categoria_macro),
+        proveedores:proveedor_id (id, nombre)
+      `)
+      .order('fecha_gasto', { ascending: false }) as unknown as RangeableQuery
+  )
 
   // Fallback si proveedor_id / proveedores no existen aun.
   if (
@@ -224,13 +249,15 @@ export async function getGastos(): Promise<{ data: Gasto[]; error: string | null
     /proveedor|relation .*proveedores.* does not exist/i.test(result.error.message)
   ) {
     console.log('[gastos] fallback sin join proveedores')
-    result = await supabase
-      .from('gastos')
-      .select(`
-        *,
-        conceptos_gastos:concepto_id (nombre, categoria_macro)
-      `)
-      .order('fecha_gasto', { ascending: false })
+    result = await fetchAllRows<Record<string, unknown>>(() =>
+      supabase
+        .from('gastos')
+        .select(`
+          *,
+          conceptos_gastos:concepto_id (nombre, categoria_macro)
+        `)
+        .order('fecha_gasto', { ascending: false }) as unknown as RangeableQuery
+    )
   }
 
   if (result.error) return { data: [], error: result.error.message }
@@ -648,16 +675,20 @@ export async function getCuentasPorPagar(): Promise<{
     return { data: [], totalDeuda: 0, error: 'Cliente no disponible' }
   }
 
-  let result = await supabase
-    .from('gastos')
-    .select(`
-      id, concepto_id, fecha_gasto, fecha_vencimiento, monto, monto_pagado,
-      estado_pago, descripcion, comprobante_url, proveedor_id,
-      conceptos_gastos:concepto_id (nombre, categoria_macro),
-      proveedores:proveedor_id (nombre)
-    `)
-    .neq('estado_pago', 'Pagado')
-    .order('fecha_vencimiento', { ascending: true, nullsFirst: false })
+  // Paginado: la deuda total (totalDeuda) suma todas las líneas abiertas y
+  // alimenta el dashboard de finanzas; no puede truncarse en 1000.
+  let result = await fetchAllRows<Record<string, unknown>>(() =>
+    supabase
+      .from('gastos')
+      .select(`
+        id, concepto_id, fecha_gasto, fecha_vencimiento, monto, monto_pagado,
+        estado_pago, descripcion, comprobante_url, proveedor_id,
+        conceptos_gastos:concepto_id (nombre, categoria_macro),
+        proveedores:proveedor_id (nombre)
+      `)
+      .neq('estado_pago', 'Pagado')
+      .order('fecha_vencimiento', { ascending: true, nullsFirst: false }) as unknown as RangeableQuery
+  )
 
   if (
     result.error &&
@@ -665,15 +696,17 @@ export async function getCuentasPorPagar(): Promise<{
   ) {
     // El retry no trae `proveedores`, por eso el cast: RowShape ya trata
     // ese campo como opcional al mapear.
-    result = (await supabase
-      .from('gastos')
-      .select(`
-        id, concepto_id, fecha_gasto, fecha_vencimiento, monto, monto_pagado,
-        estado_pago, descripcion, comprobante_url, proveedor_id,
-        conceptos_gastos:concepto_id (nombre, categoria_macro)
-      `)
-      .neq('estado_pago', 'Pagado')
-      .order('fecha_vencimiento', { ascending: true, nullsFirst: false })) as unknown as typeof result
+    result = await fetchAllRows<Record<string, unknown>>(() =>
+      supabase
+        .from('gastos')
+        .select(`
+          id, concepto_id, fecha_gasto, fecha_vencimiento, monto, monto_pagado,
+          estado_pago, descripcion, comprobante_url, proveedor_id,
+          conceptos_gastos:concepto_id (nombre, categoria_macro)
+        `)
+        .neq('estado_pago', 'Pagado')
+        .order('fecha_vencimiento', { ascending: true, nullsFirst: false }) as unknown as RangeableQuery
+    )
   }
 
   if (result.error) {

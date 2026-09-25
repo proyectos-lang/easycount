@@ -333,8 +333,12 @@ export async function getVentasResumenTotales(filtros: {
     if (filtros.almacenId != null) qLineas = qLineas.eq('ventas_encabezado.almacen_id', filtros.almacenId)
     if (filtros.estadoPago) qLineas = qLineas.eq('ventas_encabezado.estado_pago', filtros.estadoPago)
 
-    const { data: lineas, error: errLineas } = await qLineas
-    if (errLineas) return { totalVentas: 0, totalSaldo: 0, totalComisiones: 0, count: 0, error: errLineas.message }
+    // Paginado: sin esto, un filtro amplio (>1000 líneas) subestimaba el total.
+    const { data: lineas, error: errLineas } = await fetchAllRows<{
+      cantidad: number; precio_unitario: number
+      ventas_encabezado: { descuento?: number; aplica_impuesto?: boolean; porcentaje_impuesto?: number } | { descuento?: number; aplica_impuesto?: boolean; porcentaje_impuesto?: number }[] | null
+    }>(() => qLineas as unknown as RangeableQuery)
+    if (errLineas) return { totalVentas: 0, totalSaldo: 0, totalComisiones: 0, count: 0, error: errLineas }
 
     const totalVentas = +(lineas || [])
       .reduce((acc, d) => {
@@ -355,8 +359,12 @@ export async function getVentasResumenTotales(filtros: {
     if (filtros.almacenId != null) qEnc = qEnc.eq('almacen_id', filtros.almacenId)
     if (filtros.estadoPago) qEnc = qEnc.eq('estado_pago', filtros.estadoPago)
 
-    const { data: encs, error: errEnc } = await qEnc
-    if (errEnc) return { totalVentas, totalSaldo: 0, totalComisiones: 0, count: 0, error: errEnc.message }
+    // Paginado: el saldo y el conteo (count = rows.length) también dependían de
+    // traer TODAS las facturas del filtro, no solo las primeras 1000.
+    const { data: encs, error: errEnc } = await fetchAllRows<{ total_venta: number; valorpago: number }>(
+      () => qEnc as unknown as RangeableQuery
+    )
+    if (errEnc) return { totalVentas, totalSaldo: 0, totalComisiones: 0, count: 0, error: errEnc }
 
     const rows = encs || []
     const totalSaldo = +rows
@@ -376,7 +384,10 @@ export async function getVentasResumenTotales(filtros: {
     if (filtros.almacenId != null) qCom = qCom.eq('ventas_encabezado.almacen_id', filtros.almacenId)
     if (filtros.estadoPago) qCom = qCom.eq('ventas_encabezado.estado_pago', filtros.estadoPago)
 
-    const { data: pagos, error: errCom } = await qCom
+    // Paginado: las comisiones se suman sobre TODAS las líneas de pago del filtro.
+    const { data: pagos, error: errCom } = await fetchAllRows<{ monto_bruto: number; porcentaje_comision: number }>(
+      () => qCom as unknown as RangeableQuery
+    )
     if (!errCom) {
       totalComisiones = +(pagos || [])
         .reduce((acc, p) => acc + Number(p.monto_bruto || 0) * (Number(p.porcentaje_comision || 0) / 100), 0)
@@ -1350,27 +1361,33 @@ export async function getCuentasPorCobrar(): Promise<{ data: CuentaPorCobrar[]; 
       clientes: { nombre: string } | null
     }
 
-    const primary = await supabase
-      .from('ventas_encabezado')
-      .select(baseSelect.replace('estado_pago', 'valorpago,\n      estado_pago'))
-      .neq('estado_pago', 'Pagado')
-      .order('fecha_venta', { ascending: false })
+    // Paginado: la cartera abierta puede superar 1000 facturas; su saldo total
+    // alimenta el dashboard de finanzas, así que no puede truncarse.
+    const primary = await fetchAllRows<CxcRow>(() =>
+      supabase
+        .from('ventas_encabezado')
+        .select(baseSelect.replace('estado_pago', 'valorpago,\n      estado_pago'))
+        .neq('estado_pago', 'Pagado')
+        .order('fecha_venta', { ascending: false }) as unknown as RangeableQuery
+    )
 
     let ventasData = primary.data as unknown as CxcRow[] | null
     let ventasError = primary.error
 
     // Fallback: columna `valorpago` aun no existe en la DB.
-    if (ventasError && /valorpago/i.test(ventasError.message || '')) {
-      const retry = await supabase
-        .from('ventas_encabezado')
-        .select(baseSelect)
-        .neq('estado_pago', 'Pagado')
-        .order('fecha_venta', { ascending: false })
+    if (ventasError && /valorpago/i.test(ventasError || '')) {
+      const retry = await fetchAllRows<CxcRow>(() =>
+        supabase
+          .from('ventas_encabezado')
+          .select(baseSelect)
+          .neq('estado_pago', 'Pagado')
+          .order('fecha_venta', { ascending: false }) as unknown as RangeableQuery
+      )
       ventasData = retry.data as unknown as CxcRow[] | null
       ventasError = retry.error
     }
 
-    if (ventasError) return { data: [], error: ventasError.message }
+    if (ventasError) return { data: [], error: ventasError }
 
     // Para ventas SIN valorpago (historicas), calculamos total abonado
     // desde pagos_ventas para no perder cartera. Las nuevas usan valorpago.
@@ -1380,10 +1397,15 @@ export async function getCuentasPorCobrar(): Promise<{ data: CuentaPorCobrar[]; 
 
     let pagosMap: Record<number, number> = {}
     if (ventasSinValorpago.length > 0) {
-      const { data: pagosData } = await supabase
-        .from('pagos_ventas')
-        .select('venta_id, monto')
-        .in('venta_id', ventasSinValorpago.map(v => v.id))
+      // Chunked + paginado: los ids pueden ser >1000 y los pagos también.
+      const { data: pagosData } = await fetchAllRowsIn<{ venta_id: number; monto: number }>(
+        ventasSinValorpago.map(v => v.id),
+        (grupo) =>
+          supabase
+            .from('pagos_ventas')
+            .select('venta_id, monto')
+            .in('venta_id', grupo) as unknown as RangeableQuery
+      )
 
       pagosMap = (pagosData || []).reduce((acc, p) => {
         acc[p.venta_id] = (acc[p.venta_id] || 0) + p.monto
@@ -1537,14 +1559,17 @@ export async function getVentasDiariasMesActual(): Promise<{ data: VentaDiaria[]
   const supabase = createClient()
   if (!supabase) return { data: [], error: 'Cliente no disponible' }
   try {
-    const { data, error } = await supabase
-      .from('ventas_encabezado')
-      .select('fecha_venta, total_venta')
-      .gte('fecha_venta', `${year}-${mm}-01T00:00:00`)
-      // Cota superior naive (sin offset) para no arrastrar 6h del mes siguiente.
-      .lte('fecha_venta', `${year}-${mm}-${String(diasEnMes).padStart(2, '0')}T23:59:59`)
-    if (error) return { data: [], error: error.message }
-    for (const v of (data || []) as { fecha_venta: string | null; total_venta: number | null }[]) {
+    // Paginado: un mes puede tener >1000 ventas (la serie diaria salía corta).
+    const { data, error } = await fetchAllRows<{ fecha_venta: string | null; total_venta: number | null }>(() =>
+      supabase
+        .from('ventas_encabezado')
+        .select('fecha_venta, total_venta')
+        .gte('fecha_venta', `${year}-${mm}-01T00:00:00`)
+        // Cota superior naive (sin offset) para no arrastrar 6h del mes siguiente.
+        .lte('fecha_venta', `${year}-${mm}-${String(diasEnMes).padStart(2, '0')}T23:59:59`) as unknown as RangeableQuery
+    )
+    if (error) return { data: [], error }
+    for (const v of data || []) {
       acumular(v.fecha_venta, v.total_venta)
     }
     return { data: serie(), error: null }

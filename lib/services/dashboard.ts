@@ -1,6 +1,52 @@
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client'
 import { getHondurasTodayISODate } from '@/lib/utils/honduras-time'
 
+/**
+ * PostgREST corta cada `.select()` en 1000 filas. Este helper pagina con
+ * `.range()` hasta traer TODAS — sin él, los KPIs del dashboard (cartera,
+ * utilidad, top productos/deudores) salían SUBESTIMADOS para empresas con más
+ * de 1000 ventas/detalles. `buildQuery()` reconstruye la consulta base.
+ */
+type RangeableQuery = {
+  range: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
+}
+async function fetchAllRows<T>(buildQuery: () => RangeableQuery): Promise<{ data: T[]; error: string | null }> {
+  const PAGE = 1000
+  let from = 0
+  const acc: T[] = []
+  for (let guard = 0; guard < 100; guard++) {
+    const { data, error } = await buildQuery().range(from, from + PAGE - 1)
+    if (error) return { data: acc, error: error.message }
+    const rows = (data || []) as T[]
+    acc.push(...rows)
+    if (rows.length < PAGE) break
+    from += PAGE
+  }
+  return { data: acc, error: null }
+}
+
+/** Parte un arreglo en bloques (para `.in(...)` con muchos ids). */
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+
+/** Trae todas las filas de una consulta `.in(campo, ids)` con ids grandes. */
+async function fetchAllRowsIn<T>(
+  ids: number[],
+  buildQuery: (grupo: number[]) => RangeableQuery,
+  idChunk = 300,
+): Promise<{ data: T[]; error: string | null }> {
+  const acc: T[] = []
+  for (const grupo of chunk(ids, idChunk)) {
+    const { data, error } = await fetchAllRows<T>(() => buildQuery(grupo))
+    if (error) return { data: acc, error }
+    acc.push(...data)
+  }
+  return { data: acc, error: null }
+}
+
 // ==================== INTERFACES ====================
 
 export interface DashboardMetrics {
@@ -75,36 +121,46 @@ export async function getDashboardMetrics(
     // las columnas de dia-de-negocio HN-as-UTC (fecha_venta, etc.).
     const firstDayOfMonth = `${getHondurasTodayISODate().slice(0, 7)}-01T00:00:00.000Z`
 
+    // Todas paginadas: PostgREST corta en 1000 filas y estos KPIs suman el
+    // conjunto completo (mes con >1000 ventas, histórico con >1000 detalles, etc.).
     // Ventas Mes: total facturado del mes actual.
-    let ventasMesRes: any = await supabase
-      .from('ventas_encabezado')
-      .select('total_venta')
-      .eq('razon_social_id', razonSocialId)
-      .gte('fecha_venta', firstDayOfMonth)
+    const ventasMesRes = await fetchAllRows<{ total_venta: number }>(() =>
+      supabase
+        .from('ventas_encabezado')
+        .select('total_venta')
+        .eq('razon_social_id', razonSocialId)
+        .gte('fecha_venta', firstDayOfMonth) as unknown as RangeableQuery
+    )
 
     // Por Cobrar (cartera): saldo pendiente de TODAS las ventas, sin filtrar
     // por mes. Una venta de un mes anterior con saldo abierto sigue siendo
     // dinero por cobrar hoy. Si la columna `valorpago` no existe, hacemos
     // fallback historico (no se puede inferir el saldo y queda en 0).
-    let carteraRes: any = await supabase
-      .from('ventas_encabezado')
-      .select('total_venta, valorpago')
-      .eq('razon_social_id', razonSocialId)
+    const carteraRes = await fetchAllRows<{ total_venta: number; valorpago: number }>(() =>
+      supabase
+        .from('ventas_encabezado')
+        .select('total_venta, valorpago')
+        .eq('razon_social_id', razonSocialId) as unknown as RangeableQuery
+    )
 
     let tieneValorpago = true
-    if (carteraRes.error && /valorpago/i.test(carteraRes.error.message || '')) {
+    if (carteraRes.error && /valorpago/i.test(carteraRes.error || '')) {
       tieneValorpago = false
     }
 
     const [productosRes, detallesRes] = await Promise.all([
-      supabase
-        .from('productos')
-        .select('stock_total, costo_promedio')
-        .eq('razon_social_id', razonSocialId),
-      supabase
-        .from('ventas_detalle')
-        .select('utilidad_linea, ventas_encabezado!inner(razon_social_id)')
-        .eq('ventas_encabezado.razon_social_id', razonSocialId),
+      fetchAllRows<{ stock_total: number; costo_promedio: number }>(() =>
+        supabase
+          .from('productos')
+          .select('stock_total, costo_promedio')
+          .eq('razon_social_id', razonSocialId) as unknown as RangeableQuery
+      ),
+      fetchAllRows<{ utilidad_linea: number }>(() =>
+        supabase
+          .from('ventas_detalle')
+          .select('utilidad_linea, ventas_encabezado!inner(razon_social_id)')
+          .eq('ventas_encabezado.razon_social_id', razonSocialId) as unknown as RangeableQuery
+      ),
     ])
 
     // Log errores de cada consulta para debug
@@ -172,16 +228,20 @@ export async function getVentasVsCobros(
     const startDate = new Date(baseUtcMs - (dias - 1) * 86400000).toISOString()
 
     const [ventasRes, pagosRes] = await Promise.all([
-      supabase
-        .from('ventas_encabezado')
-        .select('total_venta, fecha_venta')
-        .eq('razon_social_id', razonSocialId)
-        .gte('fecha_venta', startDate),
-      supabase
-        .from('pagos_ventas')
-        .select('monto, fecha_pago, ventas_encabezado!inner(razon_social_id)')
-        .eq('ventas_encabezado.razon_social_id', razonSocialId)
-        .gte('fecha_pago', startDate),
+      fetchAllRows<{ total_venta: number; fecha_venta: string | null }>(() =>
+        supabase
+          .from('ventas_encabezado')
+          .select('total_venta, fecha_venta')
+          .eq('razon_social_id', razonSocialId)
+          .gte('fecha_venta', startDate) as unknown as RangeableQuery
+      ),
+      fetchAllRows<{ monto: number; fecha_pago: string | null }>(() =>
+        supabase
+          .from('pagos_ventas')
+          .select('monto, fecha_pago, ventas_encabezado!inner(razon_social_id)')
+          .eq('ventas_encabezado.razon_social_id', razonSocialId)
+          .gte('fecha_pago', startDate) as unknown as RangeableQuery
+      ),
     ])
 
     if (ventasRes.error) console.log('[Dashboard] ventasVsCobros ventas error:', ventasRes.error)
@@ -219,14 +279,18 @@ export async function getTopProductos(
   if (razonSocialId == null) return { data: [], error: null }
 
   try {
-    const { data, error } = await supabase
-      .from('ventas_detalle')
-      .select('producto_id, cantidad, productos(nombre), ventas_encabezado!inner(razon_social_id)')
-      .eq('ventas_encabezado.razon_social_id', razonSocialId)
+    // Paginado: el ranking se calcula sobre TODO el histórico de líneas; sin esto,
+    // con >1000 líneas el top y las cantidades salían mal.
+    const { data, error } = await fetchAllRows<{ producto_id: number; cantidad: number; productos?: { nombre?: string } | null }>(() =>
+      supabase
+        .from('ventas_detalle')
+        .select('producto_id, cantidad, productos(nombre), ventas_encabezado!inner(razon_social_id)')
+        .eq('ventas_encabezado.razon_social_id', razonSocialId) as unknown as RangeableQuery
+    )
 
     if (error) {
       console.log('[Dashboard] getTopProductos error:', error)
-      return { data: [], error: error.message }
+      return { data: [], error }
     }
 
     const aggregated: Record<number, { nombre: string; cantidad: number }> = {}
@@ -333,29 +397,37 @@ export async function getTopClientesDeudores(
   if (razonSocialId == null) return { data: [], error: null }
 
   try {
-    const { data: ventasData, error: ventasError } = await supabase
-      .from('ventas_encabezado')
-      .select('id, cliente_id, total_venta, clientes(nombre)')
-      .eq('razon_social_id', razonSocialId)
-      .neq('estado_pago', 'Pagado')
+    // Paginado: la deuda por cliente suma TODAS las facturas abiertas del tenant.
+    const { data: ventasData, error: ventasError } = await fetchAllRows<{ id: number; cliente_id: number; total_venta: number; clientes?: { nombre?: string } | null }>(() =>
+      supabase
+        .from('ventas_encabezado')
+        .select('id, cliente_id, total_venta, clientes(nombre)')
+        .eq('razon_social_id', razonSocialId)
+        .neq('estado_pago', 'Pagado') as unknown as RangeableQuery
+    )
 
     if (ventasError) {
       console.log('[Dashboard] getTopClientesDeudores ventas error:', ventasError)
-      return { data: [], error: ventasError.message }
+      return { data: [], error: ventasError }
     }
 
-    const ventaIds = (ventasData || []).map((v: any) => v.id)
+    const ventaIds = (ventasData || []).map((v) => v.id)
     let pagosMap: Record<number, number> = {}
 
     if (ventaIds.length > 0) {
-      const { data: pagosData, error: pagosError } = await supabase
-        .from('pagos_ventas')
-        .select('venta_id, monto')
-        .in('venta_id', ventaIds)
+      // Chunked + paginado: los ids pueden ser >1000 y los pagos también.
+      const { data: pagosData, error: pagosError } = await fetchAllRowsIn<{ venta_id: number; monto: number }>(
+        ventaIds,
+        (grupo) =>
+          supabase
+            .from('pagos_ventas')
+            .select('venta_id, monto')
+            .in('venta_id', grupo) as unknown as RangeableQuery
+      )
 
       if (pagosError) console.log('[Dashboard] getTopClientesDeudores pagos error:', pagosError)
 
-      pagosMap = (pagosData || []).reduce((acc: Record<number, number>, p: any) => {
+      pagosMap = (pagosData || []).reduce((acc: Record<number, number>, p) => {
         acc[p.venta_id] = (acc[p.venta_id] || 0) + p.monto
         return acc
       }, {})

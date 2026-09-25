@@ -64,6 +64,28 @@ function isMissingTable(err: { message?: string; code?: string } | null): boolea
 }
 
 /**
+ * PostgREST corta cada `.select()` en 1000 filas. Pagina con `.range()` hasta
+ * traerlas todas (para agregar TODAS las corridas del rango, no solo 1000).
+ */
+type RangeableQuery = {
+  range: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message?: string; code?: string } | null }>
+}
+async function fetchAllRows<T>(buildQuery: () => RangeableQuery): Promise<{ data: T[]; error: { message?: string; code?: string } | null }> {
+  const PAGE = 1000
+  let from = 0
+  const acc: T[] = []
+  for (let guard = 0; guard < 100; guard++) {
+    const { data, error } = await buildQuery().range(from, from + PAGE - 1)
+    if (error) return { data: acc, error }
+    const rows = (data || []) as T[]
+    acc.push(...rows)
+    if (rows.length < PAGE) break
+    from += PAGE
+  }
+  return { data: acc, error: null }
+}
+
+/**
  * OEE a partir de las corridas del período (función PURA). Cada corrida aporta a
  * los componentes que puede calcular; el promedio se pondera por unidades
  * procesadas. Devuelve null en un componente si ninguna corrida lo pudo aportar.
@@ -132,16 +154,19 @@ export async function getProduccionDashboard(
   if (!supabase) return { data: empty, error: "Cliente no disponible" }
 
   // Corridas ejecutadas/recibidas en el rango (por created_at, día de negocio).
-  const { data: corr, error } = await supabase
-    .from("produccion_corridas")
-    .select("producto_id, unidades_buenas, unidades_defectuosas, unidades_procesadas, paros_minutos, tiempo_planificado_minutos, hora_inicio, hora_fin, costo_unitario_real, estado, created_at")
-    .in("estado", ["Ejecutada", "Recibida"])
-    .gte("created_at", `${desde}T00:00:00`)
-    .lte("created_at", `${hasta}T23:59:59.999`)
-    .order("created_at", { ascending: true })
+  // Paginado: agrega TODAS las corridas del rango, no solo las primeras 1000.
+  const { data: corr, error } = await fetchAllRows<{ producto_id: number; unidades_buenas: number; unidades_defectuosas: number; unidades_procesadas: number; paros_minutos: number; tiempo_planificado_minutos: number; hora_inicio: string; hora_fin: string; costo_unitario_real: number; estado: string; created_at: string }>(() =>
+    supabase
+      .from("produccion_corridas")
+      .select("producto_id, unidades_buenas, unidades_defectuosas, unidades_procesadas, paros_minutos, tiempo_planificado_minutos, hora_inicio, hora_fin, costo_unitario_real, estado, created_at")
+      .in("estado", ["Ejecutada", "Recibida"])
+      .gte("created_at", `${desde}T00:00:00`)
+      .lte("created_at", `${hasta}T23:59:59.999`)
+      .order("created_at", { ascending: true }) as unknown as RangeableQuery
+  )
   if (error) {
     if (isMissingTable(error)) return { data: { ...empty, featurePending: true }, error: null }
-    return { data: empty, error: error.message }
+    return { data: empty, error: error.message ?? "Error de conexión" }
   }
   const filas = corr || []
   if (filas.length === 0) return { data: empty, error: null }

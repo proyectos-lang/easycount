@@ -6,6 +6,30 @@ import {
 } from "@/lib/services/tenant-stamp"
 import { getHondurasNowISO } from "@/lib/utils/honduras-time"
 
+/**
+ * PostgREST corta cada `.select()` en 1000 filas. Este helper pagina con
+ * `.range()` hasta traer TODAS. Crítico para los recálculos de saldo: si una
+ * cuenta supera 1000 movimientos, sin paginar el saldo recalculado (que se
+ * ESCRIBE de vuelta a `cuentas_config`) quedaría subestimado/corrupto.
+ */
+type RangeableQuery = {
+  range: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
+}
+async function fetchAllRows<T>(buildQuery: () => RangeableQuery): Promise<{ data: T[]; error: string | null }> {
+  const PAGE = 1000
+  let from = 0
+  const acc: T[] = []
+  for (let guard = 0; guard < 100; guard++) {
+    const { data, error } = await buildQuery().range(from, from + PAGE - 1)
+    if (error) return { data: acc, error: error.message }
+    const rows = (data || []) as T[]
+    acc.push(...rows)
+    if (rows.length < PAGE) break
+    from += PAGE
+  }
+  return { data: acc, error: null }
+}
+
 // ==================== INTERFACES ====================
 
 export interface CuentaConfig {
@@ -352,12 +376,15 @@ export async function recalcSaldoCuenta(
   if (cErr) return { saldoAnterior: 0, saldoRecalculado: 0, error: cErr.message }
   const saldoAnterior = Number(cuenta?.saldo ?? 0)
 
-  // Suma real de TODOS los movimientos de la cuenta.
-  const { data: movs, error: mErr } = await supabase
-    .from("cuenta_movimientos")
-    .select("tipo, monto")
-    .eq("cuenta_id", cuenta_id)
-  if (mErr) return { saldoAnterior, saldoRecalculado: saldoAnterior, error: mErr.message }
+  // Suma real de TODOS los movimientos de la cuenta (paginado: una cuenta activa
+  // puede superar 1000 movimientos y el saldo se ESCRIBE de vuelta).
+  const { data: movs, error: mErr } = await fetchAllRows<{ tipo: string; monto: number }>(() =>
+    supabase
+      .from("cuenta_movimientos")
+      .select("tipo, monto")
+      .eq("cuenta_id", cuenta_id) as unknown as RangeableQuery
+  )
+  if (mErr) return { saldoAnterior, saldoRecalculado: saldoAnterior, error: mErr }
 
   const saldoRecalculado = +(movs || [])
     .reduce((a, m) => a + (m.tipo === "Ingreso" ? Number(m.monto || 0) : -Number(m.monto || 0)), 0)
@@ -391,12 +418,16 @@ export async function recalcCadenaSaldoCuenta(
   const supabase = createClient()
   if (!supabase) return { saldoFinal: 0, error: "Cliente no disponible" }
 
-  const { data: movs, error } = await supabase
-    .from("cuenta_movimientos")
-    .select("id, tipo, monto, saldo_resultante")
-    .eq("cuenta_id", cuenta_id)
-    .order("id", { ascending: true })
-  if (error) return { saldoFinal: 0, error: error.message }
+  // Paginado: la cadena de saldo_resultante debe recorrer TODOS los movimientos
+  // en orden; truncar a 1000 dejaría el saldo final y la cadena corruptos.
+  const { data: movs, error } = await fetchAllRows<{ id: number; tipo: string; monto: number; saldo_resultante: number | null }>(() =>
+    supabase
+      .from("cuenta_movimientos")
+      .select("id, tipo, monto, saldo_resultante")
+      .eq("cuenta_id", cuenta_id)
+      .order("id", { ascending: true }) as unknown as RangeableQuery
+  )
+  if (error) return { saldoFinal: 0, error }
 
   let acc = 0
   for (const m of movs || []) {
@@ -455,6 +486,7 @@ export async function getMovimientosTodasLasCuentas(
   const supabase = createClient()
   if (!supabase) return { data: [], totalIngresos: 0, totalEgresos: 0, error: "Cliente no disponible" }
 
+  // Listado (para MOSTRAR): acotado por `limit` y las N más recientes.
   let query = supabase
     .from("cuenta_movimientos")
     .select("*, cuentas_config:cuenta_id (nombre)")
@@ -473,18 +505,33 @@ export async function getMovimientosTodasLasCuentas(
     return { data: [], totalIngresos: 0, totalEgresos: 0, error: error.message }
   }
 
-  let totalIngresos = 0
-  let totalEgresos = 0
   const rows: CuentaMovimientoConNombre[] = (data || []).map((m) => {
     const cuenta = Array.isArray(m.cuentas_config) ? m.cuentas_config[0] : m.cuentas_config
-    const monto = Number(m.monto || 0)
-    if (m.tipo === "Ingreso") totalIngresos += monto
-    else totalEgresos += monto
     return {
       ...(m as CuentaMovimiento),
       cuenta_nombre: (cuenta as { nombre?: string } | null)?.nombre || `Cuenta ${m.cuenta_id}`,
     }
   })
+
+  // Totales: sobre TODO el conjunto filtrado (paginado), NO solo las filas
+  // mostradas. Antes se sumaban las filas del `.limit`, así que con >1000
+  // movimientos en el rango los totales salían subestimados.
+  let totalIngresos = 0
+  let totalEgresos = 0
+  const { data: todos, error: totErr } = await fetchAllRows<{ tipo: string; monto: number }>(() => {
+    let q = supabase.from("cuenta_movimientos").select("tipo, monto")
+    if (cuenta_id) q = q.eq("cuenta_id", cuenta_id)
+    if (desde) q = q.gte("fecha", `${desde}T00:00:00`)
+    if (hasta) q = q.lte("fecha", `${hasta}T23:59:59`)
+    return q as unknown as RangeableQuery
+  })
+  if (!totErr) {
+    for (const m of todos || []) {
+      const monto = Number(m.monto || 0)
+      if (m.tipo === "Ingreso") totalIngresos += monto
+      else totalEgresos += monto
+    }
+  }
 
   return {
     data: rows,

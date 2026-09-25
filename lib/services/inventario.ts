@@ -673,14 +673,18 @@ export async function getStockByLocalizacion(
   if (!supabase) return { stock: 0, error: 'Cliente no disponible' }
 
   try {
-    const { data, error } = await supabase
-      .from('transacciones_inventario')
-      .select('cantidad')
-      .eq('producto_id', productoId)
-      .eq('localizacion_id', localizacionId)
+    // Paginado: un producto muy movido puede superar 1000 movimientos en una
+    // localización; sin esto el stock derivado saldría subestimado.
+    const { data, error } = await fetchAllRows<{ cantidad: number }>(() =>
+      supabase
+        .from('transacciones_inventario')
+        .select('cantidad')
+        .eq('producto_id', productoId)
+        .eq('localizacion_id', localizacionId) as unknown as RangeableQuery
+    )
 
-    if (error) return { stock: 0, error: error.message }
-    
+    if (error) return { stock: 0, error }
+
     const stock = (data || []).reduce((sum, t) => sum + (t.cantidad || 0), 0)
     return { stock, error: null }
   } catch (err) {

@@ -12,6 +12,29 @@ function chunk<T>(arr: T[], size: number): T[][] {
 const IN_CHUNK = 200
 
 /**
+ * PostgREST corta cada `.select()` en 1000 filas. Pagina con `.range()` hasta
+ * traerlas todas. Sin esto, un chunk de 200 ventas con varias líneas de pago
+ * c/u podía superar 1000 filas y truncar las agregaciones por venta.
+ */
+type RangeableQuery = {
+  range: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
+}
+async function fetchAllRows<T>(buildQuery: () => RangeableQuery): Promise<{ data: T[]; error: { message: string } | null }> {
+  const PAGE = 1000
+  let from = 0
+  const acc: T[] = []
+  for (let guard = 0; guard < 100; guard++) {
+    const { data, error } = await buildQuery().range(from, from + PAGE - 1)
+    if (error) return { data: acc, error }
+    const rows = (data || []) as T[]
+    acc.push(...rows)
+    if (rows.length < PAGE) break
+    from += PAGE
+  }
+  return { data: acc, error: null }
+}
+
+/**
  * Resumen de pagos del periodo, derivado de la tabla `ventas_pagos_detalle`
  * (migracion 011). Sirve como fuente unica para:
  *   - KPIs de Venta Bruta vs Venta Neta en el Dashboard
@@ -110,7 +133,9 @@ export async function getPagosResumen(
       encabQ = encabQ.gte("fecha_venta", start).lte("fecha_venta", end)
     }
 
-    const { data: encabData, error: encabErr } = await encabQ
+    const { data: encabData, error: encabErr } = await fetchAllRows<{ id: number }>(
+      () => encabQ as unknown as RangeableQuery
+    )
 
     if (encabErr) {
       return { data: empty, error: encabErr.message }
@@ -124,22 +149,27 @@ export async function getPagosResumen(
       return { data: { ...empty }, error: null }
     }
 
-    // 2) Leer los pagos de esas ventas.
-    const { data, error } = await supabase
-      .from("ventas_pagos_detalle")
-      .select(`
-        metodo_pago,
-        monto_bruto,
-        porcentaje_comision,
-        cuentas_config(nombre)
-      `)
-      .in("venta_id", ventaIds)
-
-    if (error) {
-      if (/does not exist|ventas_pagos_detalle/i.test(error.message)) {
-        return { data: { ...empty, featurePending: true }, error: null }
+    // 2) Leer los pagos de esas ventas (chunk de ids + paginado por chunk).
+    const data: { metodo_pago: string; monto_bruto: number; porcentaje_comision: number; cuentas_config: { nombre?: string } | { nombre?: string }[] | null }[] = []
+    for (const grupo of chunk(ventaIds, IN_CHUNK)) {
+      const { data: parte, error } = await fetchAllRows<typeof data[number]>(() =>
+        supabase
+          .from("ventas_pagos_detalle")
+          .select(`
+            metodo_pago,
+            monto_bruto,
+            porcentaje_comision,
+            cuentas_config(nombre)
+          `)
+          .in("venta_id", grupo) as unknown as RangeableQuery
+      )
+      if (error) {
+        if (/does not exist|ventas_pagos_detalle/i.test(error.message)) {
+          return { data: { ...empty, featurePending: true }, error: null }
+        }
+        return { data: empty, error: error.message }
       }
-      return { data: empty, error: error.message }
+      data.push(...(parte || []))
     }
 
     let totalBruto = 0
@@ -255,7 +285,9 @@ export async function getMetodosPagoPorVenta(
     // Chunk de ids para no exceder el largo de URL con miles de ventas.
     const resultados = await Promise.all(
       chunk(ventaIds, IN_CHUNK).map((grupo) =>
-        supabase.from("ventas_pagos_detalle").select("venta_id, metodo_pago").in("venta_id", grupo)
+        fetchAllRows<Row>(() =>
+          supabase.from("ventas_pagos_detalle").select("venta_id, metodo_pago").in("venta_id", grupo) as unknown as RangeableQuery
+        )
       )
     )
     const filas: Row[] = []
@@ -286,7 +318,9 @@ export async function getMetodosPagoPorVenta(
       type PagoRow = { venta_id: number; metodo_pago: string | null }
       const abonoResultados = await Promise.all(
         chunk(sinDesglose, IN_CHUNK).map((grupo) =>
-          supabase.from("pagos_ventas").select("venta_id, metodo_pago").in("venta_id", grupo)
+          fetchAllRows<PagoRow>(() =>
+            supabase.from("pagos_ventas").select("venta_id, metodo_pago").in("venta_id", grupo) as unknown as RangeableQuery
+          )
         )
       )
       for (const r of abonoResultados) {
@@ -359,10 +393,12 @@ export async function getCuentasDestinoPorVenta(
     }
     const resultados = await Promise.all(
       chunk(ventaIds, IN_CHUNK).map((grupo) =>
-        supabase
-          .from("ventas_pagos_detalle")
-          .select("venta_id, metodo_pago, cuenta_id, cuentas_config(nombre)")
-          .in("venta_id", grupo)
+        fetchAllRows<Row>(() =>
+          supabase
+            .from("ventas_pagos_detalle")
+            .select("venta_id, metodo_pago, cuenta_id, cuentas_config(nombre)")
+            .in("venta_id", grupo) as unknown as RangeableQuery
+        )
       )
     )
 
@@ -430,7 +466,9 @@ export async function getComisionesPorVenta(
     type Row = { venta_id: number; monto_bruto: number | null; porcentaje_comision: number | null }
     const resultados = await Promise.all(
       chunk(ventaIds, IN_CHUNK).map((grupo) =>
-        supabase.from("ventas_pagos_detalle").select("venta_id, monto_bruto, porcentaje_comision").in("venta_id", grupo)
+        fetchAllRows<Row>(() =>
+          supabase.from("ventas_pagos_detalle").select("venta_id, monto_bruto, porcentaje_comision").in("venta_id", grupo) as unknown as RangeableQuery
+        )
       )
     )
     const filas: Row[] = []
