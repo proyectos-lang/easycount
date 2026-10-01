@@ -10,6 +10,8 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -28,6 +30,13 @@ export function ImportarClientesDialog({ onImported }: { onImported: () => void 
   const [descargando, setDescargando] = React.useState(false)
   const [importando, setImportando] = React.useState(false)
   const [resultado, setResultado] = React.useState<ResultadoImportClientes | null>(null)
+  // Fecha para las ventas de saldo inicial (cuentas por cobrar de apertura).
+  // Default: último día del mes anterior (para no inflar el mes corriente).
+  const [fechaSaldo, setFechaSaldo] = React.useState(() => {
+    const d = new Date()
+    const ultimoMesPasado = new Date(d.getFullYear(), d.getMonth(), 0)
+    return `${ultimoMesPasado.getFullYear()}-${String(ultimoMesPasado.getMonth() + 1).padStart(2, "0")}-${String(ultimoMesPasado.getDate()).padStart(2, "0")}`
+  })
 
   function resetArchivo() {
     setFilas([]); setNombreArchivo(""); setPreview(null); setResultado(null)
@@ -72,9 +81,13 @@ export function ImportarClientesDialog({ onImported }: { onImported: () => void 
 
   async function ejecutar() {
     if (!listoParaImportar) return
+    if ((preview?.conSaldo ?? 0) > 0 && !fechaSaldo) {
+      toast({ title: "Falta la fecha", description: "Elige la fecha del saldo inicial.", variant: "destructive" })
+      return
+    }
     setImportando(true)
     try {
-      const res = await importarClientes(filas)
+      const res = await importarClientes(filas, { fechaSaldoInicial: fechaSaldo })
       if (res.error || !res.data) {
         toast({ title: "No se pudo cargar", description: res.error || "Error desconocido", variant: "destructive" })
         return
@@ -118,6 +131,12 @@ export function ImportarClientesDialog({ onImported }: { onImported: () => void 
                 <p className="text-xs text-stone-500">Con error</p>
               </div>
             </div>
+            {(resultado.saldosCreados > 0 || resultado.saldosConError > 0) && (
+              <p className="text-xs text-center text-sky-700">
+                Saldos iniciales: {resultado.saldosCreados} creado(s) como cuenta por cobrar
+                {resultado.saldosConError > 0 ? ` · ${resultado.saldosConError} con error` : ""}.
+              </p>
+            )}
             {resultado.clientes.some((c) => c.estado !== "creado") && (
               <ScrollArea className="h-40 rounded-md border">
                 <div className="p-2 space-y-1">
@@ -187,6 +206,21 @@ export function ImportarClientesDialog({ onImported }: { onImported: () => void 
                     <p className="flex items-center gap-1.5 text-xs text-emerald-700">
                       <CheckCircle2 className="h-3.5 w-3.5" /> Se crearán {preview.nuevos} cliente(s) nuevo(s).
                     </p>
+                  )}
+                  {preview.conSaldo > 0 && (
+                    <div className="rounded-lg border border-sky-200 bg-sky-50/50 p-2.5 space-y-2">
+                      <p className="text-xs text-sky-800">
+                        {preview.conSaldo} cliente(s) traen saldo pendiente (total L {preview.totalSaldo.toLocaleString("es-HN", { minimumFractionDigits: 2 })}).
+                        Se les creará una venta de apertura a crédito (cuenta por cobrar), sin tocar inventario.
+                      </p>
+                      <div className="grid gap-1">
+                        <Label className="text-xs">Fecha del saldo inicial</Label>
+                        <Input type="date" value={fechaSaldo} onChange={(e) => setFechaSaldo(e.target.value)} className="h-9" />
+                        <p className="text-[11px] text-muted-foreground">
+                          Usa una fecha de apertura (ej. cierre del año/mes anterior) para que estas cuentas por cobrar no cuenten como ventas del período actual.
+                        </p>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}

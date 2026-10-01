@@ -317,7 +317,8 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "La fecha de nacimiento alimenta las alertas de cumpleaños.",
       "Límite de crédito: el máximo que el cliente puede deber a crédito. Si es mayor que 0 y una venta a crédito haría que su deuda total (lo que ya debe + esta venta) supere ese límite, la venta se bloquea en Nueva Venta (y se omite en la carga masiva). 0 o vacío = sin límite (crédito libre).",
       "Los clientes se eligen en Nueva Venta y alimentan el ranking del Dashboard de Ventas.",
-      "Carga masiva: con 'Carga masiva' descargas una plantilla de Excel (Nombre, RTN, Dirección, Teléfono, Fecha de Nacimiento), la llenas y la subes para crear muchos clientes de una vez. Antes de cargar muestra cuántos son nuevos y cuáles se omiten por ya existir (por RTN o, si no hay RTN, por nombre).",
+      "Carga masiva: con 'Carga masiva' descargas una plantilla de Excel (Nombre, RTN, Dirección, Teléfono, Fecha de Nacimiento y Saldo Pendiente), la llenas y la subes para crear muchos clientes de una vez. Antes de cargar muestra cuántos son nuevos y cuáles se omiten por ya existir (por RTN o, si no hay RTN, por nombre).",
+      "Saldo pendiente en la carga masiva: si pones un 'Saldo Pendiente' > 0 a un cliente nuevo, el sistema le crea una venta de apertura a crédito (una línea 'Saldo inicial', sin inventario, numerada SI-####) que queda como cuenta por cobrar. Eliges la fecha del saldo inicial en el diálogo; usa una fecha de apertura (ej. cierre del período anterior) para que no cuente como venta del mes actual. Solo aplica a clientes nuevos (los que ya existen se omiten, no se les duplica saldo).",
       "Eliminar un cliente: si NO tiene ventas registradas, se borra del catálogo. Si SÍ tiene ventas, no se borra (rompería el historial): se DESACTIVA y deja de aparecer en el punto de venta y demás listas, pero se conserva en el registro/historial de ventas. Un cliente inactivo se puede reactivar con el botón de reactivar.",
       "Marca el estado de cada cliente (Activo / Inactivo) en la lista.",
     ],
@@ -340,9 +341,10 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
         titulo: "Cargar muchos clientes desde Excel",
         pasos: [
           "En Configuración → Clientes presiona 'Carga masiva'.",
-          "Descarga la plantilla y llénala (Nombre es obligatorio; RTN, dirección, teléfono y fecha de nacimiento opcionales).",
-          "Sube el archivo: verás cuántos clientes son nuevos y cuáles se omiten por ya existir.",
-          "Presiona 'Cargar'. Se crean los nuevos; los duplicados (por RTN o nombre) se omiten sin tocar los existentes.",
+          "Descarga la plantilla y llénala (Nombre es obligatorio; RTN, dirección, teléfono, fecha de nacimiento y saldo pendiente opcionales).",
+          "Sube el archivo: verás cuántos clientes son nuevos, cuáles se omiten y cuántos traen saldo pendiente.",
+          "Si hay saldos, elige la 'Fecha del saldo inicial' (fecha de apertura).",
+          "Presiona 'Cargar'. Se crean los nuevos; a los que traen saldo se les genera su cuenta por cobrar de apertura. Los duplicados se omiten sin tocar los existentes.",
         ],
       },
       {
