@@ -83,6 +83,8 @@ export interface TirillaVenta {
   pagos: TirillaPago[]
   valorPagado: number
   saldo: number
+  /** Crédito disponible del cliente DESPUÉS de esta venta (límite − deuda). Opcional. */
+  creditoDisponible?: number | null
   /** Efectivo con el que pagó el cliente (para mostrar el vuelto). Opcional. */
   efectivoRecibido?: number | null
   /** Vuelto/cambio a devolver (efectivoRecibido − efectivo aplicado). Opcional. */
@@ -176,6 +178,11 @@ export function buildTirillaVentaHtml(v: TirillaVenta): string {
   const saldoHtml =
     v.saldo > 0
       ? `<div class="row bold"><span>SALDO PENDIENTE</span><span>${formatCurrency(v.saldo)}</span></div>`
+      : ""
+
+  const creditoHtml =
+    v.creditoDisponible != null
+      ? `<div class="row"><span>Crédito disponible</span><span>${formatCurrency(v.creditoDisponible)}</span></div>`
       : ""
 
   const vueltoHtml =
@@ -287,6 +294,7 @@ export function buildTirillaVentaHtml(v: TirillaVenta): string {
   ${pagosHtml}
   <div class="row"><span>Pagado</span><span>${formatCurrency(v.valorPagado)}</span></div>
   ${saldoHtml}
+  ${creditoHtml}
   ${vueltoHtml}
   ${pieFiscalHtml}
   <div class="line"></div>

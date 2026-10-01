@@ -1178,6 +1178,11 @@ export default function NuevaVentaPage() {
         })),
         valorPagado: valorpago,
         saldo: Math.max(0, +(total - valorpago).toFixed(2)),
+        // Crédito disponible DESPUÉS de esta venta (solo si el cliente tiene
+        // límite): el disponible pre-venta menos lo que esta venta deja a crédito.
+        creditoDisponible: creditoDisponible != null
+          ? Math.max(0, +(creditoDisponible - Math.max(0, total - valorpago)).toFixed(2))
+          : null,
         efectivoRecibido: efectivoRecibidoTotal > 0 ? efectivoRecibidoTotal : null,
         vuelto: vueltoTotal > 0 ? vueltoTotal : null,
         mostrarCodigoProducto: user?.flags?.tirilla_mostrar_codigo ?? false,
