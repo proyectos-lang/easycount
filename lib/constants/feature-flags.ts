@@ -49,6 +49,13 @@ export interface FeatureFlags {
    * ciegas" sin ver cuánto hay. El admin ve todo. Default false.
    */
   caja_ocultar_saldo: boolean
+  /**
+   * Si es true, los imprimibles del Cierre Diario (tirilla y PDF) NO muestran el
+   * SALDO FINAL de cada cuenta bancaria: se siguen mostrando los movimientos del
+   * banco (cantidad de movimientos, ingresos y egresos del día), pero se omite
+   * el saldo con el que quedó la cuenta. Default false (se muestra el saldo).
+   */
+  cierre_ocultar_saldo_banco: boolean
 }
 
 export const DEFAULT_FLAGS: FeatureFlags = {
@@ -60,6 +67,7 @@ export const DEFAULT_FLAGS: FeatureFlags = {
   facturacion_cai: false,
   ventas_bloquear_precio_descuento: false,
   caja_ocultar_saldo: false,
+  cierre_ocultar_saldo_banco: false,
 }
 
 /** Etiquetas legibles para el portal (que flags se pueden togglear por empresa). */
@@ -72,6 +80,7 @@ export const FLAG_LABELS: Record<keyof FeatureFlags, string> = {
   facturacion_cai: "Impresión de factura CAI (SAR Honduras)",
   ventas_bloquear_precio_descuento: "Bloquear precio y descuento en ventas (excepto admin)",
   caja_ocultar_saldo: "Ocultar saldo de caja chica (excepto admin)",
+  cierre_ocultar_saldo_banco: "Ocultar saldo de bancos en el imprimible del cierre",
 }
 
 /**
@@ -113,5 +122,9 @@ export function mergeFlags(config: Record<string, unknown> | null | undefined): 
       c.caja_ocultar_saldo === undefined
         ? DEFAULT_FLAGS.caja_ocultar_saldo
         : Boolean(c.caja_ocultar_saldo),
+    cierre_ocultar_saldo_banco:
+      c.cierre_ocultar_saldo_banco === undefined
+        ? DEFAULT_FLAGS.cierre_ocultar_saldo_banco
+        : Boolean(c.cierre_ocultar_saldo_banco),
   }
 }

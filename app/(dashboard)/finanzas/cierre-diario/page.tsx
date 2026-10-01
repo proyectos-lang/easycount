@@ -147,6 +147,9 @@ const MOV_LABEL: Record<string, string> = {
 export default function CierreDiarioPage() {
   const { toast } = useToast()
   const { user } = useAuth()
+  // Flag super-admin: en los imprimibles (tirilla y PDF) oculta el SALDO FINAL
+  // de los bancos (los movimientos sí se muestran).
+  const ocultarSaldoBanco = user?.flags?.cierre_ocultar_saldo_banco ?? false
   const [fecha, setFecha] = React.useState<string>(() => todayISO())
   const [data, setData] = React.useState<CierreDiarioData | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -266,19 +269,30 @@ export default function CierreDiarioPage() {
       pdf.setFontSize(11)
       pdf.text("Desglose por cuenta bancaria", left, y)
       y += 2
+      // La columna "Saldo Final" se omite si el flag cierre_ocultar_saldo_banco
+      // está activo (los movimientos ingresos/egresos sí se muestran).
+      const bancoHead = ocultarSaldoBanco
+        ? ["Banco", "Movs", "Ingresos", "Egresos"]
+        : ["Banco", "Movs", "Ingresos", "Egresos", "Saldo Final"]
+      const bancoVacio = ocultarSaldoBanco
+        ? ["Sin movimientos bancarios", "", "", ""]
+        : ["Sin movimientos bancarios", "", "", "", ""]
       autoTable(pdf, {
         startY: y + 2,
-        head: [["Banco", "Movs", "Ingresos", "Egresos", "Saldo Final"]],
+        head: [bancoHead],
         body:
           data.bancos.length > 0
-            ? data.bancos.map((b) => [
-                b.banco,
-                String(b.cantidad_movimientos),
-                formatCurrency(b.total_ingresos),
-                formatCurrency(b.total_egresos),
-                formatCurrency(b.saldo_final_dia),
-              ])
-            : [["Sin movimientos bancarios", "", "", "", ""]],
+            ? data.bancos.map((b) => {
+                const fila = [
+                  b.banco,
+                  String(b.cantidad_movimientos),
+                  formatCurrency(b.total_ingresos),
+                  formatCurrency(b.total_egresos),
+                ]
+                if (!ocultarSaldoBanco) fila.push(formatCurrency(b.saldo_final_dia))
+                return fila
+              })
+            : [bancoVacio],
         theme: "striped",
         headStyles: { fillColor: [50, 50, 50], fontSize: 9 },
         styles: { fontSize: 9, cellPadding: 1.5 },
@@ -416,6 +430,7 @@ export default function CierreDiarioPage() {
         },
         fechaTexto: formatFechaLarga(fecha),
         resumen,
+        ocultarSaldoBanco,
         bancos: data.bancos.map((b) => ({
           banco: b.banco,
           ingresos: b.total_ingresos,

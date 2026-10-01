@@ -291,10 +291,12 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
       "Devoluciones (notas de crédito) registradas en el día, con su factura y monto reembolsado.",
       "Detalle de la caja: sesiones y movimientos del día.",
       "Imprime el cierre en dos formatos: tirilla térmica (80 mm) o PDF A4, ambos con el nombre de la empresa.",
+      "Si el administrador de la plataforma activó 'Ocultar saldo de bancos en el cierre', los imprimibles (tirilla y PDF) muestran los movimientos de cada banco (ingresos y egresos del día) pero NO el saldo final con el que quedó la cuenta. En pantalla el desglose sí conserva el saldo; solo el documento impreso lo oculta.",
     ],
     queNoHace: [
       "No cierra la caja (eso se hace en Caja Chica); este módulo solo reporta.",
       "No permite modificar nada: es un reporte de consulta.",
+      "La opción de ocultar el saldo de bancos solo afecta lo IMPRESO (tirilla/PDF), no los movimientos ni las cifras que ves en la pantalla del módulo.",
     ],
     operaciones: [
       {
@@ -320,8 +322,13 @@ export const TUTORIALES_FINANZAS: TutorialModulo[] = [
         respuesta:
           "No. El total vendido es el bruto; el banco entra NETO (se le restan las comisiones de tarjeta) y el crédito no ingresa dinero el mismo día. Mira el recuadro '¿Cómo se cobró lo vendido hoy?': ahí el total vendido se reparte en efectivo + banco (bruto) − comisiones + crédito, y verás que cuadra. Si todo se cobró por tarjeta, la caja de efectivo queda casi en cero y eso es correcto.",
       },
+      {
+        pregunta: "Imprimí el cierre y no aparece el saldo final de los bancos, ¿por qué?",
+        respuesta:
+          "El administrador de la plataforma activó la opción de ocultar el saldo de bancos en el imprimible del cierre. El documento (tirilla o PDF) muestra los movimientos del banco (ingresos y egresos del día) pero omite a propósito el saldo con el que quedó la cuenta. En la pantalla del módulo el saldo sí se sigue viendo.",
+      },
     ],
-    keywords: ["corte", "dia", "resumen diario", "cuadre", "reporte dia", "pdf", "tirilla", "termica", "imprimir cierre", "metodos de pago", "bruto neto", "comisiones tarjeta", "no cuadra", "se perdio"],
+    keywords: ["corte", "dia", "resumen diario", "cuadre", "reporte dia", "pdf", "tirilla", "termica", "imprimir cierre", "metodos de pago", "bruto neto", "comisiones tarjeta", "no cuadra", "se perdio", "ocultar saldo banco", "saldo banco cierre"],
   },
   {
     modulo: "Analisis Financiero",

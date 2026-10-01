@@ -40,6 +40,8 @@ export interface TirillaCierre {
   fechaTexto: string
   resumen: TirillaCierreKV[]
   bancos?: TirillaCierreBanco[]
+  /** Si es true, omite el SALDO FINAL de cada banco (muestra solo ingresos/egresos). */
+  ocultarSaldoBanco?: boolean
   productos?: TirillaCierreProducto[]
   movimientosCaja?: TirillaCierreMovCaja[]
   gastos?: TirillaCierreGasto[]
@@ -58,12 +60,14 @@ export function buildTirillaCierreHtml(c: TirillaCierre): string {
   const bancosHtml = seccion(
     "Bancos",
     (c.bancos || [])
-      .map(
-        (b) =>
-          `<div class="item"><div class="item-name">${esc(b.banco)}</div>` +
-          `<div class="row"><span>Ing ${formatCurrency(b.ingresos)} / Egr ${formatCurrency(b.egresos)}</span>` +
-          `<span>${formatCurrency(b.saldoFinal)}</span></div></div>`
-      )
+      .map((b) => {
+        const mov = `Ing ${formatCurrency(b.ingresos)} / Egr ${formatCurrency(b.egresos)}`
+        // Con el flag activo se omite el saldo final; solo quedan los movimientos.
+        const fila = c.ocultarSaldoBanco
+          ? `<div class="row"><span>${esc(mov)}</span></div>`
+          : `<div class="row"><span>${esc(mov)}</span><span>${formatCurrency(b.saldoFinal)}</span></div>`
+        return `<div class="item"><div class="item-name">${esc(b.banco)}</div>${fila}</div>`
+      })
       .join("")
   )
 
