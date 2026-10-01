@@ -23,6 +23,11 @@ export interface CompraEncabezado {
   subtotal?: number
   total?: number
   estado: 'Pendiente' | 'Recibida' | 'Cancelada'
+  /** Observaciones de la OC (script 070). */
+  notas?: string | null
+  /** Auditoría de edición de una OC recibida (script 070). */
+  modificado_en?: string | null
+  modificado_por?: string | null
   created_at?: string
 }
 
@@ -639,6 +644,75 @@ export async function crearCompraYRecibir(input: {
     pago: input.pago ? { ...input.pago, proveedor_id: input.proveedor_id } : null,
   })
   return { success: rec.success, error: rec.error, compraId: compra.id }
+}
+
+/**
+ * Edita una OC YA RECIBIDA sin tocar cantidad ni costo (ni el total). Solo
+ * permite corregir datos "de cabecera" (proveedor, número de factura, fecha
+ * tentativa, notas) y el PRECIO DE VENTA de cada producto en el catálogo. Deja
+ * rastro de la modificación (`modificado_en`/`modificado_por`).
+ *
+ * `preciosVenta` es un mapa producto_id -> nuevo precio de venta (> 0); los que
+ * no cambian no se incluyen. Degrada con gracia si faltan las columnas del
+ * script 070 (reintenta sin ellas).
+ */
+export async function actualizarCompraRecibida(
+  compraId: number,
+  cambios: {
+    proveedor_id?: number | null
+    numero_factura?: string | null
+    fecha_tentativa?: string | null
+    notas?: string | null
+    preciosVenta?: Record<number, number>
+  },
+): Promise<{ success: boolean; error: string | null }> {
+  const supabase = createClient()
+  if (!supabase) return { success: false, error: 'Cliente no disponible' }
+
+  const stamp = await getTenantStamp(supabase)
+  if (!isValidStamp(stamp)) return { success: false, error: SESION_INVALIDA_ERROR }
+
+  // Cabecera: solo campos permitidos (nunca cantidad/costo/total/tasa/moneda).
+  const patch: Record<string, unknown> = {
+    modificado_en: new Date().toISOString(),
+    modificado_por: stamp.usuario ?? null,
+  }
+  if (cambios.proveedor_id !== undefined) patch.proveedor_id = cambios.proveedor_id
+  if (cambios.numero_factura !== undefined) patch.numero_factura = cambios.numero_factura?.trim() || null
+  if (cambios.fecha_tentativa !== undefined) patch.fecha_tentativa = cambios.fecha_tentativa || null
+  if (cambios.notas !== undefined) patch.notas = cambios.notas?.trim() || null
+
+  let { error } = await supabase
+    .from('compras_encabezado')
+    .update(patch)
+    .eq('id', compraId)
+    .eq('razon_social_id', stamp.razon_social_id)
+  // Fallback: columnas de auditoría/notas del script 070 pendientes.
+  if (error && /(modificado_en|modificado_por|notas)/i.test(error.message || '')) {
+    const { modificado_en: _m, modificado_por: _p, notas: _n, ...patchBasico } = patch
+    const retry = await supabase
+      .from('compras_encabezado')
+      .update(patchBasico)
+      .eq('id', compraId)
+      .eq('razon_social_id', stamp.razon_social_id)
+    error = retry.error
+  }
+  if (error) return { success: false, error: error.message }
+
+  // Precios de venta: actualiza el precio de lista de cada producto (no el costo).
+  const precios = cambios.preciosVenta || {}
+  for (const [pidStr, precio] of Object.entries(precios)) {
+    const pid = Number(pidStr)
+    if (!pid || !(precio > 0)) continue
+    const { error: precioErr } = await supabase
+      .from('productos')
+      .update({ precio_venta_sugerido: precio, updated_at: new Date().toISOString() })
+      .eq('id', pid)
+      .eq('razon_social_id', stamp.razon_social_id)
+    if (precioErr) console.warn('[actualizarCompraRecibida] no se actualizó el precio de venta:', precioErr.message)
+  }
+
+  return { success: true, error: null }
 }
 
 // ==================== HELPERS: PRORRATEO ====================

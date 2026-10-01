@@ -46,11 +46,13 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
       "En las individuales, cada producto sin precio definido usa el precio del maestro.",
       "Las listas se asignan a los clientes desde el módulo Clientes. Un cliente sin lista usa el precio normal del maestro de productos.",
       "En Nueva Venta, al elegir un cliente con lista, el catálogo muestra el precio base tachado y al lado el precio final de la lista; ese precio final es el que entra a la venta.",
+      "Listas GENERALES por fecha: puedes marcar una lista como 'general por fecha' con una vigencia (desde/hasta). Mientras esté vigente, aplica a TODOS los clientes (incluido Consumidor Final) y TIENE PRIORIDAD sobre la lista asignada a un cliente. Ideal para promociones o precios de temporada. No se asigna a clientes.",
+      "El sistema no deja guardar dos listas generales vigentes cuyos rangos de fecha se solapen (para que en una fecha dada siempre haya una sola lista general).",
       "Este módulo lo habilita el super-admin por empresa; si no lo ves, tu empresa no lo tiene activo.",
     ],
     queNoHace: [
       "No cambia el precio del maestro de productos: la lista es un precio alterno por cliente.",
-      "No aplica una lista a una venta si el cliente no la tiene asignada (usa el precio normal).",
+      "No aplica una lista a una venta si el cliente no la tiene asignada (usa el precio normal), salvo que haya una lista general por fecha vigente, que aplica a todos.",
     ],
     operaciones: [
       {
@@ -76,6 +78,14 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "En Nueva Venta, al seleccionar ese cliente, verás el precio base tachado y el precio de la lista.",
         ],
       },
+      {
+        titulo: "Programar una lista general por fecha (promoción/temporada)",
+        pasos: [
+          "Nueva lista → elige el tipo (porcentaje o individual) y marca 'Lista general por fecha'.",
+          "Define 'Vigente desde' y 'Vigente hasta' (puedes dejar alguna en blanco para vigencia abierta).",
+          "Guarda: mientras esté vigente, esos precios aplican a TODOS los clientes y tienen prioridad sobre la lista de cada cliente. Fuera del rango, se vuelve a usar la lista del cliente (o el precio del maestro).",
+        ],
+      },
     ],
     faqs: [
       {
@@ -84,7 +94,7 @@ export const TUTORIALES_CONFIGURACION: TutorialModulo[] = [
           "Es una función que el super-admin habilita por empresa. Si no aparece en Configuración, tu empresa aún no lo tiene activo.",
       },
     ],
-    keywords: ["lista de precios", "precio por cliente", "mayorista", "descuento", "recargo", "porcentaje", "precio especial", "tarifa"],
+    keywords: ["lista de precios", "precio por cliente", "mayorista", "descuento", "recargo", "porcentaje", "precio especial", "tarifa", "lista general", "por fecha", "vigencia", "promocion", "temporada"],
   },
   {
     modulo: "Usuarios y Permisos",

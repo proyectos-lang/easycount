@@ -26,6 +26,23 @@ async function fetchAllRows<T>(buildQuery: () => RangeableQuery): Promise<{ data
   return { data: acc, error: null }
 }
 
+/**
+ * Inserta un movimiento en `transacciones_inventario`. Si la columna
+ * `observaciones` aún no existe (script 069 pendiente), reintenta sin ella para
+ * no romper la operación (degrada con gracia). Devuelve el error de Supabase.
+ */
+async function insertTransaccion(
+  supabase: NonNullable<ReturnType<typeof createClient>>,
+  fila: Record<string, unknown>,
+): Promise<{ error: { message: string } | null }> {
+  const { error } = await supabase.from('transacciones_inventario').insert(fila)
+  if (error && 'observaciones' in fila && /observaciones/i.test(error.message || '')) {
+    const { observaciones: _obs, ...sinObs } = fila
+    return await supabase.from('transacciones_inventario').insert(sinObs)
+  }
+  return { error }
+}
+
 // ==================== INTERFACES ====================
 
 export interface TransaccionInventario {
@@ -42,8 +59,11 @@ export interface TransaccionInventario {
   costo_o_precio_unitario: number
   referencia_id?: number
   fecha?: string
-  /** Etiqueta del documento origen (FC-#### para ventas, factura/OC para compras).
-   *  La rellena `resolverReferenciasMovimientos`. Ausente = sin referencia. */
+  /** Motivo/respaldo escrito en salidas/ingresos manuales y ajustes (script 069). */
+  observaciones?: string | null
+  /** Etiqueta del documento origen (FC-#### para ventas, factura/OC para compras),
+   *  o el `observaciones` del movimiento si no tiene documento. La rellena
+   *  `resolverReferenciasMovimientos`. Ausente = sin referencia. */
   referencia_texto?: string
 }
 
@@ -110,16 +130,18 @@ async function resolverReferenciasMovimientos(
     }
 
     return transacciones.map((t) => {
-      if (t.referencia_id == null) return t
-      if (t.tipo_movimiento === 'Salida Venta') {
+      if (t.referencia_id != null && t.tipo_movimiento === 'Salida Venta') {
         const label = ventaLabel.get(t.referencia_id)
-        return label ? { ...t, referencia_texto: label } : t
+        if (label) return { ...t, referencia_texto: label }
       }
-      if (t.tipo_movimiento === 'Entrada Compra') {
+      if (t.referencia_id != null && t.tipo_movimiento === 'Entrada Compra') {
         const label = compraLabel.get(t.referencia_id)
-        return label ? { ...t, referencia_texto: label } : t
+        if (label) return { ...t, referencia_texto: label }
       }
-      return t
+      // Sin documento asociado (Salida/Ingreso Manual, Ajuste, etc.): mostramos
+      // el motivo/respaldo que el usuario escribió, si lo hay.
+      const obs = (t.observaciones || "").trim()
+      return obs ? { ...t, referencia_texto: obs } : t
     })
   } catch {
     return transacciones
@@ -872,18 +894,17 @@ export async function procesarIngresoManual(data: IngresoManualData): Promise<{ 
         return { success: false, error: `La salida (${data.cantidad}) supera las existencias disponibles (${stock}).` }
       }
 
-      const { error: salidaTransError } = await supabase
-        .from('transacciones_inventario')
-        .insert({
-          producto_id: data.producto_id,
-          almacen_id: data.almacen_id,
-          localizacion_id: data.localizacion_id,
-          tipo_movimiento: 'Salida Manual',
-          cantidad: -data.cantidad,
-          costo_o_precio_unitario: Number(prod?.costo_promedio || data.costo_anterior || 0),
-          fecha: getHondurasNowISO(), // dia de negocio HN (kardex usa split)
-          ...stamp,
-        })
+      const { error: salidaTransError } = await insertTransaccion(supabase, {
+        producto_id: data.producto_id,
+        almacen_id: data.almacen_id,
+        localizacion_id: data.localizacion_id,
+        tipo_movimiento: 'Salida Manual',
+        cantidad: -data.cantidad,
+        costo_o_precio_unitario: Number(prod?.costo_promedio || data.costo_anterior || 0),
+        observaciones: data.observaciones?.trim() || null,
+        fecha: getHondurasNowISO(), // dia de negocio HN (kardex usa split)
+        ...stamp,
+      })
       if (salidaTransError) return { success: false, error: salidaTransError.message }
 
       // Resta stock (solo stock_total; el costo promedio no cambia en salidas).
@@ -894,18 +915,17 @@ export async function procesarIngresoManual(data: IngresoManualData): Promise<{ 
     }
 
     // ----- INGRESO (entrada): suma stock y recalcula costo promedio -----
-    const { error: transError } = await supabase
-      .from('transacciones_inventario')
-      .insert({
-        producto_id: data.producto_id,
-        almacen_id: data.almacen_id,
-        localizacion_id: data.localizacion_id,
-        tipo_movimiento: 'Ingreso Manual',
-        cantidad: data.cantidad,
-        costo_o_precio_unitario: data.costo_unitario,
-        fecha: getHondurasNowISO(), // dia de negocio HN (kardex usa split)
-        ...stamp
-      })
+    const { error: transError } = await insertTransaccion(supabase, {
+      producto_id: data.producto_id,
+      almacen_id: data.almacen_id,
+      localizacion_id: data.localizacion_id,
+      tipo_movimiento: 'Ingreso Manual',
+      cantidad: data.cantidad,
+      costo_o_precio_unitario: data.costo_unitario,
+      observaciones: data.observaciones?.trim() || null,
+      fecha: getHondurasNowISO(), // dia de negocio HN (kardex usa split)
+      ...stamp
+    })
 
     if (transError) return { success: false, error: transError.message }
 
@@ -1231,13 +1251,14 @@ export async function procesarAjusteInventario(
   let procesados = 0
   for (const l of cambios) {
     // 1) Movimiento de kardex 'Ajuste' con el costo actual congelado.
-    const { error: movErr } = await supabase.from('transacciones_inventario').insert({
+    const { error: movErr } = await insertTransaccion(supabase, {
       producto_id: l.producto_id,
       almacen_id: l.almacen_id,
       localizacion_id: l.localizacion_id,
       tipo_movimiento: 'Ajuste',
       cantidad: l.delta, // con signo: + entrada, - salida
       costo_o_precio_unitario: l.costo_unitario,
+      observaciones: motivo?.trim() || null,
       fecha: getHondurasNowISO(), // dia de negocio HN (kardex usa split)
       ...stamp,
     })

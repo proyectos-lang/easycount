@@ -64,7 +64,8 @@ import {
   getCompras,
   getDetallesCompra,
   createCompra,
-  getCompraById
+  getCompraById,
+  actualizarCompraRecibida
 } from "@/lib/services/compras"
 import { getRazonSocialForPdf } from "@/lib/services/ventas"
 import { type Proveedor, type Producto, getProveedores, getProductos } from "@/lib/services/catalogos"
@@ -106,6 +107,17 @@ export default function OrdenCompraPage() {
   const [comboValue, setComboValue] = useState("")
   // Crear producto al vuelo desde la OC.
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
+
+  // Edición de una OC YA RECIBIDA: solo cabecera + precio de venta (no cantidad/costo).
+  const [editandoOC, setEditandoOC] = useState(false)
+  const [guardandoOC, setGuardandoOC] = useState(false)
+  const [edicionOC, setEdicionOC] = useState<{
+    proveedor_id: number
+    numero_factura: string
+    fecha_tentativa: string
+    notas: string
+    preciosVenta: Record<number, string> // producto_id -> precio (string del input)
+  }>({ proveedor_id: 0, numero_factura: "", fecha_tentativa: "", notas: "", preciosVenta: {} })
 
   const { toast } = useToast()
 
@@ -155,6 +167,57 @@ export default function OrdenCompraPage() {
     }
     setDetallesVista(data)
     setLoadingDetalles(false)
+    setEditandoOC(false)
+  }
+
+  // Entra en modo edición de una OC recibida: siembra la cabecera y el precio de
+  // venta ACTUAL de cada producto (desde el catálogo), para poder corregirlos.
+  const iniciarEdicionOC = () => {
+    if (!selectedCompra) return
+    const precios: Record<number, string> = {}
+    for (const d of detallesVista) {
+      const prod = productos.find((p) => p.id === d.producto_id)
+      precios[d.producto_id] = String(prod?.precio_venta_sugerido ?? "")
+    }
+    setEdicionOC({
+      proveedor_id: selectedCompra.proveedor_id,
+      numero_factura: selectedCompra.numero_factura || "",
+      fecha_tentativa: (selectedCompra.fecha_tentativa || "").split("T")[0],
+      notas: selectedCompra.notas || "",
+      preciosVenta: precios,
+    })
+    setEditandoOC(true)
+  }
+
+  const guardarEdicionOC = async () => {
+    if (!selectedCompra?.id) return
+    setGuardandoOC(true)
+    // Convierte los precios (string) a número; solo los > 0 se envían.
+    const preciosVenta: Record<number, number> = {}
+    for (const [pid, val] of Object.entries(edicionOC.preciosVenta)) {
+      const n = parseFloat(val)
+      if (Number.isFinite(n) && n > 0) preciosVenta[Number(pid)] = n
+    }
+    const { success, error } = await actualizarCompraRecibida(selectedCompra.id, {
+      proveedor_id: edicionOC.proveedor_id || null,
+      numero_factura: edicionOC.numero_factura,
+      fecha_tentativa: edicionOC.fecha_tentativa,
+      notas: edicionOC.notas,
+      preciosVenta,
+    })
+    setGuardandoOC(false)
+    if (error || !success) {
+      toast({ title: "Error", description: error || "No se pudo guardar", variant: "destructive" })
+      return
+    }
+    toast({ title: "Orden actualizada", description: "Los cambios quedaron registrados." })
+    setEditandoOC(false)
+    await fetchData()
+    // Recarga el detalle y el encabezado actualizado.
+    const actualizada = (await getCompras()).data.find((c) => c.id === selectedCompra.id)
+    if (actualizada) setSelectedCompra(actualizada)
+    const { data } = await getDetallesCompra(selectedCompra.id)
+    setDetallesVista(data)
   }
 
   const handleAddProduct = (producto: Producto) => {
@@ -835,10 +898,28 @@ export default function OrdenCompraPage() {
             </h1>
             <p className="text-sm md:text-base text-muted-foreground">Detalle de la orden</p>
           </div>
-          <Button variant="outline" onClick={() => generateOrdenCompraPDF(selectedCompra.id!)}>
-            <Download className="h-4 w-4 mr-2" />
-            Descargar PDF
-          </Button>
+          <div className="flex items-center gap-2">
+            {selectedCompra.estado === "Recibida" && !editandoOC && (
+              <Button variant="outline" onClick={iniciarEdicionOC}>
+                Editar
+              </Button>
+            )}
+            {editandoOC && (
+              <>
+                <Button variant="ghost" onClick={() => setEditandoOC(false)} disabled={guardandoOC}>
+                  Cancelar
+                </Button>
+                <Button onClick={guardarEdicionOC} disabled={guardandoOC}>
+                  {guardandoOC && <Spinner className="h-4 w-4 mr-2" />}
+                  Guardar cambios
+                </Button>
+              </>
+            )}
+            <Button variant="outline" onClick={() => generateOrdenCompraPDF(selectedCompra.id!)}>
+              <Download className="h-4 w-4 mr-2" />
+              Descargar PDF
+            </Button>
+          </div>
         </div>
 
         {/* Order Info Card */}
@@ -847,7 +928,21 @@ export default function OrdenCompraPage() {
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4 mb-6">
               <div>
                 <p className="text-xs text-muted-foreground">Proveedor</p>
-                <p className="font-medium">{selectedCompra.proveedor_nombre}</p>
+                {editandoOC ? (
+                  <Select
+                    value={edicionOC.proveedor_id ? String(edicionOC.proveedor_id) : ""}
+                    onValueChange={(v) => setEdicionOC((s) => ({ ...s, proveedor_id: Number(v) }))}
+                  >
+                    <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Proveedor" /></SelectTrigger>
+                    <SelectContent>
+                      {proveedores.map((p) => (
+                        <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="font-medium">{selectedCompra.proveedor_nombre}</p>
+                )}
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Fecha Orden</p>
@@ -855,13 +950,61 @@ export default function OrdenCompraPage() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Fecha Tentativa</p>
-                <p className="font-medium">{formatDate(selectedCompra.fecha_tentativa)}</p>
+                {editandoOC ? (
+                  <Input
+                    type="date"
+                    className="mt-1 h-9"
+                    value={edicionOC.fecha_tentativa}
+                    onChange={(e) => setEdicionOC((s) => ({ ...s, fecha_tentativa: e.target.value }))}
+                  />
+                ) : (
+                  <p className="font-medium">{formatDate(selectedCompra.fecha_tentativa)}</p>
+                )}
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Estado</p>
                 <div className="mt-0.5">{getEstadoBadge(selectedCompra.estado)}</div>
               </div>
+              <div>
+                <p className="text-xs text-muted-foreground">N.º factura</p>
+                {editandoOC ? (
+                  <Input
+                    className="mt-1 h-9"
+                    value={edicionOC.numero_factura}
+                    onChange={(e) => setEdicionOC((s) => ({ ...s, numero_factura: e.target.value }))}
+                    placeholder="N.º de factura del proveedor"
+                  />
+                ) : (
+                  <p className="font-medium">{selectedCompra.numero_factura || "—"}</p>
+                )}
+              </div>
+              <div className="col-span-2 md:col-span-3">
+                <p className="text-xs text-muted-foreground">Notas</p>
+                {editandoOC ? (
+                  <Input
+                    className="mt-1 h-9"
+                    value={edicionOC.notas}
+                    onChange={(e) => setEdicionOC((s) => ({ ...s, notas: e.target.value }))}
+                    placeholder="Observaciones de la orden (opcional)"
+                  />
+                ) : (
+                  <p className="font-medium">{selectedCompra.notas || "—"}</p>
+                )}
+              </div>
             </div>
+
+            {editandoOC && (
+              <p className="mb-4 text-xs text-amber-700">
+                En una orden recibida solo puedes editar proveedor, número de factura, fecha, notas y el
+                precio de venta de los productos. La cantidad y el costo no se modifican.
+              </p>
+            )}
+            {!editandoOC && selectedCompra.modificado_en && (
+              <p className="mb-4 text-xs text-muted-foreground">
+                Última modificación: {formatDate(selectedCompra.modificado_en)}
+                {selectedCompra.modificado_por ? ` · ${selectedCompra.modificado_por}` : ""}
+              </p>
+            )}
 
             {/* Products Table - Desktop */}
             <div className="hidden md:block border rounded-lg">
@@ -873,18 +1016,19 @@ export default function OrdenCompraPage() {
                     <TableHead className="text-right">Cantidad</TableHead>
                     <TableHead className="text-right">Costo Unit.</TableHead>
                     <TableHead className="text-right">Subtotal</TableHead>
+                    {editandoOC && <TableHead className="text-right w-36">Precio venta</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loadingDetalles ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8">
+                      <TableCell colSpan={editandoOC ? 6 : 5} className="text-center py-8">
                         <Spinner className="h-6 w-6 mx-auto" />
                       </TableCell>
                     </TableRow>
                   ) : detallesVista.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={editandoOC ? 6 : 5} className="text-center text-muted-foreground py-8">
                         Sin productos
                       </TableCell>
                     </TableRow>
@@ -896,6 +1040,19 @@ export default function OrdenCompraPage() {
                         <TableCell className="text-right">{d.cantidad}</TableCell>
                         <TableCell className="text-right">{formatCurrency(d.costo_unitario_moneda_origen, selectedCompra.moneda)}</TableCell>
                         <TableCell className="text-right font-medium">{formatCurrency(d.cantidad * d.costo_unitario_moneda_origen, selectedCompra.moneda)}</TableCell>
+                        {editandoOC && (
+                          <TableCell className="text-right">
+                            <Input
+                              type="number" min="0" step="0.01"
+                              className="h-8 text-right"
+                              value={edicionOC.preciosVenta[d.producto_id] ?? ""}
+                              onChange={(e) => setEdicionOC((s) => ({
+                                ...s,
+                                preciosVenta: { ...s.preciosVenta, [d.producto_id]: e.target.value },
+                              }))}
+                            />
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))
                   )}
@@ -932,6 +1089,20 @@ export default function OrdenCompraPage() {
                         <p className="font-medium text-primary">{formatCurrency(d.cantidad * d.costo_unitario_moneda_origen, selectedCompra.moneda)}</p>
                       </div>
                     </div>
+                    {editandoOC && (
+                      <div className="mt-2">
+                        <p className="text-xs text-muted-foreground">Precio venta</p>
+                        <Input
+                          type="number" min="0" step="0.01"
+                          className="h-8"
+                          value={edicionOC.preciosVenta[d.producto_id] ?? ""}
+                          onChange={(e) => setEdicionOC((s) => ({
+                            ...s,
+                            preciosVenta: { ...s.preciosVenta, [d.producto_id]: e.target.value },
+                          }))}
+                        />
+                      </div>
+                    )}
                   </div>
                 ))
               )}

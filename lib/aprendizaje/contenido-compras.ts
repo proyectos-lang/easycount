@@ -14,10 +14,12 @@ export const TUTORIALES_COMPRAS: TutorialModulo[] = [
       "Genera la orden en PDF con el logo de la empresa para enviarla al proveedor.",
       "Si el producto no existe todavía, créalo al vuelo con 'Crear producto' en el buscador (se agrega al catálogo y a la orden sin salir de la pantalla).",
       "Al buscar un producto, el primer resultado queda resaltado: con Enter se agrega ese, sin saltar al final de la lista.",
+      "Editar una orden YA RECIBIDA: con el botón 'Editar' puedes corregir el proveedor, el número de factura, la fecha tentativa, las notas y el precio de venta de los productos. La cantidad y el costo NO se modifican (preservan el inventario y los costos). Cada cambio queda registrado con fecha, hora y usuario ('Última modificación').",
     ],
     queNoHace: [
       "No mueve inventario ni costos al crearla: el stock y el costo promedio cambian solo al RECIBIR la mercancía (Recepción por OC).",
       "No registra el pago al proveedor — el pago se maneja en Finanzas → Gastos (cuentas por pagar).",
+      "Al editar una orden ya recibida NO cambia cantidades ni costos (eso alteraría el inventario y la valoración ya aplicados); solo datos de la orden y el precio de venta.",
     ],
     operaciones: [
       {

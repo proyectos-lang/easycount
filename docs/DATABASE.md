@@ -227,7 +227,12 @@ Abonos posteriores a ventas al crédito (cuentas por cobrar).
 | `costos_importacion`, `impuestos_compra`, `otros_costos` | numeric | se prorratean al costo final |
 | `total_compra_local` | numeric | total en moneda local |
 | `estado` | text | `Pendiente` / `Recibida` / `Cancelada` |
+| `notas` | text | **(script 070, nullable)** observaciones de la OC |
+| `modificado_en` | timestamptz | **(script 070, nullable)** fecha/hora de la última edición de una OC recibida |
+| `modificado_por` | text | **(script 070, nullable)** usuario que editó la OC recibida |
 | `razon_social_id` | bigint | FK tenant |
+
+Editar una OC **recibida** (`actualizarCompraRecibida`, `lib/services/compras.ts`) solo cambia proveedor, `numero_factura`, `fecha_tentativa`, `notas` y el `precio_venta_sugerido` de los productos — nunca cantidad/costo/total. Sella `modificado_en`/`modificado_por`.
 
 ### `compras_detalle`
 
@@ -255,10 +260,11 @@ Abonos posteriores a ventas al crédito (cuentas por cobrar).
 | `producto_id` | bigint | FK → `productos.id` |
 | `almacen_id` | bigint | FK → `almacenes.id` |
 | `localizacion_id` | bigint | FK → `localizaciones.id` |
-| `tipo_movimiento` | text | `Entrada Compra` / `Salida Venta` / `Traslado Entrada` / `Traslado Salida` / `Ajuste` |
+| `tipo_movimiento` | text | texto libre: `Entrada Compra` / `Salida Venta` / `Traslado Entrada` / `Traslado Salida` / `Ajuste` / `Salida Manual` / `Ingreso Manual` / `Entrada Produccion` / … |
 | `cantidad` | numeric | positiva o negativa |
 | `costo_o_precio_unitario` | numeric | costo (entradas) o precio (salidas) |
-| `referencia_id` | bigint | id del documento origen (compra, venta, traslado) |
+| `referencia_id` | bigint | id del documento origen (compra, venta, traslado) — polimórfico, sin FK |
+| `observaciones` | text | **(script 069, nullable)** motivo/respaldo de salidas/ingresos manuales y ajustes; el Kardex lo muestra en 'Referencia' cuando no hay documento |
 | `fecha` | timestamptz | default `now()` |
 | `razon_social_id` | bigint | FK tenant |
 

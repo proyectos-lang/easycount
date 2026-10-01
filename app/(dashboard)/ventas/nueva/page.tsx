@@ -62,7 +62,7 @@ import {
 } from "@/lib/services/ventas"
 import { useTenant } from "@/lib/hooks/use-tenant"
 import { useAuth } from "@/lib/contexts/auth-context"
-import { getListaAplicadaCliente, calcularPrecioLista, type ListaAplicada } from "@/lib/services/listas-precios"
+import { getListaAplicadaCliente, getListaGeneralVigente, calcularPrecioLista, type ListaAplicada } from "@/lib/services/listas-precios"
 import { getCuentas, type CuentaConfig } from "@/lib/services/cuentas"
 import { useCajaSesion } from "@/lib/hooks/use-caja-sesion"
 import { printTirilla } from "@/lib/print-tirilla"
@@ -502,11 +502,22 @@ export default function NuevaVentaPage() {
   // Carga la lista de precios del cliente al seleccionarlo (si la empresa tiene
   // el modulo). Con lista, el catalogo muestra el precio base tachado + el final.
   React.useEffect(() => {
-    if (!puedeListas || !clienteId) { setListaAplicada(null); return }
-    const cid = Number(clienteId)
-    if (!cid) { setListaAplicada(null); return }
-    getListaAplicadaCliente(cid).then((r) => setListaAplicada(r.data))
-  }, [clienteId, puedeListas])
+    if (!puedeListas) { setListaAplicada(null); return }
+    let cancel = false
+    ;(async () => {
+      // La lista GENERAL por fecha vigente TIENE PRIORIDAD sobre la del cliente
+      // (promoción/temporada que aplica a todos). Si no hay general vigente, cae
+      // a la lista asignada al cliente; si no, precio del maestro.
+      const general = await getListaGeneralVigente(fecha)
+      if (cancel) return
+      if (general.data) { setListaAplicada(general.data); return }
+      const cid = Number(clienteId)
+      if (!cid) { setListaAplicada(null); return }
+      const r = await getListaAplicadaCliente(cid)
+      if (!cancel) setListaAplicada(r.data)
+    })()
+    return () => { cancel = true }
+  }, [clienteId, puedeListas, fecha])
 
   // Carga la deuda actual del cliente al seleccionarlo, para mostrar su crédito
   // disponible. Solo si el cliente tiene límite de crédito definido (> 0).

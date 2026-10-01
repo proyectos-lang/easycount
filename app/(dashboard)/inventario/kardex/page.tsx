@@ -242,7 +242,7 @@ export default function KardexPage() {
         rows.push({
           Fecha: "", Hora: "", 'Tipo Movimiento': "Saldo inicial (antes del rango)",
           Almacen: "", Localizacion: "", Entrada: "", Salida: "", Saldo: kardex.saldoInicial,
-          'Costo/Precio': "",
+          'Costo/Precio': "", Referencia: "",
         })
       }
       for (const t of kardex.filas) {
@@ -256,13 +256,14 @@ export default function KardexPage() {
           Salida: t.cantidad < 0 ? Math.abs(t.cantidad) : '',
           Saldo: t.saldo,
           'Costo/Precio': t.costo_o_precio_unitario,
+          Referencia: t.referencia_texto || '',
         })
       }
       const nombre = productoSel ? productoSel.nombre.replace(/[^\w]+/g, "_").slice(0, 40) : "producto"
       exportToXlsx(rows, {
         sheetName: "Kardex",
         filename: `Kardex_${nombre}`,
-        colWidths: [12, 10, 18, 16, 16, 10, 10, 12, 12],
+        colWidths: [12, 10, 18, 16, 16, 10, 10, 12, 12, 24],
       })
       toast({ title: "Exportado", description: "El kardex se descargo correctamente" })
       return
@@ -283,13 +284,14 @@ export default function KardexPage() {
       Almacen: t.almacen_nombre || '',
       Localizacion: t.localizacion_nombre || '',
       Cantidad: t.cantidad,
-      'Costo/Precio': t.costo_o_precio_unitario
+      'Costo/Precio': t.costo_o_precio_unitario,
+      Referencia: t.referencia_texto || '',
     }))
 
     exportToXlsx(data, {
       sheetName: "Transacciones",
       filename: "Historial_Transacciones",
-      colWidths: [12, 10, 30, 14, 18, 16, 16, 10, 12],
+      colWidths: [12, 10, 30, 14, 18, 16, 16, 10, 12, 24],
     })
     toast({ title: "Exportado", description: "El archivo Excel se descargo correctamente" })
   }

@@ -39,6 +39,10 @@ export default function ListasPreciosPage() {
   const [nombre, setNombre] = React.useState("")
   const [tipo, setTipo] = React.useState<TipoLista>("porcentaje")
   const [porcentaje, setPorcentaje] = React.useState("0")
+  // Lista general por fecha (vigencia). es_general = aplica a todos sin cliente.
+  const [esGeneral, setEsGeneral] = React.useState(false)
+  const [vigenteDesde, setVigenteDesde] = React.useState("")
+  const [vigenteHasta, setVigenteHasta] = React.useState("")
   const [guardando, setGuardando] = React.useState(false)
 
   // Editor de precios individuales
@@ -62,24 +66,35 @@ export default function ListasPreciosPage() {
   React.useEffect(() => { cargar() }, [cargar])
 
   function abrirNueva() {
-    setEditId(null); setNombre(""); setTipo("porcentaje"); setPorcentaje("0"); setDialogOpen(true)
+    setEditId(null); setNombre(""); setTipo("porcentaje"); setPorcentaje("0")
+    setEsGeneral(false); setVigenteDesde(""); setVigenteHasta(""); setDialogOpen(true)
   }
   function abrirEditar(l: ListaPrecio) {
-    setEditId(l.id); setNombre(l.nombre); setTipo(l.tipo); setPorcentaje(String(l.porcentaje ?? 0)); setDialogOpen(true)
+    setEditId(l.id); setNombre(l.nombre); setTipo(l.tipo); setPorcentaje(String(l.porcentaje ?? 0))
+    setEsGeneral(!!l.es_general)
+    setVigenteDesde((l.vigente_desde || "").split("T")[0])
+    setVigenteHasta((l.vigente_hasta || "").split("T")[0])
+    setDialogOpen(true)
   }
 
   async function guardar() {
     if (!nombre.trim()) {
       toast({ title: "Falta el nombre", variant: "destructive" }); return
     }
+    if (esGeneral && vigenteDesde && vigenteHasta && vigenteHasta < vigenteDesde) {
+      toast({ title: "Fechas inválidas", description: "La fecha final no puede ser anterior a la inicial.", variant: "destructive" }); return
+    }
     setGuardando(true)
+    const vigencia = esGeneral
+      ? { es_general: true, vigente_desde: vigenteDesde || null, vigente_hasta: vigenteHasta || null }
+      : { es_general: false, vigente_desde: null, vigente_hasta: null }
     if (editId == null) {
-      const res = await crearListaPrecio({ nombre, tipo, porcentaje: Number(porcentaje) || 0 })
+      const res = await crearListaPrecio({ nombre, tipo, porcentaje: Number(porcentaje) || 0, ...vigencia })
       setGuardando(false)
       if (res.error) { toast({ title: "Error", description: res.error, variant: "destructive" }); return }
       toast({ title: "Lista creada", description: nombre.trim() })
     } else {
-      const res = await actualizarListaPrecio(editId, { nombre, porcentaje: Number(porcentaje) || 0 })
+      const res = await actualizarListaPrecio(editId, { nombre, porcentaje: Number(porcentaje) || 0, ...vigencia })
       setGuardando(false)
       if (res.error) { toast({ title: "Error", description: res.error, variant: "destructive" }); return }
       toast({ title: "Lista actualizada" })
@@ -165,7 +180,18 @@ export default function ListasPreciosPage() {
                 <TableBody>
                   {listas.map((l) => (
                     <TableRow key={l.id}>
-                      <TableCell className="font-medium">{l.nombre}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex flex-col">
+                          <span>{l.nombre}</span>
+                          {l.es_general && (
+                            <span className="text-xs text-sky-700">
+                              General por fecha{l.vigente_desde || l.vigente_hasta
+                                ? ` · ${l.vigente_desde ? l.vigente_desde.split("T")[0] : "…"} → ${l.vigente_hasta ? l.vigente_hasta.split("T")[0] : "…"}`
+                                : " · vigencia abierta"}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         {l.tipo === "porcentaje" ? (
                           <Badge variant="outline" className="gap-1"><Percent className="h-3 w-3" /> Porcentaje</Badge>
@@ -229,6 +255,33 @@ export default function ListasPreciosPage() {
                 <p className="text-xs text-muted-foreground">Siempre baja el precio del maestro. Ej.: 5 → 5% menos.</p>
               </div>
             )}
+
+            {/* Lista general por fecha: aplica a TODOS por vigencia (prioridad sobre
+                la lista del cliente). Si está apagado, es una lista normal por cliente. */}
+            <div className="rounded-lg border p-3 space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" className="h-4 w-4 accent-primary" checked={esGeneral} onChange={(e) => setEsGeneral(e.target.checked)} />
+                <span className="text-sm font-medium">Lista general por fecha (aplica a todos, por vigencia)</span>
+              </label>
+              {esGeneral && (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    Mientras esté vigente, tiene PRIORIDAD sobre la lista asignada a un cliente.
+                    No se asigna a clientes. Déjalas en blanco para vigencia abierta.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="grid gap-1">
+                      <Label className="text-xs">Vigente desde</Label>
+                      <Input type="date" value={vigenteDesde} onChange={(e) => setVigenteDesde(e.target.value)} />
+                    </div>
+                    <div className="grid gap-1">
+                      <Label className="text-xs">Vigente hasta</Label>
+                      <Input type="date" value={vigenteHasta} onChange={(e) => setVigenteHasta(e.target.value)} />
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={guardando}>Cancelar</Button>
