@@ -68,6 +68,8 @@ import {
 } from "@/lib/services/compras"
 import { getRazonSocialForPdf } from "@/lib/services/ventas"
 import { type Proveedor, type Producto, getProveedores, getProductos } from "@/lib/services/catalogos"
+import { QuickCreateProductoDialog } from "@/components/recepcion/quick-create-producto-dialog"
+import { PackagePlus } from "lucide-react"
 
 export default function OrdenCompraPage() {
   const [compras, setCompras] = useState<CompraEncabezado[]>([])
@@ -97,7 +99,14 @@ export default function OrdenCompraPage() {
   
   // Product search
   const [comboboxOpen, setComboboxOpen] = useState(false)
-  
+  // Texto de búsqueda + valor resaltado del Command (cmdk). Al cambiar la
+  // búsqueda reseteamos el resaltado a "" para que cmdk marque el PRIMER
+  // resultado de arriba y Enter lo tome (antes el resaltado saltaba al fondo).
+  const [comboSearch, setComboSearch] = useState("")
+  const [comboValue, setComboValue] = useState("")
+  // Crear producto al vuelo desde la OC.
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false)
+
   const { toast } = useToast()
 
   const fetchData = useCallback(async () => {
@@ -161,6 +170,16 @@ export default function OrdenCompraPage() {
       costo_unitario_moneda_origen: producto.costo_promedio || 0
     }])
     setComboboxOpen(false)
+    setComboSearch("")
+    setComboValue("")
+  }
+
+  // Producto recién creado desde la OC: lo agrega al catálogo local y a la OC.
+  const handleProductoCreado = (producto: Producto) => {
+    if (producto.id == null) return
+    setProductos((prev) => (prev.some((p) => p.id === producto.id) ? prev : [...prev, producto]))
+    handleAddProduct(producto)
+    setQuickCreateOpen(false)
   }
 
   const handleRemoveProduct = (productoId: number) => {
@@ -574,10 +593,29 @@ export default function OrdenCompraPage() {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Escribir nombre o codigo..." />
+                  {/* value/onValueChange controlados: al cambiar la búsqueda se
+                      resetea el resaltado para que quede en el PRIMER resultado
+                      de arriba y Enter lo tome (no salta al fondo). */}
+                  <Command value={comboValue} onValueChange={setComboValue}>
+                    <CommandInput
+                      placeholder="Escribir nombre o codigo..."
+                      value={comboSearch}
+                      onValueChange={(v) => { setComboSearch(v); setComboValue("") }}
+                    />
                     <CommandList>
-                      <CommandEmpty>No se encontraron productos.</CommandEmpty>
+                      <CommandEmpty>
+                        <div className="px-2 py-3 text-center">
+                          <p className="text-sm text-muted-foreground mb-2">No se encontraron productos.</p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => { setComboboxOpen(false); setQuickCreateOpen(true) }}
+                          >
+                            <PackagePlus className="h-4 w-4" /> Crear producto
+                          </Button>
+                        </div>
+                      </CommandEmpty>
                       <CommandGroup heading="Productos disponibles">
                         {/* Se OCULTAN los ya agregados (en vez de dejarlos como
                             items deshabilitados): así el resaltado de cmdk queda
@@ -606,6 +644,17 @@ export default function OrdenCompraPage() {
                         ))}
                       </CommandGroup>
                     </CommandList>
+                    {/* Footer permanente: crear producto nuevo sin salir del flujo. */}
+                    <div className="border-t p-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full justify-start gap-2 text-sm"
+                        onClick={() => { setComboboxOpen(false); setQuickCreateOpen(true) }}
+                      >
+                        <PackagePlus className="h-4 w-4" /> Crear producto nuevo
+                      </Button>
+                    </div>
                   </Command>
                 </PopoverContent>
               </Popover>
@@ -759,6 +808,14 @@ export default function OrdenCompraPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Crear producto al vuelo desde la OC (se agrega al catálogo y a la lista). */}
+        <QuickCreateProductoDialog
+          open={quickCreateOpen}
+          onOpenChange={setQuickCreateOpen}
+          defaultNombre={comboSearch}
+          onCreated={handleProductoCreado}
+        />
       </div>
     )
   }

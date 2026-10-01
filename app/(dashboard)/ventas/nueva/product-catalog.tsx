@@ -24,8 +24,8 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import type { Producto, Marca, Categoria } from "@/lib/services/catalogos"
+import { usePreferenciaUsuario } from "@/lib/hooks/use-preferencia-usuario"
 
-const VIEW_STORAGE_KEY = "pos.catalogo.view"
 const STOCK_BAJO = 5
 const TODOS = "__todos__"
 
@@ -95,7 +95,8 @@ export function ProductCatalog({
   onAddTodos,
   precioFinal,
 }: ProductCatalogProps) {
-  const [view, setView] = React.useState<"grid" | "list">("grid")
+  // Vista lista/cuadrícula recordada POR USUARIO (persiste entre sesiones).
+  const [view, cambiarVista] = usePreferenciaUsuario<"grid" | "list">("pos.catalogo.view", "grid")
   const [searchInternal, setSearchInternal] = React.useState("")
   // Caja de busqueda controlada por el padre si pasa searchValue/onSearchChange
   // (lo usa el lector de codigo de barras); si no, estado interno.
@@ -115,25 +116,6 @@ export function ProductCatalog({
     },
     [localizacionSeleccionada, stockPorLocalizacion]
   )
-
-  // Hidratamos la preferencia de vista desde localStorage al montar.
-  React.useEffect(() => {
-    try {
-      const saved = localStorage.getItem(VIEW_STORAGE_KEY)
-      if (saved === "grid" || saved === "list") setView(saved)
-    } catch {
-      // localStorage puede no estar disponible (SSR / modo privado).
-    }
-  }, [])
-
-  function cambiarVista(next: "grid" | "list") {
-    setView(next)
-    try {
-      localStorage.setItem(VIEW_STORAGE_KEY, next)
-    } catch {
-      // no-op
-    }
-  }
 
   // Filtrado local combinable: texto + categoria + marca + disponibilidad.
   // Si hay localizacion seleccionada, ocultamos las referencias sin stock.

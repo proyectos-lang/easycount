@@ -138,6 +138,9 @@ export default function NuevaVentaPage() {
   
   const [clienteId, setClienteId] = React.useState<string>("")
   const [clienteComboOpen, setClienteComboOpen] = React.useState(false)
+  // Saldo pendiente (deuda) del cliente seleccionado, para mostrar su crédito
+  // disponible ANTES de armar la venta. null = aún sin cargar / sin cliente.
+  const [saldoCliente, setSaldoCliente] = React.useState<number | null>(null)
   const [numeroFactura, setNumeroFactura] = React.useState("")
   // Fecha local (dia de negocio). NO usar toISOString(): de noche adelanta el dia.
   const [fecha, setFecha] = React.useState(hoyISO())
@@ -505,6 +508,18 @@ export default function NuevaVentaPage() {
     getListaAplicadaCliente(cid).then((r) => setListaAplicada(r.data))
   }, [clienteId, puedeListas])
 
+  // Carga la deuda actual del cliente al seleccionarlo, para mostrar su crédito
+  // disponible. Solo si el cliente tiene límite de crédito definido (> 0).
+  React.useEffect(() => {
+    const cid = Number(clienteId)
+    const cli = clientes.find(c => c.id?.toString() === clienteId)
+    const limite = Number(cli?.limite_credito || 0)
+    if (!cid || limite <= 0) { setSaldoCliente(null); return }
+    let cancel = false
+    getSaldoPendienteCliente(cid).then((s) => { if (!cancel) setSaldoCliente(s) })
+    return () => { cancel = true }
+  }, [clienteId, clientes])
+
   // Precio de venta efectivo de un producto: precio de la lista del cliente si
   // aplica, o el precio del maestro.
   const precioDeVenta = React.useCallback(
@@ -863,6 +878,14 @@ export default function NuevaVentaPage() {
   }, [user?.razon_social_id, loading, pagosDetalle.length])
 
   const selectedCliente = clientes.find(c => c.id?.toString() === clienteId)
+
+  // Crédito disponible del cliente (solo si tiene límite > 0 y ya cargó su deuda).
+  // `disponible` = límite − deuda actual. Se muestra al elegir cliente y en la
+  // factura para no armar una venta grande que luego el sistema bloquee por tope.
+  const limiteCredito = Number(selectedCliente?.limite_credito || 0)
+  const tieneLimiteCredito = limiteCredito > 0 && saldoCliente != null
+  const creditoDisponible = tieneLimiteCredito ? Math.max(0, limiteCredito - (saldoCliente as number)) : null
+  const money = (n: number) => `L ${n.toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
   // Stock validation
   const lineasConStockInsuficiente = lineas.filter(l => l.cantidad > l.stock_disponible)
@@ -1624,9 +1647,22 @@ export default function NuevaVentaPage() {
             </PopoverContent>
           </Popover>
           {selectedCliente && (
-            <p className="text-xs text-muted-foreground mt-2">
-              RTN: {selectedCliente.rtn || "N/A"}
-            </p>
+            <div className="mt-2 space-y-1">
+              <p className="text-xs text-muted-foreground">
+                RTN: {selectedCliente.rtn || "N/A"}
+              </p>
+              {creditoDisponible != null && (
+                <p className={`text-xs font-medium ${total > creditoDisponible ? "text-destructive" : "text-emerald-700"}`}>
+                  Crédito disponible: {money(creditoDisponible)}
+                  <span className="text-muted-foreground font-normal"> (límite {money(limiteCredito)})</span>
+                  {total > creditoDisponible && (
+                    <span className="block text-destructive">
+                      Esta venta ({money(total)}) supera el crédito disponible si queda a crédito.
+                    </span>
+                  )}
+                </p>
+              )}
+            </div>
           )}
         </div>
 

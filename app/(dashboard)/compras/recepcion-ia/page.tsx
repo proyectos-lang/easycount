@@ -17,7 +17,8 @@ import {
   X,
   PackagePlus,
   Plus,
-  Layers3
+  Layers3,
+  Maximize2
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -144,8 +145,10 @@ export default function RecepcionIAPage() {
   // AI Processing
   const [processingAI, setProcessingAI] = useState(false)
   const [dragOver, setDragOver] = useState(false)
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
-  const [filePreview, setFilePreview] = useState<string>("")
+  // Varias fotos: cada factura puede venir en más de una imagen; de todas se
+  // genera un solo listado combinado (se concatenan los items extraídos).
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
+  const [filePreviews, setFilePreviews] = useState<string[]>([])
   
   // Extracted & Mapped Data
   const [lineas, setLineas] = useState<LineaFactura[]>([])
@@ -164,7 +167,7 @@ export default function RecepcionIAPage() {
 
   // Reception form
   const [proveedorId, setProveedorId] = useState<string>("")
-  const [moneda, setMoneda] = useState<'LPS' | 'USD'>('USD')
+  const [moneda, setMoneda] = useState<'LPS' | 'USD'>('LPS')
   const [tasaCambio, setTasaCambio] = useState(24.5)
   const [costosImportacion, setCostosImportacion] = useState(0)
   const [impuestosCompra, setImpuestosCompra] = useState(0)
@@ -181,6 +184,8 @@ export default function RecepcionIAPage() {
   const [numeroFactura, setNumeroFactura] = useState("")
   // Buscador para agregar productos manualmente (modo manual).
   const [addProductoOpen, setAddProductoOpen] = useState(false)
+  // Modo manual: ver la sección de verificación/mapeo a pantalla completa.
+  const [mapeoFullScreen, setMapeoFullScreen] = useState(false)
   // Historial de facturas de compra (compras recibidas) + detalle abierto.
   const [historial, setHistorial] = useState<CompraEncabezado[]>([])
   const [detalleAbierto, setDetalleAbierto] = useState<CompraEncabezado | null>(null)
@@ -259,7 +264,7 @@ export default function RecepcionIAPage() {
     if (!d || !Array.isArray(d.lineas) || d.lineas.length === 0) return
     setLineas(d.lineas)
     setProveedorId(d.proveedorId ?? "")
-    setMoneda(d.moneda ?? 'USD')
+    setMoneda(d.moneda ?? 'LPS')
     setTasaCambio(d.tasaCambio ?? 24.5)
     setCostosImportacion(d.costosImportacion ?? 0)
     setImpuestosCompra(d.impuestosCompra ?? 0)
@@ -357,85 +362,94 @@ export default function RecepcionIAPage() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(false)
-    
-    const file = e.dataTransfer.files[0]
-    if (file) {
-      processFile(file)
-    }
+    addFiles(Array.from(e.dataTransfer.files || []))
   }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      processFile(file)
-    }
+    addFiles(Array.from(e.target.files || []))
+    // Limpia el input para permitir volver a elegir el mismo archivo.
+    e.target.value = ""
   }
 
-  const processFile = (file: File) => {
+  // Agrega una o varias fotos (acumula; cada una genera su preview).
+  const addFiles = (files: File[]) => {
     const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
-    if (!validTypes.includes(file.type)) {
-      toast({ title: "Error", description: "Solo se aceptan imagenes JPG, PNG o PDF", variant: "destructive" })
-      return
+    const validos = files.filter((f) => validTypes.includes(f.type))
+    const invalidos = files.length - validos.length
+    if (invalidos > 0) {
+      toast({ title: "Archivos omitidos", description: `${invalidos} archivo(s) no son JPG, PNG, WEBP o PDF.`, variant: "destructive" })
     }
-    
-    setUploadedFile(file)
-    
-    // Create preview for images
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setFilePreview(reader.result as string)
+    if (validos.length === 0) return
+
+    setUploadedFiles((prev) => [...prev, ...validos])
+    for (const file of validos) {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader()
+        reader.onloadend = () => setFilePreviews((prev) => [...prev, reader.result as string])
+        reader.readAsDataURL(file)
+      } else {
+        // PDF u otro: placeholder vacío para conservar el paralelismo por índice.
+        setFilePreviews((prev) => [...prev, ""])
       }
-      reader.readAsDataURL(file)
-    } else {
-      setFilePreview("")
     }
   }
 
-  const removeFile = () => {
-    setUploadedFile(null)
-    setFilePreview("")
+  // Quita una foto por índice.
+  const removeFileAt = (idx: number) => {
+    setUploadedFiles((prev) => prev.filter((_, i) => i !== idx))
+    setFilePreviews((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  const removeAllFiles = () => {
+    setUploadedFiles([])
+    setFilePreviews([])
     setLineas([])
   }
 
-  // Process invoice with Gemini AI
+  const fileToBase64 = (file: File) =>
+    new Promise<string>((resolve) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve((reader.result as string).split(',')[1])
+      reader.readAsDataURL(file)
+    })
+
+  // Process invoice with Gemini AI. Procesa TODAS las fotos cargadas (una
+  // llamada por imagen) y CONCATENA los items en un solo listado.
   const processWithAI = async () => {
-    if (!uploadedFile) return
-    
+    if (uploadedFiles.length === 0) return
+
     setProcessingAI(true)
-    
+
     try {
-      // Convert file to base64
-      const base64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader()
-        reader.onloadend = () => {
-          const base64String = (reader.result as string).split(',')[1]
-          resolve(base64String)
+      const extractedData: ExtractedItem[] = []
+      let fallos = 0
+      for (const file of uploadedFiles) {
+        try {
+          const base64 = await fileToBase64(file)
+          // La extraccion con Gemini corre en el servidor (la API key no se expone)
+          const res = await fetch("/api/procesar-factura", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tipo: "compra", base64, mimeType: file.type }),
+          })
+          const json = await res.json()
+          if (!res.ok) throw new Error(json.error || "Error procesando la factura")
+          if (Array.isArray(json.data)) extractedData.push(...json.data)
+        } catch (e) {
+          console.error("[AI] Error en una foto:", e)
+          fallos++
         }
-        reader.readAsDataURL(uploadedFile)
-      })
-      
-      // La extraccion con Gemini corre en el servidor (la API key no se expone)
-      const res = await fetch("/api/procesar-factura", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo: "compra", base64, mimeType: uploadedFile.type }),
-      })
-      const json = await res.json()
-      if (!res.ok) {
-        throw new Error(json.error || "Error procesando la factura")
       }
 
-      const extractedData: ExtractedItem[] = json.data
-      
-      if (!Array.isArray(extractedData) || extractedData.length === 0) {
-        toast({ title: "Sin resultados", description: "No se encontraron productos en la factura", variant: "destructive" })
+      if (extractedData.length === 0) {
+        toast({ title: "Sin resultados", description: "No se encontraron productos en las fotos", variant: "destructive" })
         setProcessingAI(false)
         return
       }
-      
+
       // Convert to LineaFactura format
       let conTallas = 0
+      const base = Date.now()
       const newLineas: LineaFactura[] = extractedData.map((item, idx) => {
         // Tallas válidas solo si la empresa usa tallas y la IA devolvió >=2.
         const tallas = (tallasActivo && Array.isArray(item.tallas))
@@ -450,7 +464,7 @@ export default function RecepcionIAPage() {
           ? tallas.reduce((a, t) => a + t.cantidad, 0)
           : (item.cantidad || 1)
         return {
-          id: Date.now() + idx,
+          id: base + idx,
           nombreExtraido: item.nombre_extraido,
           productoId: null,
           productoNombre: "",
@@ -465,11 +479,13 @@ export default function RecepcionIAPage() {
 
       setLineas(newLineas)
 
+      const fotosTxt = uploadedFiles.length > 1 ? ` de ${uploadedFiles.length} fotos` : ""
+      const fallosTxt = fallos > 0 ? ` (${fallos} foto(s) no se pudieron leer)` : ""
       toast({
         title: "Factura procesada",
         description:
-          `Se extrajeron ${extractedData.length} productos. Mapee cada uno con su producto correspondiente.` +
-          (conTallas > 0 ? ` ${conTallas} con tallas detectadas.` : ""),
+          `Se extrajeron ${extractedData.length} productos${fotosTxt}. Mapee cada uno con su producto correspondiente.` +
+          (conTallas > 0 ? ` ${conTallas} con tallas detectadas.` : "") + fallosTxt,
       })
       
     } catch (err) {
@@ -647,8 +663,8 @@ export default function RecepcionIAPage() {
   // Descarta el borrador en curso (limpia lo capturado y el localStorage).
   const descartarBorrador = () => {
     setLineas([])
-    setUploadedFile(null)
-    setFilePreview("")
+    setUploadedFiles([])
+    setFilePreviews([])
     setProveedorId("")
     setNumeroFactura("")
     setCostosImportacion(0)
@@ -727,8 +743,8 @@ export default function RecepcionIAPage() {
 
         // Reset form
         setLineas([])
-        setUploadedFile(null)
-        setFilePreview("")
+        setUploadedFiles([])
+        setFilePreviews([])
         setCostosImportacion(0)
         setImpuestosCompra(0)
         setOtrosCostos(0)
@@ -858,76 +874,99 @@ export default function RecepcionIAPage() {
                 Captura manual: agrega los productos abajo (por nombre o código) sin subir imagen.
               </div>
             )}
-            {modo === 'digitalizar' && (!uploadedFile ? (
-              <div
-                className={cn(
-                  "border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer",
-                  dragOver
-                    ? "border-amber-500 bg-amber-100/50"
-                    : "border-amber-300 hover:border-amber-400 hover:bg-amber-50/50"
-                )}
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={handleDrop}
-                onClick={() => document.getElementById('file-input')?.click()}
-              >
-                <Upload className="h-10 w-10 mx-auto mb-3 text-amber-400" />
-                <p className="text-sm font-medium text-amber-800">Arrastra tu factura aqui</p>
-                <p className="text-xs text-amber-600 mt-1">o haz clic para seleccionar</p>
-                <p className="text-xs text-amber-500 mt-3">JPG, PNG o PDF</p>
-                <input
-                  id="file-input"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,application/pdf"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-              </div>
-            ) : (
+            {modo === 'digitalizar' && (
               <div className="space-y-4">
-                {/* File preview */}
-                <div className="relative rounded-lg border border-amber-200 overflow-hidden bg-white">
-                  {filePreview ? (
-                    <img src={filePreview} alt="Preview" className="w-full h-48 object-contain" />
-                  ) : (
-                    <div className="h-48 flex items-center justify-center bg-amber-50">
-                      <FileText className="h-16 w-16 text-amber-300" />
-                    </div>
+                {/* Dropzone: siempre visible para poder agregar MÁS fotos. */}
+                <div
+                  className={cn(
+                    "border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer",
+                    dragOver
+                      ? "border-amber-500 bg-amber-100/50"
+                      : "border-amber-300 hover:border-amber-400 hover:bg-amber-50/50"
                   )}
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    className="absolute top-2 right-2 h-8 w-8"
-                    onClick={removeFile}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                
-                <div className="flex items-center gap-2 text-sm text-amber-800">
-                  <FileImage className="h-4 w-4" />
-                  <span className="truncate">{uploadedFile.name}</span>
-                </div>
-                
-                <Button
-                  className="w-full gap-2 bg-amber-600 hover:bg-amber-700 text-white"
-                  onClick={processWithAI}
-                  disabled={processingAI}
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={handleDrop}
+                  onClick={() => document.getElementById('file-input')?.click()}
                 >
-                  {processingAI ? (
-                    <>
-                      <Spinner className="h-4 w-4" />
-                      Procesando factura...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="h-4 w-4" />
-                      Extraer Productos
-                    </>
-                  )}
-                </Button>
+                  <Upload className="h-9 w-9 mx-auto mb-2 text-amber-400" />
+                  <p className="text-sm font-medium text-amber-800">
+                    {uploadedFiles.length === 0 ? "Arrastra tus facturas aquí" : "Agregar más fotos"}
+                  </p>
+                  <p className="text-xs text-amber-600 mt-1">o haz clic para seleccionar (puedes elegir varias)</p>
+                  <p className="text-xs text-amber-500 mt-2">JPG, PNG o PDF · de todas se genera un solo listado</p>
+                  <input
+                    id="file-input"
+                    type="file"
+                    multiple
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                </div>
+
+                {uploadedFiles.length > 0 && (
+                  <>
+                    {/* Miniaturas de las fotos cargadas (con quitar individual). */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {uploadedFiles.map((file, idx) => (
+                        <div key={idx} className="relative rounded-lg border border-amber-200 overflow-hidden bg-white">
+                          {filePreviews[idx] ? (
+                            <img src={filePreviews[idx]} alt={`Foto ${idx + 1}`} className="w-full h-28 object-contain" />
+                          ) : (
+                            <div className="h-28 flex items-center justify-center bg-amber-50">
+                              <FileText className="h-10 w-10 text-amber-300" />
+                            </div>
+                          )}
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            className="absolute top-1 right-1 h-6 w-6"
+                            onClick={(e) => { e.stopPropagation(); removeFileAt(idx) }}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                          <div className="px-1.5 py-1 text-[10px] text-amber-800 truncate flex items-center gap-1">
+                            <FileImage className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{file.name}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-amber-700">{uploadedFiles.length} foto(s) cargada(s)</span>
+                      <button
+                        type="button"
+                        onClick={removeAllFiles}
+                        disabled={processingAI}
+                        className="text-xs text-muted-foreground hover:text-destructive disabled:opacity-50"
+                      >
+                        Quitar todas
+                      </button>
+                    </div>
+
+                    <Button
+                      className="w-full gap-2 bg-amber-600 hover:bg-amber-700 text-white"
+                      onClick={processWithAI}
+                      disabled={processingAI}
+                    >
+                      {processingAI ? (
+                        <>
+                          <Spinner className="h-4 w-4" />
+                          Procesando {uploadedFiles.length > 1 ? "facturas" : "factura"}...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="h-4 w-4" />
+                          Extraer Productos{uploadedFiles.length > 1 ? ` (${uploadedFiles.length} fotos)` : ""}
+                        </>
+                      )}
+                    </Button>
+                  </>
+                )}
               </div>
-            ))}
+            )}
 
             {/* Proveedor Selection */}
             <div className="pt-4 border-t border-amber-200">
@@ -963,8 +1002,8 @@ export default function RecepcionIAPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="USD">Dolares (USD)</SelectItem>
                   <SelectItem value="LPS">Lempiras (LPS)</SelectItem>
+                  <SelectItem value="USD">Dolares (USD)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -985,15 +1024,27 @@ export default function RecepcionIAPage() {
         </Card>
 
         {/* Verification Table & Costs */}
+        {(() => {
+        const verCard = (
         <Card className="lg:col-span-2">
           <CardHeader className="p-4 md:p-6">
-            <CardTitle className="text-base flex items-center gap-2">
-              <PackageCheck className="h-4 w-4" />
-              Verificacion y Mapeo de Productos
-            </CardTitle>
-            <CardDescription className="text-xs md:text-sm">
-              Revise y corrija los datos extraidos, luego mapee cada producto
-            </CardDescription>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <PackageCheck className="h-4 w-4" />
+                  Verificacion y Mapeo de Productos
+                </CardTitle>
+                <CardDescription className="text-xs md:text-sm">
+                  Revise y corrija los datos extraidos, luego mapee cada producto
+                </CardDescription>
+              </div>
+              {/* Modo manual: abrir la verificación a pantalla completa para más visibilidad. */}
+              {modo === 'manual' && (
+                <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => setMapeoFullScreen(true)}>
+                  <Maximize2 className="h-4 w-4" /> Pantalla completa
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="p-4 md:p-6 pt-0">
             {modo === 'manual' && (
@@ -1433,6 +1484,25 @@ export default function RecepcionIAPage() {
             )}
           </CardContent>
         </Card>
+        )
+        // Modo manual + pantalla completa: la verificación se muestra en un
+        // diálogo que abarca toda la pantalla, para más visibilidad.
+        return modo === 'manual' && mapeoFullScreen ? (
+          <Dialog open={mapeoFullScreen} onOpenChange={setMapeoFullScreen}>
+            <DialogContent className="max-w-none w-screen h-screen sm:rounded-none p-4 md:p-6 overflow-y-auto flex flex-col">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <PackageCheck className="h-5 w-5" /> Verificación y Mapeo de Productos
+                </DialogTitle>
+                <DialogDescription>Pantalla completa — revisa y mapea cada producto cómodamente.</DialogDescription>
+              </DialogHeader>
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                {verCard}
+              </div>
+            </DialogContent>
+          </Dialog>
+        ) : verCard
+        })()}
       </div>
       )}
 

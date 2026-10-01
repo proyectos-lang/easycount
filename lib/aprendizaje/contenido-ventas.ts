@@ -55,6 +55,8 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "En pagos en efectivo puedes escribir con cuánto paga el cliente (efectivo recibido) y el sistema calcula el vuelto; se registra el monto de la venta, no el recibido. Ej.: venta L 800, recibido L 1,000 → vuelto L 200 (se registran L 800).",
       "Descuenta el stock del almacén y deja rastro en el kardex de inventario.",
       "Límite de crédito del cliente: si la venta deja saldo a crédito y el cliente tiene un límite configurado (> 0), el sistema bloquea la venta cuando su deuda total (lo que ya debe + esta venta) superaría ese límite. Cobra parte de contado o sube su límite en Configuración → Clientes.",
+      "Crédito disponible a la vista: al elegir un cliente con límite de crédito, debajo de su RTN se muestra cuánto crédito le queda (límite − lo que ya debe). Si la venta en curso superaría ese disponible, el aviso se pone en rojo — así no armas una factura grande para que al final se bloquee.",
+      "Recuerda tu vista del catálogo: si eliges verlo en lista o en cuadrícula, esa preferencia se guarda para tu usuario y se mantiene la próxima vez que entres.",
       "Al guardar, el formulario queda en blanco y aparece una ventana con las opciones de impresión: imprimir tirilla térmica de 80 mm (largo exacto, sin espacios en blanco) o descargar la factura A4 en PDF.",
     ],
     queNoHace: [
