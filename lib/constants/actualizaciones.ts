@@ -31,6 +31,25 @@ export interface Actualizacion {
 /** Del más reciente al más antiguo. La primera entrada es "la última actualización". */
 export const ACTUALIZACIONES: Actualizacion[] = [
   {
+    id: '2026-10-01-mejoras-compras-ventas-listas',
+    fecha: '2026-10-01',
+    titulo: 'Compras, ventas, clientes y listas de precios: lote de mejoras',
+    tipo: 'Mejora',
+    resumen:
+      'Un paquete de mejoras pedidas desde el uso diario: compras más ágiles, crédito del cliente a la vista, listas de precios por fecha y saldos iniciales de clientes.',
+    cambios: [
+      'Recepción por Factura: ahora puedes subir VARIAS fotos de una misma factura y de todas se arma un solo listado; la moneda viene en Lempiras por defecto; y en la captura manual hay un botón "Pantalla completa" para revisar y mapear los productos con más comodidad.',
+      'Crear producto al instante: en la Orden de Compra (y ya en Recepción por Factura) puedes crear un artículo nuevo sin salir de la pantalla. Además, al buscar un producto y presionar Enter se agrega el primero de la lista, sin saltar al final.',
+      'Orden de Compra: puedes EDITAR una orden ya recibida para corregir el proveedor, el número de factura, la fecha, las notas y el precio de venta de los productos (la cantidad y el costo no se tocan). Cada cambio queda registrado con su fecha y el usuario que lo hizo.',
+      'Ventas — crédito del cliente a la vista: al elegir un cliente con límite de crédito verás cuánto crédito le queda (y un aviso en rojo si la venta lo superaría), para no armar una factura grande que luego se bloquee. Ese crédito disponible también sale impreso en la tirilla.',
+      'Ventas — tu vista del catálogo se recuerda: si lo prefieres en lista o en cuadrícula, queda guardado para tu usuario y así lo verás la próxima vez.',
+      'Listas de precios por fecha: puedes programar una lista GENERAL con vigencia (desde/hasta) que aplica a todos los clientes mientras esté activa (ideal para promociones o temporadas) y tiene prioridad sobre la lista de cada cliente.',
+      'Clientes — saldo inicial en la carga masiva: la plantilla de Excel incluye una columna "Saldo Pendiente". A cada cliente nuevo con saldo se le crea su cuenta por cobrar de apertura; eliges la fecha del saldo inicial para que no cuente como venta del mes.',
+      'Inventario (Kardex): las salidas e ingresos manuales y los ajustes ahora muestran el motivo que escribiste en la columna "Referencia" (por eso conviene siempre justificar una salida manual).',
+      'Importante: recarga la página para tomar la versión nueva. Algunas funciones nuevas (editar orden recibida, listas por fecha, motivos en el kardex) requieren que el administrador aplique la actualización de base de datos; si no la ves aún, avísale.',
+    ],
+  },
+  {
     id: '2026-09-22-mejoras-rendimiento',
     fecha: '2026-09-22',
     titulo: 'Mejoras de rendimiento y velocidad',
