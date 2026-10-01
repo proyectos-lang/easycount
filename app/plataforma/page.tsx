@@ -4,6 +4,7 @@ import {
   getSupabaseProjectStatus,
 } from "@/lib/services/plataforma"
 import { FlagToggle } from "./flag-toggle"
+import { RrhhToggle } from "./rrhh-toggle"
 import { LogoutButton } from "./logout-button"
 import { CrearEmpresaDialog } from "./crear-empresa"
 import { GestionUsuariosDialog } from "./gestion-usuarios"
@@ -179,6 +180,9 @@ export default async function PlataformaPage() {
                 <th className="px-4 py-2 font-medium" title="En los imprimibles del Cierre Diario (tirilla y PDF) oculta el SALDO FINAL de cada banco; los movimientos (ingresos/egresos) sí se muestran">
                   Ocultar saldo bancos (cierre)
                 </th>
+                <th className="px-4 py-2 font-medium" title="Enciende o apaga de un clic los 5 módulos de Recursos Humanos (Empleados, Asistencia, Novedades, Nómina, Parámetros RRHH) para la empresa">
+                  RRHH
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -300,6 +304,9 @@ export default async function PlataformaPage() {
                         onLabel="Oculto"
                         offLabel="Visible"
                       />
+                    </td>
+                    <td className="px-4 py-2">
+                      <RrhhToggle razonSocialId={e.id} initial={e.rrhh_activo} />
                     </td>
                   </tr>
                 ))

@@ -3,7 +3,10 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 import { mergeFlags, type FeatureFlags } from "@/lib/constants/feature-flags"
-import { findModuloByDBName, moduloEsBase, moduloHabilitadoParaEmpresa } from "@/lib/constants/modulos"
+import { MODULOS, findModuloByDBName, moduloEsBase, moduloHabilitadoParaEmpresa } from "@/lib/constants/modulos"
+
+/** Nombres de los 5 módulos de la categoría RRHH (fuente de verdad: MODULOS). */
+const MODULOS_RRHH: string[] = MODULOS.filter((m) => m.categoria === "RRHH").map((m) => m.nombre)
 
 /** Nombre canonico (del constants) de un modulo guardado en la BD. */
 function canonModulo(dbNombre: string): string {
@@ -49,6 +52,8 @@ export interface EmpresaResumen {
   ultima_conexion: string | null
   /** Feature flags / mini-personalizaciones de la empresa (con defaults). */
   flags: FeatureFlags
+  /** true si TODOS los módulos de RRHH están habilitados para la empresa. */
+  rrhh_activo: boolean
 }
 
 export interface DbStats {
@@ -123,7 +128,14 @@ export async function getResumenEmpresas(): Promise<{ data: EmpresaResumen[]; er
     cfgMap.set(Number(c.razon_social_id), (c.config as Record<string, unknown>) ?? {})
   }
 
-  const rows = ((data as RawEmpresa[]) || []).map((r) => ({
+  const rows = ((data as RawEmpresa[]) || []).map((r) => {
+    const cfg = cfgMap.get(Number(r.id)) ?? null
+    const des = leerDeshabilitados(cfg)
+    const hab = leerHabilitados(cfg)
+    // RRHH activo = los 5 módulos de la categoría están habilitados.
+    const rrhhActivo = MODULOS_RRHH.length > 0 &&
+      MODULOS_RRHH.every((n) => moduloHabilitadoParaEmpresa(n, des, hab))
+    return {
     id: Number(r.id),
     nombre: String(r.nombre ?? ""),
     comercial: (r.comercial as string | null) ?? null,
@@ -138,8 +150,10 @@ export async function getResumenEmpresas(): Promise<{ data: EmpresaResumen[]; er
     valor_inventario: Number(r.valor_inventario ?? 0),
     creada: (r.creada as string | null) ?? null,
     ultima_conexion: (r.ultima_conexion as string | null) ?? null,
-    flags: mergeFlags(cfgMap.get(Number(r.id)) ?? null),
-  }))
+    flags: mergeFlags(cfg),
+    rrhh_activo: rrhhActivo,
+  }
+  })
   return { data: rows, error: null }
 }
 
@@ -593,6 +607,46 @@ export async function setModuloEmpresa(input: {
   }
 
   const config = { ...cfg, modulos_deshabilitados: [...des], modulos_habilitados: [...hab] }
+  const { error } = await admin.from("razon_social_config").upsert(
+    {
+      razon_social_id: input.razonSocialId,
+      config,
+      usuario: su.email,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "razon_social_id" }
+  )
+  return { error: error ? error.message : null }
+}
+
+/**
+ * Enciende (true) o apaga (false) TODOS los módulos de RRHH para una empresa en
+ * una sola escritura. Los 5 módulos RRHH son "nuevos" (opt-in): habilitarlos =
+ * agregarlos a `modulos_habilitados`; deshabilitarlos = quitarlos de esa lista.
+ */
+export async function setRrhhEmpresa(input: {
+  razonSocialId: number
+  habilitado: boolean
+}): Promise<{ error: string | null }> {
+  const su = await getSuperadmin()
+  if (!su) return { error: "No autorizado." }
+  const admin = createAdminClient()
+  if (!admin) return { error: "Service role no configurado." }
+
+  const { data: cur } = await admin
+    .from("razon_social_config")
+    .select("config")
+    .eq("razon_social_id", input.razonSocialId)
+    .maybeSingle()
+
+  const cfg = (cur?.config as Record<string, unknown>) ?? {}
+  const hab = new Set<string>(leerHabilitados(cfg))
+  for (const nombre of MODULOS_RRHH) {
+    if (input.habilitado) hab.add(nombre)
+    else hab.delete(nombre)
+  }
+
+  const config = { ...cfg, modulos_habilitados: [...hab] }
   const { error } = await admin.from("razon_social_config").upsert(
     {
       razon_social_id: input.razonSocialId,
