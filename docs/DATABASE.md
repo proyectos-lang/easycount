@@ -460,3 +460,21 @@ Agregación para la Valoración de Inventario, `security_invoker` (respetan la R
 ## Storage
 
 Supabase Storage guarda: logo de la empresa (`razon_social.logo_url`), fotos de productos (`productos.foto_url`) y comprobantes de gastos (`gastos.comprobante_url`). La subida se hace vía [app/api/upload-imagen/route.ts](../app/api/upload-imagen/route.ts).
+
+Los archivos del expediente de empleados (RRHH) van al bucket PRIVADO `documentos`, bajo `rrhh/<razon_social_id>/<empleado_id>/…`. Las reglas `easycount_rrhh_documentos_{select,insert,delete}` (script 072) acotan el acceso a esa carpeta por tenant con `public.app_current_tenant()`.
+
+---
+
+## RRHH y nómina (script 072; módulos opt-in por empresa)
+
+Categoría "RRHH" (5 módulos: Empleados, Asistencia, Novedades, Nómina, Parámetros RRHH), portada de Officemart. Nacen deshabilitados: el super-admin los habilita por empresa desde /plataforma.
+
+- **`empleados`**: ficha (`codigo`, `nombre`, `identidad`, `rtn`, `fecha_nacimiento`, contacto, `puesto`, `departamento`, `fecha_ingreso`/`fecha_salida`, `tipo_contrato`, `salario_mensual`, `frecuencia_pago` Mensual|Quincenal, `forma_pago`, `banco`, `cuenta_bancaria`, `usuario_id` uuid = usuario de la app para marcar, `vendedor_id` (sin uso en EasyCount, queda null), `ihss_afiliacion`, `rap_afiliacion`, `aplica_ihss/rap/isr`, `estado` Activo|Inactivo).
+- **`empleados_documentos`**: `tipo` (Identidad|Contrato|Certificado|Medico|Otro), `nombre`, `archivo_path` (bucket `documentos`, carpeta `rrhh/<tenant>/…`), `vence_en` (aviso 30 días).
+- **`rrhh_marcaciones`**: una fila por `(empleado_id, fecha)` UNIQUE con `entrada`/`salida` (HN-as-UTC), `horas`, `origen` app|manual|import.
+- **`rrhh_novedades`**: `tipo` (ver `TIPOS_NOVEDAD` en `rrhh.ts`: horas extra diurna/mixta/nocturna, Bono, Comision, Aguinaldo, Otro ingreso, Vacaciones, Permiso con/sin goce, Incapacidad, Ausencia, Deduccion, Anticipo, Prestamo), `fecha`, `cantidad` (horas/días) o `monto`, `gravable` (ISR), `cotizable` (IHSS/RAP), `nomina_id` cuando se aplica.
+- **`rrhh_parametros`**: `(razon_social_id, vigente_desde)` UNIQUE, `parametros` jsonb (ver `ParametrosNomina` en `nomina.ts`; se normaliza con defaults 2026).
+- **`rrhh_nominas`** (`tipo`, `periodo_desde/hasta`, `fecha_pago`, `estado` Borrador|Aprobada|Pagada|Anulada, totales, `parametros_id`, `gasto_id`) + **`rrhh_nominas_detalle`** (por empleado: salario_periodo, horas_extra, otros_ingresos, total_devengado, ihss_empleado, rap_empleado, isr, otras_deducciones, total_deducciones, neto, ihss_patronal, rap_patronal, `lineas` jsonb).
+- RLS `<tabla>_tenant` en las 7 tablas (`public.app_current_tenant()`).
+
+Código: `lib/services/rrhh.ts` (CRUD + puras `calcularHoras`, `documentosPorVencer`, `antiguedadAnios`, `diasVacacionesPorAntiguedad`, `mapearMarcacionesImportadas`, `resolverEmpleado`) y `lib/services/nomina.ts` (puras `calcularIHSS`, `calcularRAP`, `calcularISRAnual`, `calcularISRMensual`, `calcularHorasExtra`, `calcularNominaEmpleado`, `totalesNomina`, `calcularAguinaldoProporcional`, `empleadosDelPeriodo`; I/O `generarNomina`, `recalcularNomina`, `aprobarNomina`, `pagarNomina` → gastos, `anularNomina`, `planillaRows`). Parámetros 2026 de referencia en `PARAMETROS_2026` (IHSS techo 11,903.13; RAP piso 11,903.13 / techo 57,896.16; ISR exento 228,324.32).

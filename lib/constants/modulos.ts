@@ -45,6 +45,9 @@ import {
   Gauge,
   Workflow,
   Receipt,
+  Clock,
+  ListPlus,
+  SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react"
 
@@ -55,6 +58,7 @@ export type Categoria =
   | "Inventario"
   | "Produccion"
   | "Finanzas"
+  | "RRHH"
   | "Configuracion"
 
 export interface ModuloGranular {
@@ -76,10 +80,10 @@ export interface ModuloGranular {
 }
 
 /**
- * 45 modulos granulares. Cualquier cambio aqui debe replicarse en la tabla
- * `modulos` (y viceversa). NOTA: "Listas de Precios", "Facturación CAI" y TODOS
- * los de la categoria "Produccion" NO van en MODULOS_BASE (nacen deshabilitados
- * por empresa; el super-admin los habilita desde /plataforma).
+ * 50 modulos granulares. Cualquier cambio aqui debe replicarse en la tabla
+ * `modulos` (y viceversa). NOTA: "Listas de Precios", "Facturación CAI", TODOS
+ * los de la categoria "Produccion" y los 5 de "RRHH" NO van en MODULOS_BASE
+ * (nacen deshabilitados por empresa; el super-admin los habilita desde /plataforma).
  */
 export const MODULOS: ReadonlyArray<ModuloGranular> = [
   // ── Dashboard ──────────────────────────────────────────────────────────
@@ -171,6 +175,13 @@ export const MODULOS: ReadonlyArray<ModuloGranular> = [
     icon: Banknote,
   },
 
+  // ── RRHH (modulos NUEVOS, nacen deshabilitados: no estan en MODULOS_BASE; script 072) ──
+  { nombre: "Empleados", href: "/rrhh/empleados", categoria: "RRHH", icon: Users },
+  { nombre: "Asistencia", href: "/rrhh/asistencia", categoria: "RRHH", icon: Clock },
+  { nombre: "Novedades", href: "/rrhh/novedades", categoria: "RRHH", icon: ListPlus },
+  { nombre: "Nómina", href: "/rrhh/nomina", categoria: "RRHH", icon: Banknote },
+  { nombre: "Parámetros RRHH", href: "/rrhh/parametros", categoria: "RRHH", icon: SlidersHorizontal },
+
   // ── Configuracion ──────────────────────────────────────────────────────
   { nombre: "Razon Social", href: "/configuracion/razon-social", categoria: "Configuracion", icon: Building2 },
   { nombre: "Listas de Precios", href: "/configuracion/listas-precios", categoria: "Configuracion", icon: Tags },
@@ -247,6 +258,7 @@ export const CATEGORIAS_ORDEN: ReadonlyArray<Categoria> = [
   "Inventario",
   "Produccion",
   "Finanzas",
+  "RRHH",
   "Configuracion",
 ]
 

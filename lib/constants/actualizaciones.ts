@@ -31,6 +31,22 @@ export interface Actualizacion {
 /** Del más reciente al más antiguo. La primera entrada es "la última actualización". */
 export const ACTUALIZACIONES: Actualizacion[] = [
   {
+    id: '2026-10-01-nuevo-modulo-rrhh',
+    fecha: '2026-10-01',
+    titulo: 'Nuevo módulo: Recursos Humanos y Nómina',
+    tipo: 'Nuevo módulo',
+    resumen:
+      'Lleva a tus empleados, asistencia, novedades y la nómina (con IHSS, RAP e ISR) dentro de EasyCount. Es opcional: para activarlo, contacta al personal de EasyCount.',
+    cambios: [
+      'Empleados: ficha completa de cada colaborador (identidad, puesto, fechas de ingreso/salida, salario, forma de pago y afiliaciones a IHSS/RAP) y su expediente de documentos (identidad, contrato, certificados…) con aviso de vencimiento.',
+      'Asistencia: registra la entrada y salida de cada empleado por día y lleva el control de las horas trabajadas.',
+      'Novedades: horas extra, bonos, comisiones, aguinaldo, vacaciones, permisos, incapacidades, ausencias, deducciones, anticipos y préstamos, que luego se aplican a la nómina.',
+      'Nómina: genera la planilla Mensual o Quincenal con el cálculo automático de IHSS, RAP e ISR, deducciones y aportes patronales; pásala de Borrador → Aprobada → Pagada (registra el gasto) e imprime la boleta de pago de cada empleado.',
+      'Parámetros RRHH: define los valores legales vigentes (porcentajes y techos de IHSS/RAP, tabla del ISR, recargos de horas extra) con su fecha de vigencia.',
+      '¿Quieres activarlo para tu empresa? Es un módulo opcional: contacta al personal de EasyCount para habilitártelo.',
+    ],
+  },
+  {
     id: '2026-10-01-mejoras-compras-ventas-listas',
     fecha: '2026-10-01',
     titulo: 'Compras, ventas, clientes y listas de precios: lote de mejoras',
