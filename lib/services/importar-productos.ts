@@ -140,9 +140,11 @@ export async function parsearArchivoProductos(file: File): Promise<FilaProductoI
       subcategoria: str(col(row, ["Subcategoria", "Subcategoría", "Sub Categoria", "Sub Categoría"])),
       marca: str(col(row, ["Marca"])),
       talla: str(col(row, ["Talla"])),
-      precio_venta: num(col(row, ["Precio Venta", "Precio de Venta", "Precio", "Precio Unitario"])),
-      costo_unitario: num(col(row, ["Costo Unitario", "Costo", "Costo Unit", "Costo Unit."])),
-      cantidad_inicial: num(col(row, ["Cantidad Inicial", "Cantidad", "Stock Inicial", "Existencias"])),
+      // Montos/cantidades negativas no tienen sentido en inventario: se suben
+      // como 0 (ej. una "Cantidad Inicial" negativa en el Excel = 0 en stock).
+      precio_venta: Math.max(0, num(col(row, ["Precio Venta", "Precio de Venta", "Precio", "Precio Unitario"]))),
+      costo_unitario: Math.max(0, num(col(row, ["Costo Unitario", "Costo", "Costo Unit", "Costo Unit."]))),
+      cantidad_inicial: Math.max(0, num(col(row, ["Cantidad Inicial", "Cantidad", "Stock Inicial", "Existencias"]))),
     })
   })
   return filas

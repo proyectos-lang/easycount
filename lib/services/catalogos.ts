@@ -311,6 +311,9 @@ export async function saveProducto(
       }
 
       const { id, ...productoData } = cleanProducto
+      // Un producto nuevo nunca entra con stock/costo negativos: se suben como 0.
+      if (productoData.stock_total != null) productoData.stock_total = Math.max(0, Number(productoData.stock_total) || 0)
+      if (productoData.costo_promedio != null) productoData.costo_promedio = Math.max(0, Number(productoData.costo_promedio) || 0)
       const { data, error } = await supabase
         .from('productos')
         .insert({ ...productoData, ...stamp })
