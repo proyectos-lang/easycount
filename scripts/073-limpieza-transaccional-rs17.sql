@@ -40,6 +40,14 @@ BEGIN
   RAISE NOTICE 'Limpiando datos transaccionales de la razón social 17 (%).', v_nombre;
 END $$;
 
+-- ── Pedidos por catálogo y links (ANTES que ventas y productos) ─────────────
+-- pedidos_encabezado.venta_id referencia a ventas_encabezado (sin CASCADE), y
+-- pedidos_detalle / catalogo_link_productos referencian a productos (sin CASCADE).
+DELETE FROM public.pedidos_detalle             WHERE razon_social_id = 17;
+DELETE FROM public.pedidos_encabezado          WHERE razon_social_id = 17;
+DELETE FROM public.catalogo_link_productos     WHERE razon_social_id = 17;
+DELETE FROM public.catalogo_links              WHERE razon_social_id = 17;
+
 -- ── Ventas (hijas → encabezado) ─────────────────────────────────────────────
 DELETE FROM public.ventas_detalle_descripcion WHERE razon_social_id = 17;
 DELETE FROM public.ventas_pagos_detalle        WHERE razon_social_id = 17;
@@ -58,6 +66,7 @@ DELETE FROM public.compras_encabezado          WHERE razon_social_id = 17;
 
 -- ── Inventario ──────────────────────────────────────────────────────────────
 DELETE FROM public.ajustes_inventario          WHERE razon_social_id = 17;
+DELETE FROM public.ajustes_costo               WHERE razon_social_id = 17;  -- bitácora de ajuste de costo (FK a productos)
 DELETE FROM public.transacciones_inventario    WHERE razon_social_id = 17;
 
 -- ── Finanzas / tesorería ────────────────────────────────────────────────────
