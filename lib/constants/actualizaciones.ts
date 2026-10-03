@@ -31,6 +31,36 @@ export interface Actualizacion {
 /** Del más reciente al más antiguo. La primera entrada es "la última actualización". */
 export const ACTUALIZACIONES: Actualizacion[] = [
   {
+    id: '2026-10-02-orden-retiro-bodega',
+    fecha: '2026-10-02',
+    titulo: 'Orden de retiro en bodega al imprimir la factura',
+    tipo: 'Mejora',
+    resumen:
+      'Al imprimir la tirilla de una venta puede salir también una orden de retiro para la bodega, con el mismo número de factura. Es opcional: para activarla, contacta al personal de EasyCount.',
+    cambios: [
+      'Después de la tirilla de la factura se imprime una segunda tirilla "ORDEN DE RETIRO EN BODEGA" con el mismo número de factura, la fecha y el cliente.',
+      'Lleva el listado de productos con su código y cantidad (sin precios), el total de referencias y unidades, y espacio para la firma de quien entrega y quien recibe.',
+      'También sale al reimprimir la tirilla desde el Historial de ventas, y en la ventana "Venta registrada" hay un botón para imprimir solo la orden de retiro.',
+      '¿La quieres para tu empresa? Contacta al personal de EasyCount para activarla.',
+    ],
+  },
+  {
+    id: '2026-10-02-nuevo-modulo-reporteria',
+    fecha: '2026-10-02',
+    titulo: 'Nuevo módulo: Reportería',
+    tipo: 'Nuevo módulo',
+    resumen:
+      'Arma tus propios reportes de ventas, compras, inventario, producción, finanzas, clientes, proveedores y RRHH, elige las columnas y descárgalos en Excel. Es opcional: para activarlo, contacta al personal de EasyCount.',
+    cambios: [
+      '28 fuentes de datos listas para usar: facturas, ventas por producto, cobros, pagos por método, cuentas por cobrar, devoluciones, órdenes de compra, compras por producto, cuentas por pagar, existencias y valoración, kardex, materiales, producción, estado de resultados por mes, ingresos, egresos, flujo de caja, gastos, movimientos bancarios, clientes, proveedores, empleados, nómina, novedades y asistencia.',
+      'Elige el período (hoy, este mes, mes anterior, trimestre, año, últimos 30 días, personalizado o todo el historial), marca las columnas que quieres y ordénalas como saldrán en el Excel.',
+      'Filtra por cualquier columna (contiene, igual, mayor, menor, entre, lista de valores, vacío…) y agrega una fila de TOTAL.',
+      'Exporta a Excel con fechas y montos como valores reales: autofiltro, encabezado fijo y una hoja «Parámetros» con lo que se usó para generarlo. Ideal para tablas dinámicas.',
+      'Guarda tus reportes con nombre para toda la empresa, márcalos como destacados y vuelve a exportarlos con un clic (el período relativo se recalcula solo).',
+      '¿Quieres activarlo para tu empresa? Es un módulo opcional: contacta al personal de EasyCount para habilitártelo.',
+    ],
+  },
+  {
     id: '2026-10-01-nuevo-modulo-rrhh',
     fecha: '2026-10-01',
     titulo: 'Nuevo módulo: Recursos Humanos y Nómina',
