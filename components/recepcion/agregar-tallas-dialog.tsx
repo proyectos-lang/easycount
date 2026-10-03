@@ -119,7 +119,7 @@ export function AgregarTallasDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Layers3 className="h-5 w-5 text-amber-700" /> Agregar tallas
@@ -131,7 +131,8 @@ export function AgregarTallasDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-2">
+        {/* Con muchas tallas el contenido hace scroll; el footer queda visible. */}
+        <div className="grid gap-4 py-2 flex-1 min-h-0 overflow-y-auto pr-2">
           <datalist id="agregar-tallas-preset">
             {TALLAS_PRESET.map((t) => <option key={t} value={t} />)}
           </datalist>
@@ -211,7 +212,7 @@ export function AgregarTallasDialog({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>

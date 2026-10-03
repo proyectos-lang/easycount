@@ -402,7 +402,7 @@ export function QuickCreateProductoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Crear Producto Rapido</DialogTitle>
           <DialogDescription>
@@ -411,7 +411,9 @@ export function QuickCreateProductoDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-2">
+        {/* Campos con scroll dentro del alto del diálogo: con muchas tallas el
+            contenido supera la pantalla y el botón de guardar debe seguir visible. */}
+        <div className="grid gap-4 py-2 flex-1 min-h-0 overflow-y-auto pr-2">
           {/* Nombre */}
           <div className="grid gap-1.5">
             <Label htmlFor="qc-nombre">
@@ -782,7 +784,7 @@ export function QuickCreateProductoDialog({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button
             type="button"
             variant="outline"
