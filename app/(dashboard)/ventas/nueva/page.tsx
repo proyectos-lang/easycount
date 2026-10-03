@@ -68,6 +68,7 @@ import { useCajaSesion } from "@/lib/hooks/use-caja-sesion"
 import { printTirilla } from "@/lib/print-tirilla"
 import { tirillaLogoUrl } from "@/lib/utils/tirilla-logos"
 import { buildTirillaVentaHtml, metodoPagoLabel, type TirillaVenta, type TirillaFiscal } from "@/lib/utils/tirilla-venta"
+import { buildTirillaRetiroHtml } from "@/lib/utils/tirilla-retiro"
 import {
   getConfigsCai,
   calcularDesgloseFiscal,
@@ -1207,11 +1208,30 @@ export default function NuevaVentaPage() {
 
   // Imprime la tirilla termica (80 mm) de la venta recien registrada. Mide el
   // alto real del contenido para que el papel salga del largo EXACTO.
+  // Si la empresa tiene el flag `ventas_orden_retiro_bodega`, al cerrar el
+  // dialogo de impresion de la factura sale la "Orden de retiro en bodega".
   function handleImprimirTirilla() {
     if (!ventaExitosa) return
     setImprimiendo(true)
     try {
-      printTirilla(buildTirillaVentaHtml(ventaExitosa.tirilla), { widthMm: 80 })
+      const tirilla = ventaExitosa.tirilla
+      const conRetiro = user?.flags?.ventas_orden_retiro_bodega ?? false
+      printTirilla(buildTirillaVentaHtml(tirilla), {
+        widthMm: 80,
+        onAfterPrint: conRetiro ? () => printTirilla(buildTirillaRetiroHtml(tirilla), { widthMm: 80 }) : undefined,
+      })
+    } catch {
+      toast({ title: "Error", description: "No se pudo preparar la tirilla", variant: "destructive" })
+    } finally {
+      setImprimiendo(false)
+    }
+  }
+
+  // Reimprime solo la orden de retiro en bodega (si se trabó o se perdió).
+  function handleImprimirRetiro() {
+    if (!ventaExitosa) return
+    try {
+      printTirilla(buildTirillaRetiroHtml(ventaExitosa.tirilla), { widthMm: 80 })
     } catch {
       toast({ title: "Error", description: "No se pudo preparar la tirilla", variant: "destructive" })
     } finally {
@@ -2234,6 +2254,16 @@ export default function NuevaVentaPage() {
               <Printer className="h-4 w-4" />
               Imprimir tirilla (80 mm)
             </Button>
+            {user?.flags?.ventas_orden_retiro_bodega && (
+              <Button
+                variant="outline"
+                onClick={handleImprimirRetiro}
+                className="w-full gap-2"
+              >
+                <Printer className="h-4 w-4" />
+                Imprimir solo orden de retiro en bodega
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={handleDescargarPdf}

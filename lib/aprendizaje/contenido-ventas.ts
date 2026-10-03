@@ -58,6 +58,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "Crédito disponible a la vista: al elegir un cliente con límite de crédito, debajo de su RTN se muestra cuánto crédito le queda (límite − lo que ya debe). Si la venta en curso superaría ese disponible, el aviso se pone en rojo — así no armas una factura grande para que al final se bloquee.",
       "Recuerda tu vista del catálogo: si eliges verlo en lista o en cuadrícula, esa preferencia se guarda para tu usuario y se mantiene la próxima vez que entres.",
       "Al guardar, el formulario queda en blanco y aparece una ventana con las opciones de impresión: imprimir tirilla térmica de 80 mm (largo exacto, sin espacios en blanco) o descargar la factura A4 en PDF.",
+      "Orden de retiro en bodega (si tu empresa la tiene activa): al imprimir la tirilla de la factura sale también una segunda tirilla 'ORDEN DE RETIRO EN BODEGA' con el mismo número de factura y el listado de productos (código y cantidad, sin precios) para que la bodega despache.",
     ],
     queNoHace: [
       "No permite vender en efectivo sin una sesión de caja chica abierta (el sistema lo bloquea).",
@@ -86,6 +87,15 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
           "Se abre el diálogo de impresión del navegador ya ajustado al ancho de 80 mm y al largo exacto del contenido (sin papel en blanco de más). Elige tu impresora térmica y confirma.",
           "Según la configuración de tu empresa, la tirilla puede incluir el código de cada producto debajo de su nombre (se activa de forma centralizada para tu empresa).",
           "Si sale papel en blanco de sobra o se corta la última línea, revisa el tamaño de papel del driver de la impresora: debe estar en 'rollo/continuo' o un tamaño personalizado, no en A4/Carta.",
+        ],
+      },
+      {
+        titulo: "Orden de retiro en bodega",
+        pasos: [
+          "Requiere que tu empresa tenga activa la 'Orden de retiro en bodega' (se activa de forma centralizada).",
+          "Al presionar 'Imprimir tirilla (80 mm)', primero sale la factura; al cerrar ese diálogo de impresión se abre otro con la tirilla 'ORDEN DE RETIRO EN BODEGA'.",
+          "La orden lleva el MISMO número de la factura, la fecha, el cliente y el listado de productos con su código y cantidad (sin precios), más el total de referencias y unidades y espacio para firmas de quien entrega y quien recibe.",
+          "Si necesitas solo la orden otra vez, usa 'Imprimir solo orden de retiro en bodega' en la ventana 'Venta registrada'. Desde el Historial, al reimprimir la tirilla también sale la orden.",
         ],
       },
       {
@@ -158,6 +168,7 @@ export const TUTORIALES_VENTAS: TutorialModulo[] = [
       "vender", "factura", "pos", "cobrar", "efectivo", "tarjeta", "credito",
       "descuento", "isv", "impuesto", "comision", "ticket", "punto de venta",
       "tirilla", "termica", "impresora", "80mm", "imprimir", "comprobante", "recibo",
+      "orden de retiro", "retiro en bodega", "despacho", "bodega",
       "pantalla completa", "pos", "kiosko", "caja",
       "vuelto", "cambio", "efectivo recibido", "con cuanto paga",
       "codigo de barras", "escaner", "escanear", "lector", "pistola", "barcode",

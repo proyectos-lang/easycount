@@ -56,6 +56,13 @@ export interface FeatureFlags {
    * el saldo con el que quedó la cuenta. Default false (se muestra el saldo).
    */
   cierre_ocultar_saldo_banco: boolean
+  /**
+   * Si es true, al imprimir la tirilla de una venta (Nueva Venta y reimpresión
+   * desde el Historial) se imprime a continuación una segunda tirilla "ORDEN DE
+   * RETIRO EN BODEGA" con el mismo número de factura y el listado de productos
+   * (código, nombre y cantidad, sin precios). Default false.
+   */
+  ventas_orden_retiro_bodega: boolean
 }
 
 export const DEFAULT_FLAGS: FeatureFlags = {
@@ -68,6 +75,7 @@ export const DEFAULT_FLAGS: FeatureFlags = {
   ventas_bloquear_precio_descuento: false,
   caja_ocultar_saldo: false,
   cierre_ocultar_saldo_banco: false,
+  ventas_orden_retiro_bodega: false,
 }
 
 /** Etiquetas legibles para el portal (que flags se pueden togglear por empresa). */
@@ -81,6 +89,7 @@ export const FLAG_LABELS: Record<keyof FeatureFlags, string> = {
   ventas_bloquear_precio_descuento: "Bloquear precio y descuento en ventas (excepto admin)",
   caja_ocultar_saldo: "Ocultar saldo de caja chica (excepto admin)",
   cierre_ocultar_saldo_banco: "Ocultar saldo de bancos en el imprimible del cierre",
+  ventas_orden_retiro_bodega: "Imprimir orden de retiro en bodega junto con la factura",
 }
 
 /**
@@ -126,5 +135,9 @@ export function mergeFlags(config: Record<string, unknown> | null | undefined): 
       c.cierre_ocultar_saldo_banco === undefined
         ? DEFAULT_FLAGS.cierre_ocultar_saldo_banco
         : Boolean(c.cierre_ocultar_saldo_banco),
+    ventas_orden_retiro_bodega:
+      c.ventas_orden_retiro_bodega === undefined
+        ? DEFAULT_FLAGS.ventas_orden_retiro_bodega
+        : Boolean(c.ventas_orden_retiro_bodega),
   }
 }
