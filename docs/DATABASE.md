@@ -478,3 +478,14 @@ Categoría "RRHH" (5 módulos: Empleados, Asistencia, Novedades, Nómina, Parám
 - RLS `<tabla>_tenant` en las 7 tablas (`public.app_current_tenant()`).
 
 Código: `lib/services/rrhh.ts` (CRUD + puras `calcularHoras`, `documentosPorVencer`, `antiguedadAnios`, `diasVacacionesPorAntiguedad`, `mapearMarcacionesImportadas`, `resolverEmpleado`) y `lib/services/nomina.ts` (puras `calcularIHSS`, `calcularRAP`, `calcularISRAnual`, `calcularISRMensual`, `calcularHorasExtra`, `calcularNominaEmpleado`, `totalesNomina`, `calcularAguinaldoProporcional`, `empleadosDelPeriodo`; I/O `generarNomina`, `recalcularNomina`, `aprobarNomina`, `pagarNomina` → gastos, `anularNomina`, `planillaRows`). Parámetros 2026 de referencia en `PARAMETROS_2026` (IHSS techo 11,903.13; RAP piso 11,903.13 / techo 57,896.16; ISR exento 228,324.32).
+
+---
+
+## Reportería (script 074; módulo opt-in por empresa)
+
+Módulo `Reportería` (categoría propia "Reporteria" en el menú, justo después de Dashboard), portado de Officemart. Nace deshabilitado: el super-admin lo habilita por empresa desde /plataforma → Módulos. Es de **solo lectura**: arma reportes planos sobre las tablas existentes (28 fuentes agrupadas por sistema: Ventas, Compras, Inventario, Producción, Finanzas, Clientes y proveedores, RRHH), con columnas elegibles, período, filtros y exportación **solo a `.xlsx`**.
+
+- **`reportes_guardados`**: `nombre`, `descripcion`, `fuente` (id de la fuente en `lib/reporteria/fuentes.ts`), `config` jsonb (`ConfigReporte`: columnas y orden, período relativo o fijo, filtros, orden), `favorito`, `exportaciones` (contador), `ultima_exportacion`, `usuario`, `created_at`/`updated_at`. Índice `idx_reportes_guardados_tenant (razon_social_id, nombre)`. RLS `reportes_guardados_tenant` (`public.app_current_tenant()`).
+- Si la tabla no existe aún (error de PostgREST), `lib/services/reportes-guardados.ts` degrada a localStorage (`easycount_reportes_guardados`) y la pantalla muestra `REPORTES_FEATURE_PENDING`.
+
+Código: `lib/reporteria/motor.ts` (puro: `resolverRango`, `ejecutarReporte`, filtros, totales), `lib/reporteria/fuentes.ts` (catálogo `FUENTES`; cada fuente lee por `ctx.supabase` con RLS, pagina de 1000 en 1000 y resuelve catálogos por diccionarios en memoria), `lib/reporteria/excel.ts` (`exportarReporteXlsx`: fechas y montos como valores reales, autofiltro, hoja «Parámetros»), página `app/(dashboard)/reporteria/page.tsx`. Tests en `tests/reporteria.test.ts` (ids únicos, claves de columna únicas, ≥1 columna `porDefecto` por fuente).
