@@ -3,8 +3,11 @@
 import * as React from "react"
 import {
   Scale, Warehouse, MapPin, Package, Search, ArrowUpCircle, ArrowDownCircle,
-  Info, Loader2,
+  Info, Loader2, Layers3,
 } from "lucide-react"
+import { useAuth } from "@/lib/contexts/auth-context"
+import { getGruposTallas, type GrupoTallaRef } from "@/lib/services/grupos-tallas"
+import { compararTallas } from "@/lib/utils/tallas"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -37,6 +40,11 @@ import {
 
 export default function AjustesInventarioPage() {
   const { toast } = useToast()
+  const { user } = useAuth()
+  // Empresas con productos por talla: una prenda tallada se elige UNA vez y se
+  // ajustan todas sus tallas juntas (cada talla es su propio producto/stock).
+  const tallasActivo = user?.flags?.productos_por_talla ?? false
+  const [grupos, setGrupos] = React.useState<Map<number, GrupoTallaRef>>(new Map())
   const [productos, setProductos] = React.useState<Producto[]>([])
   const [almacenes, setAlmacenes] = React.useState<Almacen[]>([])
   const [localizaciones, setLocalizaciones] = React.useState<Localizacion[]>([])
@@ -54,6 +62,9 @@ export default function AjustesInventarioPage() {
   const [busquedaProd, setBusquedaProd] = React.useState("")
   const [stockActualProd, setStockActualProd] = React.useState<number | null>(null)
   const [realProd, setRealProd] = React.useState("")
+  // Prenda tallada seleccionada (valor "g:<grupo_id>"): stock y conteo por talla.
+  const [stockGrupo, setStockGrupo] = React.useState<Record<number, number>>({})
+  const [realGrupo, setRealGrupo] = React.useState<Record<number, string>>({})
 
   // Modo POR LOCALIZACIÓN (conteo físico de varios productos seleccionados)
   const [conteo, setConteo] = React.useState<Record<number, string>>({}) // producto_id -> real
@@ -63,10 +74,11 @@ export default function AjustesInventarioPage() {
   const [cargandoStock, setCargandoStock] = React.useState(false)
 
   React.useEffect(() => {
-    Promise.all([getProductos(), getAlmacenes(), getLocalizaciones()]).then(([p, a, l]) => {
+    Promise.all([getProductos(), getAlmacenes(), getLocalizaciones(), getGruposTallas()]).then(([p, a, l, g]) => {
       setProductos(p.data || [])
       setAlmacenes(a.data || [])
       setLocalizaciones(l.data || [])
+      setGrupos(g.data)
       setLoading(false)
     })
   }, [])
@@ -76,21 +88,81 @@ export default function AjustesInventarioPage() {
     [localizaciones, almacenId]
   )
 
-  const selectedProducto = productos.find((p) => String(p.id) === productoId)
+  const grupoSelId = tallasActivo && productoId.startsWith("g:") ? Number(productoId.slice(2)) : null
+  const selectedProducto = grupoSelId == null ? productos.find((p) => String(p.id) === productoId) : undefined
 
-  // ---- Modo producto: cargar stock actual al elegir producto+localización ----
+  // Tallas (hermanos) de la prenda seleccionada, en orden de etiqueta.
+  const hermanos = React.useMemo(
+    () =>
+      grupoSelId == null
+        ? []
+        : productos
+            .filter((p) => grupos.get(p.id!)?.grupo_id === grupoSelId)
+            .sort((a, b) => compararTallas(a.talla, b.talla)),
+    [grupoSelId, productos, grupos]
+  )
+  const nombreGrupoSel = grupoSelId == null ? "" : grupos.get(hermanos[0]?.id ?? -1)?.nombre_grupo || hermanos[0]?.nombre || ""
+
+  // ---- Modo producto: cargar stock actual al elegir producto (o prenda
+  // tallada) + localización. Las casillas "Real" arrancan con el actual. ----
   React.useEffect(() => {
-    if (productoId && localizacionId) {
-      getStockMultipleProducts([Number(productoId)], Number(localizacionId)).then((r) => {
+    let activo = true
+    if (!productoId || !localizacionId) {
+      setStockActualProd(null); setRealProd(""); setStockGrupo({}); setRealGrupo({})
+      return
+    }
+    const ids = grupoSelId != null ? hermanos.map((p) => p.id!) : [Number(productoId)]
+    if (ids.length === 0) return
+    getStockMultipleProducts(ids, Number(localizacionId)).then((r) => {
+      if (!activo) return
+      if (grupoSelId != null) {
+        const stock: Record<number, number> = {}
+        const real: Record<number, string> = {}
+        for (const id of ids) { stock[id] = r.data[id] ?? 0; real[id] = String(stock[id]) }
+        setStockGrupo(stock); setRealGrupo(real)
+        setStockActualProd(null); setRealProd("")
+      } else {
         const actual = r.data[Number(productoId)] ?? 0
         setStockActualProd(actual)
         setRealProd(String(actual))
-      })
-    } else {
-      setStockActualProd(null)
-      setRealProd("")
+        setStockGrupo({}); setRealGrupo({})
+      }
+    })
+    return () => { activo = false }
+  }, [productoId, localizacionId, grupoSelId, hermanos])
+
+  // Opciones del selector: con tallas activas, cada prenda tallada aparece UNA
+  // vez ("Camisa polo · 5 tallas"); la búsqueda también encuentra por código
+  // o talla de cualquiera de sus tallas.
+  const opcionesProducto = React.useMemo(() => {
+    const q = busquedaProd.trim().toLowerCase()
+    const coincide = (p: Producto) =>
+      !q || p.nombre.toLowerCase().includes(q) || !!p.codigo_barras?.toLowerCase().includes(q) ||
+      (tallasActivo && !!p.talla?.toLowerCase().includes(q))
+    const out: { value: string; label: string }[] = []
+    const gruposVistos = new Set<number>()
+    const porGrupo = new Map<number, Producto[]>()
+    if (tallasActivo) {
+      for (const p of productos) {
+        const g = grupos.get(p.id!)
+        if (g) porGrupo.set(g.grupo_id, [...(porGrupo.get(g.grupo_id) || []), p])
+      }
     }
-  }, [productoId, localizacionId])
+    for (const p of productos) {
+      const g = tallasActivo ? grupos.get(p.id!) : undefined
+      if (g) {
+        if (gruposVistos.has(g.grupo_id)) continue
+        const tallas = porGrupo.get(g.grupo_id) || [p]
+        if (!tallas.some(coincide)) continue
+        gruposVistos.add(g.grupo_id)
+        out.push({ value: `g:${g.grupo_id}`, label: `${g.nombre_grupo || p.nombre} · ${tallas.length} talla${tallas.length === 1 ? "" : "s"}` })
+      } else if (coincide(p)) {
+        out.push({ value: String(p.id), label: p.nombre })
+      }
+      if (out.length >= 100) break
+    }
+    return out
+  }, [productos, grupos, tallasActivo, busquedaProd])
 
   // ---- Modo localización: cargar el stock del catálogo en la loc ----
   // La casilla "Real" arranca VACÍA: el conteo físico obliga a escribir la
@@ -107,7 +179,7 @@ export default function AjustesInventarioPage() {
   }, [localizacionId, productos])
 
   function resetSeleccion() {
-    setProductoId(""); setRealProd(""); setStockActualProd(null)
+    setProductoId(""); setRealProd(""); setStockActualProd(null); setStockGrupo({}); setRealGrupo({})
     setConteo({}); setStockLoc({}); setSeleccionados(new Set()); setBusquedaLoc(""); setBusquedaProd("")
   }
 
@@ -123,6 +195,20 @@ export default function AjustesInventarioPage() {
   // ---- Construcción de líneas a ajustar según el modo ----
   function construirLineas(modo: "producto" | "localizacion"): AjusteLineaInput[] {
     if (!almacenId || !localizacionId) return []
+    if (modo === "producto" && grupoSelId != null) {
+      // Una línea por talla con cantidad real escrita (vacía = no se toca).
+      return hermanos
+        .filter((p) => stockGrupo[p.id!] !== undefined && (realGrupo[p.id!] ?? "").trim() !== "")
+        .map((p) => ({
+          producto_id: p.id!,
+          almacen_id: Number(almacenId),
+          localizacion_id: Number(localizacionId),
+          stock_actual: stockGrupo[p.id!],
+          stock_real: Number(realGrupo[p.id!]),
+          costo_unitario: Number(p.costo_promedio || 0),
+          producto_nombre: p.talla ? `${p.nombre} (talla ${p.talla})` : p.nombre,
+        }))
+    }
     if (modo === "producto") {
       if (!selectedProducto || stockActualProd == null || realProd === "") return []
       return [{
@@ -152,7 +238,7 @@ export default function AjustesInventarioPage() {
           stock_actual: actual,
           stock_real: Number(conteo[p.id!]),
           costo_unitario: Number(p.costo_promedio || 0),
-          producto_nombre: p.nombre,
+          producto_nombre: tallasActivo && p.talla ? `${p.nombre} (talla ${p.talla})` : p.nombre,
         }
       })
   }
@@ -161,7 +247,7 @@ export default function AjustesInventarioPage() {
   const lineasCambio = React.useMemo(
     () => calcularLineasAjuste(construirLineas(modoActual)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [modoActual, productoId, realProd, stockActualProd, conteo, stockLoc, seleccionados, almacenId, localizacionId]
+    [modoActual, productoId, realProd, stockActualProd, conteo, stockLoc, seleccionados, almacenId, localizacionId, hermanos, stockGrupo, realGrupo]
   )
   const entradas = lineasCambio.filter((l) => l.delta > 0)
   const salidas = lineasCambio.filter((l) => l.delta < 0)
@@ -296,15 +382,77 @@ export default function AjustesInventarioPage() {
                 <Select value={productoId} onValueChange={setProductoId}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar producto" /></SelectTrigger>
                   <SelectContent>
-                    {productos
-                      .filter((p) => {
-                        const q = busquedaProd.trim().toLowerCase()
-                        return !q || p.nombre.toLowerCase().includes(q) || p.codigo_barras?.toLowerCase().includes(q)
-                      })
-                      .slice(0, 100)
-                      .map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
+                    {opcionesProducto.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
+
+                {/* Prenda tallada: una fila por talla con su conteo. */}
+                {grupoSelId != null && hermanos.length > 0 && Object.keys(stockGrupo).length > 0 && (() => {
+                  const totActual = hermanos.reduce((s, p) => s + (stockGrupo[p.id!] ?? 0), 0)
+                  const totReal = hermanos.reduce((s, p) => {
+                    const r = (realGrupo[p.id!] ?? "").trim()
+                    return s + (r === "" ? (stockGrupo[p.id!] ?? 0) : Number(r) || 0)
+                  }, 0)
+                  const totDif = +(totReal - totActual).toFixed(2)
+                  return (
+                    <div className="space-y-2">
+                      <p className="flex items-center gap-1.5 text-sm font-medium text-amber-900">
+                        <Layers3 className="h-4 w-4" /> {nombreGrupoSel}: escribe la cantidad real de cada talla
+                      </p>
+                      <div className="overflow-x-auto rounded-lg border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Talla</TableHead>
+                              <TableHead>Código</TableHead>
+                              <TableHead className="text-center">Actual</TableHead>
+                              <TableHead className="text-center w-32">Real</TableHead>
+                              <TableHead className="text-center">Dif.</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {hermanos.map((p) => {
+                              const actual = stockGrupo[p.id!] ?? 0
+                              const realStr = realGrupo[p.id!] ?? ""
+                              const dif = realStr.trim() === "" ? 0 : +(Number(realStr) - actual).toFixed(2)
+                              return (
+                                <TableRow key={p.id}>
+                                  <TableCell>
+                                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">{p.talla || "—"}</span>
+                                  </TableCell>
+                                  <TableCell className="text-xs text-stone-500 font-mono">{p.codigo_barras || "—"}</TableCell>
+                                  <TableCell className="text-center text-stone-600">{actual}</TableCell>
+                                  <TableCell>
+                                    <Input
+                                      type="number" step="0.01" min="0"
+                                      className="h-8 text-center"
+                                      value={realStr}
+                                      onChange={(e) => setRealGrupo((prev) => ({ ...prev, [p.id!]: e.target.value }))}
+                                    />
+                                  </TableCell>
+                                  <TableCell className={`text-center font-medium ${dif > 0 ? "text-emerald-700" : dif < 0 ? "text-red-700" : "text-stone-300"}`}>
+                                    {dif !== 0 ? `${dif > 0 ? "+" : ""}${dif}` : "—"}
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })}
+                            <TableRow className="bg-stone-50 font-semibold">
+                              <TableCell colSpan={2}>Total</TableCell>
+                              <TableCell className="text-center">{totActual}</TableCell>
+                              <TableCell className="text-center">{totReal}</TableCell>
+                              <TableCell className={`text-center ${totDif > 0 ? "text-emerald-700" : totDif < 0 ? "text-red-700" : "text-stone-400"}`}>
+                                {totDif !== 0 ? `${totDif > 0 ? "+" : ""}${totDif}` : "0"}
+                              </TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </div>
+                      <p className="text-xs text-stone-500">
+                        Costo prom. de cada talla se respeta; solo cambian las tallas cuya cantidad real difiere.
+                      </p>
+                    </div>
+                  )
+                })()}
 
                 {selectedProducto && stockActualProd != null && (
                   <div className="grid gap-4 sm:grid-cols-3 items-end">

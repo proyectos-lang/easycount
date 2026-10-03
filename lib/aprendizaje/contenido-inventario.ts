@@ -158,9 +158,11 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
       "Genera automáticamente un movimiento de 'Ajuste' por producto en el kardex: entrada si sobra, salida si falta.",
       "Usa el costo promedio ACTUAL del producto en el movimiento, así el ajuste NO altera la valoración/costo promedio.",
       "Guarda una bitácora con el motivo, el antes/después y quién hizo el ajuste (auditoría).",
+      "Productos por talla (si tu empresa los usa): en 'Un producto' cada prenda tallada aparece una sola vez ('Camisa polo · 5 tallas'). Al elegirla ves una tabla con TODAS sus tallas —código, cantidad actual, real y diferencia, más el total— y las ajustas juntas en un solo paso.",
     ],
     queNoHace: [
       "No cambia el costo promedio del producto: solo corrige la cantidad.",
+      "En una prenda tallada no mueve unidades de una talla a otra: cada talla se ajusta por su cuenta (entrada o salida) según lo que escribas.",
       "No genera movimiento para los productos cuya cantidad real coincide con la del sistema (solo ajusta lo que difiere).",
       "No es para ingresar mercancía nueva con costo (eso es Movimientos Manuales o Compras); es para cuadrar existencias.",
     ],
@@ -173,6 +175,16 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
           "En 'Un producto', busca y selecciona el producto: verás su cantidad actual y su costo promedio.",
           "Escribe la cantidad real contada. Aparece la diferencia (entrada o salida).",
           "Escribe el motivo (opcional) y presiona 'Aplicar ajuste'; confirma el resumen.",
+        ],
+      },
+      {
+        titulo: "Ajustar las tallas de una prenda",
+        pasos: [
+          "Requiere que tu empresa use productos por talla (se activa de forma centralizada).",
+          "Elige almacén y localización y, en 'Un producto', busca la prenda (por nombre, código o talla) y selecciónala: aparece una sola vez con el número de tallas.",
+          "Se muestra una fila por talla con su cantidad actual; la casilla 'Real' arranca con esa misma cantidad.",
+          "Cambia solo las tallas que no cuadran. Verás la diferencia por talla y el total de la prenda.",
+          "Motivo (opcional) y 'Aplicar ajuste': se genera un movimiento de ajuste por cada talla que cambió.",
         ],
       },
       {
@@ -204,7 +216,7 @@ export const TUTORIALES_INVENTARIO: TutorialModulo[] = [
           "En Inventario → Historial de Transacciones aparece como movimiento 'Ajuste' (con la cantidad en + o −). El motivo y el antes/después quedan en la bitácora de ajustes.",
       },
     ],
-    keywords: ["ajuste", "conteo", "cuadrar", "inventario fisico", "merma", "faltante", "sobrante", "toma fisica", "varios productos", "seleccionar", "masivo", "conteo masivo"],
+    keywords: ["ajuste", "conteo", "cuadrar", "inventario fisico", "merma", "faltante", "sobrante", "toma fisica", "varios productos", "seleccionar", "masivo", "conteo masivo", "tallas", "talla", "prenda", "ajustar tallas"],
   },
   {
     modulo: "Ajuste de Costo",

@@ -46,16 +46,22 @@ export async function getGruposTallas(): Promise<{
   const supabase = createClient()
   if (!supabase) return { data: vacio, error: "Cliente no disponible" }
 
-  const { data, error } = await supabase
-    .from("producto_grupo_tallas")
-    .select("producto_id, grupo_id, nombre_grupo")
-  if (error) {
-    if (isMissingTable(error)) return { data: vacio, error: null }
-    return { data: vacio, error: error.message }
-  }
+  // Paginado de 1000 en 1000 (tope de PostgREST): una empresa con muchas
+  // tallas perdería el agrupamiento de los productos más allá de la fila 1000.
   const map = new Map<number, GrupoTallaRef>()
-  for (const r of (data || []) as { producto_id: number; grupo_id: number; nombre_grupo: string | null }[]) {
-    map.set(r.producto_id, { grupo_id: r.grupo_id, nombre_grupo: r.nombre_grupo })
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error } = await supabase
+      .from("producto_grupo_tallas")
+      .select("producto_id, grupo_id, nombre_grupo")
+      .order("producto_id")
+      .range(desde, desde + 999)
+    if (error) {
+      if (isMissingTable(error)) return { data: vacio, error: null }
+      return { data: vacio, error: error.message }
+    }
+    const filas = (data || []) as { producto_id: number; grupo_id: number; nombre_grupo: string | null }[]
+    for (const r of filas) map.set(r.producto_id, { grupo_id: r.grupo_id, nombre_grupo: r.nombre_grupo })
+    if (filas.length < 1000) break
   }
   return { data: map, error: null }
 }
