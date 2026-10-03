@@ -75,6 +75,7 @@ import { useAuth } from "@/lib/contexts/auth-context"
 import { printTirilla } from "@/lib/print-tirilla"
 import { tirillaLogoUrl } from "@/lib/utils/tirilla-logos"
 import { buildTirillaVentaHtml, metodoPagoLabel, type TirillaVenta, type TirillaFiscal } from "@/lib/utils/tirilla-venta"
+import { buildTirillaRetiroHtml } from "@/lib/utils/tirilla-retiro"
 import {
   getConfigsCai,
   calcularDesgloseFiscal,
@@ -775,7 +776,12 @@ export default function HistorialVentasPage() {
         mostrarCodigoProducto: user?.flags?.tirilla_mostrar_codigo ?? false,
       }
 
-      printTirilla(buildTirillaVentaHtml(tirilla), { widthMm: 80 })
+      // Flag `ventas_orden_retiro_bodega`: tras la factura, sale la orden de retiro.
+      const conRetiro = user?.flags?.ventas_orden_retiro_bodega ?? false
+      printTirilla(buildTirillaVentaHtml(tirilla), {
+        widthMm: 80,
+        onAfterPrint: conRetiro ? () => printTirilla(buildTirillaRetiroHtml(tirilla), { widthMm: 80 }) : undefined,
+      })
     } catch {
       toast({ title: "Error", description: "No se pudo preparar la tirilla", variant: "destructive" })
     } finally {

@@ -17,7 +17,16 @@
  */
 export function printTirilla(
   fullHtml: string,
-  opts?: { widthMm?: number; bottomMarginMm?: number }
+  opts?: {
+    widthMm?: number
+    bottomMarginMm?: number
+    /**
+     * Se llama cuando el dialogo de impresion se cierra (`print()` bloquea
+     * hasta entonces). Sirve para encadenar una segunda tirilla sin que los
+     * dos dialogos choquen (p. ej. factura → orden de retiro en bodega).
+     */
+    onAfterPrint?: () => void
+  }
 ): void {
   const widthMm = opts?.widthMm ?? 80
   const bottomMarginMm = opts?.bottomMarginMm ?? 2
@@ -46,6 +55,7 @@ export function printTirilla(
         iframe.contentWindow?.focus()
         iframe.contentWindow?.print()
         URL.revokeObjectURL(blobUrl)
+        if (opts?.onAfterPrint) setTimeout(opts.onAfterPrint, 300)
         setTimeout(() => {
           if (document.body.contains(iframe)) document.body.removeChild(iframe)
         }, 3000)

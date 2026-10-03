@@ -180,6 +180,9 @@ export default async function PlataformaPage() {
                 <th className="px-4 py-2 font-medium" title="En los imprimibles del Cierre Diario (tirilla y PDF) oculta el SALDO FINAL de cada banco; los movimientos (ingresos/egresos) sí se muestran">
                   Ocultar saldo bancos (cierre)
                 </th>
+                <th className="px-4 py-2 font-medium" title="Al imprimir la tirilla de una venta, imprime también una tirilla 'ORDEN DE RETIRO EN BODEGA' con el mismo número de factura y el listado de productos (código y cantidad, sin precios)">
+                  Orden retiro bodega
+                </th>
                 <th className="px-4 py-2 font-medium" title="Enciende o apaga de un clic los 5 módulos de Recursos Humanos (Empleados, Asistencia, Novedades, Nómina, Parámetros RRHH) para la empresa">
                   RRHH
                 </th>
@@ -188,7 +191,7 @@ export default async function PlataformaPage() {
             <tbody>
               {empresas.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-10 text-center text-stone-400">
+                  <td colSpan={16}className="px-4 py-10 text-center text-stone-400">
                     Sin empresas para mostrar.
                   </td>
                 </tr>
@@ -303,6 +306,15 @@ export default async function PlataformaPage() {
                         initial={e.flags.cierre_ocultar_saldo_banco}
                         onLabel="Oculto"
                         offLabel="Visible"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <FlagToggle
+                        razonSocialId={e.id}
+                        flag="ventas_orden_retiro_bodega"
+                        initial={e.flags.ventas_orden_retiro_bodega}
+                        onLabel="Activo"
+                        offLabel="Inactivo"
                       />
                     </td>
                     <td className="px-4 py-2">
