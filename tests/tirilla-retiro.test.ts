@@ -53,9 +53,10 @@ describe("buildTirillaRetiroHtml", () => {
 describe("combinarTirillas", () => {
   const html = combinarTirillas([buildTirillaVentaHtml(venta), buildTirillaRetiroHtml(venta)])
 
-  it("pone cada tirilla en su propia página con nombre", () => {
-    expect(html).toContain('class="tirilla-sec tirilla-s0" style="page: t0"')
-    expect(html).toContain('class="tirilla-sec tirilla-s1" style="page: t1"')
+  it("pone cada tirilla en su propia página", () => {
+    expect(html).toContain('class="tirilla-sec tirilla-s0"')
+    expect(html).toContain('class="tirilla-sec tirilla-s1"')
+    expect(html).toContain(".tirilla-sec { break-after: page; }")
     expect(html).toContain('id="page-style"')
     expect(html.match(/<body/g)).toHaveLength(1)
   })

@@ -121,8 +121,8 @@ function aislarCss(css: string, scope: string): string {
 
 /**
  * Une varios documentos de tirilla (cada uno con su `<style>` y `<body>`) en
- * un solo HTML: cada tirilla va en su propia PAGINA con nombre (`page: tN`),
- * para que el navegador la imprima como hoja aparte —la termica la corta por
+ * un solo HTML: cada tirilla va en su propia PAGINA (salto de pagina entre
+ * secciones), para que el navegador la imprima como hoja aparte —la termica la corta por
  * separado— con un solo dialogo de impresion. Puro (solo strings): testeable.
  */
 export function combinarTirillas(docs: string[]): string {
@@ -132,12 +132,12 @@ export function combinarTirillas(docs: string[]): string {
       .map((m) => aislarCss(m[1], scope))
       .join("")
     const body = html.match(/<body[^>]*>([\s\S]*)<\/body>/)?.[1] ?? ""
-    return { css, html: `<div class="tirilla-sec tirilla-s${i}" style="page: t${i}">${body}</div>` }
+    return { css, html: `<div class="tirilla-sec tirilla-s${i}">${body}</div>` }
   })
   return `<!DOCTYPE html>
 <html lang="es"><head><meta charset="UTF-8">
 <style id="page-style">
-  /* Se sobrescribe con el alto exacto de cada tirilla (una @page por seccion). */
+  /* Se sobrescribe con el alto de la tirilla mas larga (mismo tamaño para todas). */
   @page { size: 80mm 500mm; margin: 0 !important; }
 </style>
 <style>
@@ -152,9 +152,9 @@ ${secciones.map((s) => s.html).join("\n")}
 
 /**
  * Imprime VARIAS tirillas (p. ej. factura + orden de retiro en bodega) con UN
- * solo clic y un solo dialogo: cada una sale como hoja separada de largo exacto
- * (named pages con su propio `size`). Si el driver de la termica tiene "cortar
- * al final de cada pagina", salen cortadas por separado.
+ * solo clic y un solo dialogo: cada una sale como hoja separada, todas del
+ * largo de la mas larga (ver el comentario del @page abajo). Si el driver de la
+ * termica tiene "cortar al final de cada pagina", salen cortadas por separado.
  */
 export function printTirillas(
   docs: string[],
@@ -169,12 +169,13 @@ export function printTirillas(
     )
     const pageStyle = iDoc.getElementById("page-style")
     if (pageStyle) {
-      // El @page base usa la tirilla mas larga: si un navegador no soporta
-      // tamaños por pagina con nombre, nada se corta (solo sobra papel).
+      // UN solo tamaño para todas las hojas: el de la tirilla más larga. Los
+      // drivers de térmicas en Windows suelen aplicar el tamaño de la PRIMERA
+      // hoja a todo el trabajo; con tamaños por hoja, si la 2.ª era más larga
+      // que la 1.ª se desbordaba y salía una 3.ª tirilla ("Recibido por…").
+      // Costo: unos mm en blanco al final de la tirilla más corta.
       const maxMm = Math.max(1, ...alturas)
-      pageStyle.textContent =
-        `@page { size: ${widthMm}mm ${maxMm}mm; margin: 0 !important; }\n` +
-        alturas.map((h, i) => `@page t${i} { size: ${widthMm}mm ${h}mm; margin: 0 !important; }`).join("\n")
+      pageStyle.textContent = `@page { size: ${widthMm}mm ${maxMm}mm; margin: 0 !important; }`
     }
   })
 }
