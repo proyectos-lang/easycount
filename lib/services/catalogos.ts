@@ -1226,9 +1226,44 @@ export async function deleteLocalizacion(id: number): Promise<{ success: boolean
 async function getClientesInactivosSet(
   supabase: NonNullable<ReturnType<typeof createClient>>
 ): Promise<Set<number>> {
-  const { data, error } = await supabase.from('clientes_inactivos').select('cliente_id')
-  if (error) return new Set() // tabla ausente u otro error -> nadie inactivo
-  return new Set((data || []).map((r: { cliente_id: number }) => r.cliente_id))
+  const set = new Set<number>()
+  // Paginado: PostgREST corta en 1000 filas.
+  for (let from = 0, guard = 0; guard < 200; guard++, from += 1000) {
+    const { data, error } = await supabase
+      .from('clientes_inactivos')
+      .select('cliente_id')
+      .order('cliente_id', { ascending: true })
+      .range(from, from + 999)
+    if (error) return new Set() // tabla ausente u otro error -> nadie inactivo
+    const rows = (data || []) as { cliente_id: number }[]
+    for (const r of rows) set.add(r.cliente_id)
+    if (rows.length < 1000) break
+  }
+  return set
+}
+
+/**
+ * Todas las filas de `clientes` del tenant (RLS), paginando de 1000 en 1000:
+ * PostgREST corta cada select en 1000 filas, y una empresa con más clientes
+ * no veía en los buscadores (Nueva Venta, etc.) a los creados después.
+ */
+async function getClientesPaginados(
+  supabase: NonNullable<ReturnType<typeof createClient>>
+): Promise<{ data: Cliente[]; error: string | null }> {
+  const PAGE = 1000
+  const acc: Cliente[] = []
+  for (let from = 0, guard = 0; guard < 200; guard++, from += PAGE) {
+    const { data, error } = await supabase
+      .from('clientes')
+      .select('*')
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1)
+    if (error) return { data: [], error: error.message }
+    const rows = (data || []) as Cliente[]
+    acc.push(...rows)
+    if (rows.length < PAGE) break
+  }
+  return { data: acc, error: null }
 }
 
 /**
@@ -1251,12 +1286,12 @@ export async function getClientes(
 
   try {
     const [{ data, error }, inactivos] = await Promise.all([
-      supabase.from('clientes').select('*').order('id', { ascending: true }),
+      getClientesPaginados(supabase),
       getClientesInactivosSet(supabase),
     ])
 
-    if (error) return { data: [], error: error.message }
-    let lista = (data || []).map((c: Cliente) => ({ ...c, activo: !inactivos.has(c.id!) }))
+    if (error) return { data: [], error }
+    let lista = data.map((c: Cliente) => ({ ...c, activo: !inactivos.has(c.id!) }))
     if (opts?.soloActivos) lista = lista.filter((c) => c.activo)
     return { data: lista, error: null }
   } catch (err) {
