@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { buildTirillaRetiroHtml } from "@/lib/utils/tirilla-retiro"
-import type { TirillaVenta } from "@/lib/utils/tirilla-venta"
+import { buildTirillaVentaHtml, type TirillaVenta } from "@/lib/utils/tirilla-venta"
+import { combinarTirillas } from "@/lib/print-tirilla"
 
 const venta: TirillaVenta = {
   empresa: { nombre: "Ferretería <Uno>" },
@@ -46,5 +47,28 @@ describe("buildTirillaRetiroHtml", () => {
   it("muestra el número fiscal si la venta es CAI", () => {
     const h = buildTirillaRetiroHtml({ ...venta, fiscal: { cai: "X", numeroFiscal: "000-001-01-00000009", importeExento: 0, importeExonerado: 0, importeGravado15: 0, importeGravado18: 0, isv15: 0, isv18: 0, totalEnLetras: "" } })
     expect(h).toContain("000-001-01-00000009")
+  })
+})
+
+describe("combinarTirillas", () => {
+  const html = combinarTirillas([buildTirillaVentaHtml(venta), buildTirillaRetiroHtml(venta)])
+
+  it("pone cada tirilla en su propia página con nombre", () => {
+    expect(html).toContain('class="tirilla-sec tirilla-s0" style="page: t0"')
+    expect(html).toContain('class="tirilla-sec tirilla-s1" style="page: t1"')
+    expect(html).toContain('id="page-style"')
+    expect(html.match(/<body/g)).toHaveLength(1)
+  })
+
+  it("aísla el CSS de cada tirilla para que no se pisen", () => {
+    expect(html).toContain(".tirilla-s0 .row")
+    expect(html).toContain(".tirilla-s1 .row")
+    expect(html).toMatch(/\.tirilla-s0 \{[^}]*width: 80mm/)
+    expect(html).not.toMatch(/(^|\n)\s*\.row\s*\{/)
+  })
+
+  it("conserva el contenido de ambas", () => {
+    expect(html).toContain("Gracias por su compra")
+    expect(html).toContain("ORDEN DE RETIRO EN BODEGA")
   })
 })

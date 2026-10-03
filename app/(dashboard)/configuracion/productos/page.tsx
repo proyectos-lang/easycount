@@ -1459,7 +1459,7 @@ export default function ProductosConfigPage() {
 
       {/* Product Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-lg max-h-[90dvh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingProducto ? "Editar Producto" : "Nuevo Producto"}</DialogTitle>
             <DialogDescription>
@@ -2599,7 +2599,7 @@ function EditarGrupoDialog({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90dvh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Layers3 className="h-5 w-5 text-amber-700" />
@@ -2611,6 +2611,8 @@ function EditarGrupoDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {/* Cuerpo con scroll propio: el footer queda siempre visible. */}
+        <div className="grid gap-4 flex-1 min-h-0 overflow-y-auto pr-2">
         {/* ── Datos COMUNES del grupo (foto/nombre/marca/categoría) ─────────── */}
         <div className="rounded-lg border border-stone-200 bg-stone-50/50 p-3 space-y-3">
           <p className="text-sm font-medium text-stone-700">Datos comunes (todas las tallas)</p>
@@ -2772,8 +2774,9 @@ function EditarGrupoDialog({
             Agregar talla
           </Button>
         </div>
+        </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={onClose}>Cerrar</Button>
         </DialogFooter>
       </DialogContent>
@@ -2861,7 +2864,7 @@ function ConvertirTalladoDialog({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90dvh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Layers3 className="h-5 w-5 text-amber-700" /> Convertir en producto tallado
@@ -2872,6 +2875,8 @@ function ConvertirTalladoDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {/* Cuerpo con scroll propio: el footer queda siempre visible. */}
+        <div className="flex-1 min-h-0 overflow-y-auto pr-2">
         {cargando ? (
           <div className="flex justify-center py-10"><Spinner className="h-6 w-6" /></div>
         ) : bloqueadoMultiLoc ? (
@@ -2953,8 +2958,9 @@ function ConvertirTalladoDialog({
             </div>
           </div>
         )}
+        </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           {!bloqueadoMultiLoc && !cargando && (
             <Button

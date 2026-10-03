@@ -72,7 +72,7 @@ import {
 import { getMetodosPagoPorVenta, getComisionesPorVenta, getCuentasDestinoPorVenta, type ComisionVenta } from "@/lib/services/ventas-analytics"
 import { contarDevolucionesDeVenta } from "@/lib/services/devoluciones"
 import { useAuth } from "@/lib/contexts/auth-context"
-import { printTirilla } from "@/lib/print-tirilla"
+import { printTirillas } from "@/lib/print-tirilla"
 import { tirillaLogoUrl } from "@/lib/utils/tirilla-logos"
 import { buildTirillaVentaHtml, metodoPagoLabel, type TirillaVenta, type TirillaFiscal } from "@/lib/utils/tirilla-venta"
 import { buildTirillaRetiroHtml } from "@/lib/utils/tirilla-retiro"
@@ -776,12 +776,13 @@ export default function HistorialVentasPage() {
         mostrarCodigoProducto: user?.flags?.tirilla_mostrar_codigo ?? false,
       }
 
-      // Flag `ventas_orden_retiro_bodega`: tras la factura, sale la orden de retiro.
+      // Flag `ventas_orden_retiro_bodega`: en la misma impresion sale la orden
+      // de retiro como tirilla aparte.
       const conRetiro = user?.flags?.ventas_orden_retiro_bodega ?? false
-      printTirilla(buildTirillaVentaHtml(tirilla), {
-        widthMm: 80,
-        onAfterPrint: conRetiro ? () => printTirilla(buildTirillaRetiroHtml(tirilla), { widthMm: 80 }) : undefined,
-      })
+      printTirillas(
+        conRetiro ? [buildTirillaVentaHtml(tirilla), buildTirillaRetiroHtml(tirilla)] : [buildTirillaVentaHtml(tirilla)],
+        { widthMm: 80 },
+      )
     } catch {
       toast({ title: "Error", description: "No se pudo preparar la tirilla", variant: "destructive" })
     } finally {
