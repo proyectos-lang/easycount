@@ -85,7 +85,7 @@ export function GestionShell({ usuario, rol, contadores, notificaciones, empresa
   const router = useRouter()
   const { logout } = useAuth()
   const [pago, setPago] = React.useState<{ abierto: boolean; empresaId: number | null; k: number }>({ abierto: false, empresaId: null, k: 0 })
-  const abrirRegistrarPago = React.useCallback((empresaId?: number) => setPago((p) => ({ abierto: true, empresaId: empresaId ?? null, k: p.k + 1 })), [])
+  const abrirRegistrarPago = (empresaId?: number) => setPago((p) => ({ abierto: true, empresaId: empresaId ?? null, k: p.k + 1 }))
 
   const titulo = TITULOS[pathname] ?? (pathname.startsWith("/gestion/empresas/") ? "Empresa" : "Gestión")
   const nombre = usuario.nombre || usuario.email || "Admin"
