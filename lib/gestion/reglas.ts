@@ -136,7 +136,19 @@ export function proximoPago(fechaPago: string, ciclo: Ciclo, diaCobro: number | 
   return ciclo === "anual" ? proximoPagoAnual(fechaPago) : proximoPagoMensual(fechaPago, diaCobro ?? Number(fechaPago.slice(8, 10)))
 }
 
-/** Período que cubre un pago: desde la fecha del pago hasta el día anterior al próximo. */
+/**
+ * Desde qué fecha cuenta el período que salda un pago. Si el cliente ya tiene
+ * un cobro programado (es cliente vigente), el pago salda ESE cobro —aunque se
+ * pague tarde o adelantado— y el próximo pago corre un período desde ahí. Si
+ * no tiene cobro programado (primer pago, prueba, prospecto), cuenta desde la
+ * fecha del pago. Ej.: cobro del 05/08 pagado el 01/09 → cubre 05/08–04/09 y
+ * el próximo es el 05/09 (no el 05/10).
+ */
+export function basePeriodoPago(fechaPago: string, fechaProximoPago: string | null | undefined, estado: EstadoEmpresa | string): string {
+  return (estado === "activo" || estado === "pago_pendiente") && fechaProximoPago ? fechaProximoPago : fechaPago
+}
+
+/** Período que cubre un pago: desde su base (ver basePeriodoPago) hasta el día anterior al próximo. */
 export function periodoCubierto(fechaPago: string, ciclo: Ciclo, diaCobro: number | null | undefined): { desde: string; hasta: string } {
   return { desde: fechaPago, hasta: sumarDias(proximoPago(fechaPago, ciclo, diaCobro), -1) }
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import {
-  finPrueba, proximoPagoMensual, proximoPagoAnual, proximoPago, periodoCubierto, primerProximoPago,
+  basePeriodoPago, finPrueba, proximoPagoMensual, proximoPagoAnual, proximoPago, periodoCubierto, primerProximoPago,
   estadoCobro, estadoEmpresaPorCobro, mrr, utilidad, costoPor, sumarMeses, ultimoDiaMes, diasEntre,
   estadoDesdeEtapa, etapaDesdeEstado, etapaPorResultado,
 } from "@/lib/gestion/reglas"
@@ -115,5 +115,19 @@ describe("ayudas de fecha y pipeline", () => {
     expect(etapaDesdeEstado("pago_pendiente")).toBe("cliente")
     expect(etapaPorResultado("quiere_prueba")).toBe("prueba")
     expect(etapaPorResultado("interesado")).toBe("reunion_realizada")
+  })
+})
+
+describe("pago atrasado o adelantado", () => {
+  it("un cliente vigente salda su cobro programado, no desde la fecha del pago", () => {
+    const base = basePeriodoPago("2026-09-01", "2026-08-05", "activo")
+    expect(base).toBe("2026-08-05")
+    expect(periodoCubierto(base, "mensual", 5)).toEqual({ desde: "2026-08-05", hasta: "2026-09-04" })
+    expect(proximoPago(base, "mensual", 5)).toBe("2026-09-05")
+  })
+  it("también si está en pago pendiente; sin cobro programado cuenta desde el pago", () => {
+    expect(basePeriodoPago("2026-10-10", "2026-09-15", "pago_pendiente")).toBe("2026-09-15")
+    expect(basePeriodoPago("2026-10-10", null, "activo")).toBe("2026-10-10")
+    expect(basePeriodoPago("2026-10-10", "2026-09-15", "prueba")).toBe("2026-10-10")
   })
 })
