@@ -489,3 +489,16 @@ Módulo `Reportería` (categoría propia "Reporteria" en el menú, justo despué
 - Si la tabla no existe aún (error de PostgREST), `lib/services/reportes-guardados.ts` degrada a localStorage (`easycount_reportes_guardados`) y la pantalla muestra `REPORTES_FEATURE_PENDING`.
 
 Código: `lib/reporteria/motor.ts` (puro: `resolverRango`, `ejecutarReporte`, filtros, totales), `lib/reporteria/fuentes.ts` (catálogo `FUENTES`; cada fuente lee por `ctx.supabase` con RLS, pagina de 1000 en 1000 y resuelve catálogos por diccionarios en memoria), `lib/reporteria/excel.ts` (`exportarReporteXlsx`: fechas y montos como valores reales, autofiltro, hoja «Parámetros»), página `app/(dashboard)/reporteria/page.tsx`. Tests en `tests/reporteria.test.ts` (ids únicos, claves de columna únicas, ≥1 columna `porDefecto` por fuente).
+
+---
+
+## Portal de gestión interna `/gestion` (script 076; solo super-admins)
+
+CRM + cobros + finanzas **del negocio EasyCount** (no de los tenants): las empresas que usan la app, sus mensualidades/anualidades, pagos recibidos, reuniones de venta, gastos, campañas y notificaciones. Tablas `gestion_*` sin `razon_social_id`, con RLS encendido y **sin políticas**: solo las lee/escribe el service role desde `lib/services/gestion.ts`, que valida `getSuperadmin()` (tabla `plataforma_admins`, ahora con `rol` nullable: administrador | ventas | contabilidad).
+
+- **`gestion_empresas`**: ficha + `plan`, `cuota`, `moneda`, `ciclo_cobro` (mensual|anual), `fecha_instalacion`, `dia_cobro` (1–31, solo mensual), `fecha_proximo_pago`, `estado` (prospecto, reunion_pendiente, reunion_realizada, prueba, activo, pago_pendiente, cancelado), `etapa_pipeline` (nuevo, reunion_pendiente, reunion_realizada, prueba, cliente, no_interesado; el prospecto es la misma fila), `motivo_perdida`, `ultima_interaccion`, `proxima_accion`, `razon_social_id` (empresa real, opcional). `fin_prueba` y `estado_cobro` son DERIVADOS (no se guardan).
+- **`gestion_pagos`**: `empresa_id`, `fecha`, `monto`, `metodo`, `cuenta_id` → `gestion_cuentas`, `referencia`, `ciclo_aplicado`, `periodo_cubierto_desde/hasta` (calculados al registrar).
+- **`gestion_reuniones`**: `fecha`, `hora`, `tipo`, `estado`, `resultado`, `motivo_perdida` (CHECK: obligatorio solo si resultado = no_interesado), `proximo_paso`.
+- **`gestion_gastos`** (`categoria`, `comprobante_path` en bucket `documentos`), **`gestion_campanas`** (invertido, prospectos/reuniones/clientes generados), **`gestion_actividades`** (bitácora automática + notas), **`gestion_notificaciones`** (`clave` UNIQUE para no duplicar), **`gestion_config`** (fila única: días de prueba = 10, moneda, planes, categorías, plantillas), **`gestion_cuentas`**.
+
+Reglas de negocio PURAS en `lib/gestion/reglas.ts` (fin de prueba, próximo pago mensual —día 29–31 cae al último día— y anual, estado derivado del cobro pagado/próximo/pendiente/atrasado, activo ↔ pago_pendiente, MRR, utilidad/margen, costo por prospecto/cliente) con tests en `tests/gestion-reglas.test.ts`; agregaciones por mes en `lib/gestion/calculos.ts`. `sincronizarGestion()` corre al cargar el portal (sin cron): aplica activo ↔ pago_pendiente y genera las notificaciones del día.
