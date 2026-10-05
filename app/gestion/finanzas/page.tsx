@@ -2,7 +2,8 @@ import Link from "next/link"
 import { datosGestion } from "../datos"
 import { leerMes } from "@/lib/gestion/mes"
 import { etiquetaMes, resumenFinanzas } from "@/lib/gestion/calculos"
-import { estadoResultados, liquidacionMes } from "@/lib/gestion/socios"
+import { estadoResultados, estadoResultadosMensual, liquidacionMes } from "@/lib/gestion/socios"
+import { EstadoResultadosTabla } from "../_components/estado-resultados-tabla"
 import { GraficaIngresosGastos } from "../_components/graficas"
 import { BarrasHorizontales, Panel, Vacio, fmtMoneda, fmtPct } from "../_components/ui"
 
@@ -24,6 +25,11 @@ export default async function FinanzasPage({ searchParams }: { searchParams: Pro
     gastos: d.gastos.map((g) => ({ fecha: g.fecha, monto: g.monto, socio_id: g.socio_id })),
   })
   const er = estadoResultados(liq)
+  const mensual = estadoResultadosMensual({
+    anio: sel.anio, mes: sel.mes, meses: 12, socios: d.socios,
+    ingresos: d.pagos.map((p) => ({ fecha: p.fecha, monto: p.monto })),
+    gastos: d.gastos.map((g) => ({ fecha: g.fecha, monto: g.monto, socio_id: g.socio_id })),
+  })
   const sociosConParte = liq.socios.filter((s) => s.porcentaje > 0)
   const tonoValor = (n: number) => (n >= 0 ? "text-emerald-700" : "text-red-700")
 
@@ -104,6 +110,7 @@ export default async function FinanzasPage({ searchParams }: { searchParams: Pro
           </div>
         </>
       )}
+      <EstadoResultadosTabla columnas={mensual.columnas} total={mensual.total} moneda={m} titulo={`Estado de resultados mes a mes · hasta ${etiquetaMes(sel.anio, sel.mes)}`} />
     </div>
   )
 }

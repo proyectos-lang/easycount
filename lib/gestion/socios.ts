@@ -100,6 +100,44 @@ export function estadoResultados(l: LiquidacionMes): EstadoResultadosMes {
   }
 }
 
+export interface FilaEstadoSocio { socio_id: number; nombre: string; porcentaje: number; participacion: number; reembolso: number; liquidacion: number }
+export interface ColumnaEstado extends EstadoResultadosMes { mes: string; socios: FilaEstadoSocio[] }
+
+/**
+ * Estado de resultados MES A MES (columnas) para la tabla de Finanzas: por
+ * mes, ingresos, gastos, utilidad bruta, participación de cada socio,
+ * utilidad neta y la liquidación de cada socio (participación + reembolso).
+ * Arranca en el primer mes con movimientos dentro de la ventana; la última
+ * columna `total` suma todos los meses mostrados.
+ */
+export function estadoResultadosMensual(args: { anio: number; mes: number; meses: number; ingresos: IngresoCalc[]; gastos: GastoSocioCalc[]; socios: SocioCalc[] }): { columnas: ColumnaEstado[]; total: ColumnaEstado; socios: SocioCalc[] } {
+  const serie = serieLiquidaciones(args)
+  const primero = serie.findIndex((l) => l.ingresos !== 0 || l.gastosEasycount !== 0 || l.gastosSocios !== 0)
+  const visibles = primero < 0 ? serie.slice(-1) : serie.slice(primero)
+  // Socios que aparecen: los que tienen % o algún movimiento en la ventana.
+  const socios = args.socios.filter((s) => (s.activo && s.porcentaje > 0) || visibles.some((l) => l.socios.some((f) => f.socio_id === s.id)))
+  const columnas: ColumnaEstado[] = visibles.map((l) => ({
+    mes: l.mes,
+    ...estadoResultados(l),
+    socios: socios.map((s) => {
+      const f = l.socios.find((x) => x.socio_id === s.id)
+      return { socio_id: s.id, nombre: s.nombre, porcentaje: f?.porcentaje ?? (s.activo ? s.porcentaje : 0), participacion: f?.participacion ?? 0, reembolso: f?.reembolso ?? 0, liquidacion: f?.total ?? 0 }
+    }),
+  }))
+  const suma = (fn: (c: ColumnaEstado) => number) => r2(columnas.reduce((a, c) => a + fn(c), 0))
+  const ingresos = suma((c) => c.ingresos), utilidadBruta = suma((c) => c.utilidadBruta), utilidadNeta = suma((c) => c.utilidadNeta)
+  const total: ColumnaEstado = {
+    mes: "total", ingresos, gastos: suma((c) => c.gastos), utilidadBruta, participacionSocios: suma((c) => c.participacionSocios), utilidadNeta,
+    margenBruto: ingresos > 0 ? Math.round((utilidadBruta / ingresos) * 10000) / 10000 : null,
+    margenNeto: ingresos > 0 ? Math.round((utilidadNeta / ingresos) * 10000) / 10000 : null,
+    socios: socios.map((s, i) => ({
+      socio_id: s.id, nombre: s.nombre, porcentaje: s.activo ? s.porcentaje : 0,
+      participacion: suma((c) => c.socios[i].participacion), reembolso: suma((c) => c.socios[i].reembolso), liquidacion: suma((c) => c.socios[i].liquidacion),
+    })),
+  }
+  return { columnas, total, socios }
+}
+
 /** Serie de N meses hasta (anio, mes), del más antiguo al más reciente. */
 export function serieLiquidaciones(args: { anio: number; mes: number; meses: number; ingresos: IngresoCalc[]; gastos: GastoSocioCalc[]; socios: SocioCalc[] }): LiquidacionMes[] {
   const out: LiquidacionMes[] = []

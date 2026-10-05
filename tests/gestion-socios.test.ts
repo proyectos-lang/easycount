@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { estadoResultados, liquidacionMes, repartoPorcentajes, saldoSocios, serieLiquidaciones } from "@/lib/gestion/socios"
+import { estadoResultados, estadoResultadosMensual, liquidacionMes, repartoPorcentajes, saldoSocios, serieLiquidaciones } from "@/lib/gestion/socios"
 
 const socios = [
   { id: 1, nombre: "Sebas", porcentaje: 40, activo: true },
@@ -77,5 +77,27 @@ describe("estado de resultados (participación DESPUÉS de gastos)", () => {
   it("sin socios la utilidad neta es la bruta", () => {
     const e = estadoResultados(liquidacionMes({ anio: 2026, mes: 10, ingresos: [{ fecha: "2026-10-03", monto: 500 }], gastos: [], socios: [] }))
     expect([e.utilidadBruta, e.participacionSocios, e.utilidadNeta]).toEqual([500, 0, 500])
+  })
+})
+
+describe("estado de resultados mes a mes", () => {
+  const ingresos = [{ fecha: "2026-08-10", monto: 4000 }, { fecha: "2026-09-10", monto: 5000 }, { fecha: "2026-10-10", monto: 6000 }]
+  const gastos = [{ fecha: "2026-09-12", monto: 1000, socio_id: 1 }, { fecha: "2026-10-01", monto: 500, socio_id: null }]
+  const r = estadoResultadosMensual({ anio: 2026, mes: 10, meses: 12, ingresos, gastos, socios })
+  it("arranca en el primer mes con movimientos y termina en el mes elegido", () => {
+    expect(r.columnas.map((c) => c.mes)).toEqual(["2026-08", "2026-09", "2026-10"])
+  })
+  it("cada mes cuadra: bruta − participación de cada socio = neta", () => {
+    for (const c of r.columnas) {
+      expect(Math.round((c.utilidadBruta - c.socios.reduce((a, s) => a + s.participacion, 0)) * 100) / 100).toBe(c.utilidadNeta)
+    }
+    const sep = r.columnas[1]
+    expect([sep.ingresos, sep.gastos, sep.utilidadBruta]).toEqual([5000, 1000, 4000])
+    expect(sep.socios.map((s) => [s.nombre, s.participacion, s.reembolso, s.liquidacion])).toEqual([["Sebas", 1600, 1000, 2600], ["Kristel", 1200, 0, 1200]])
+  })
+  it("la columna total suma los meses", () => {
+    expect([r.total.ingresos, r.total.gastos, r.total.utilidadBruta]).toEqual([15000, 1500, 13500])
+    expect(r.total.socios.find((s) => s.socio_id === 1)).toMatchObject({ participacion: 5400, reembolso: 1000, liquidacion: 6400 })
+    expect(r.total.utilidadNeta).toBe(13500 - 5400 - 4050)
   })
 })
