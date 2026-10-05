@@ -5,7 +5,8 @@ import {
   saveEmpresaGestion, deleteEmpresaGestion, setEtapaGestion, registrarPagoGestion, deletePagoGestion, saveReunionGestion, resultadoReunionGestion,
   deleteReunionGestion, saveGastoGestion, deleteGastoGestion, subirComprobanteGestion, urlComprobanteGestion, saveCampanaGestion, deleteCampanaGestion,
   agregarNotaGestion, marcarNotificacionesLeidasGestion, saveConfigGestion, saveCuentaGestion, setRolAdminGestion,
-  type EmpresaInput, type PagoInput, type ReunionInput, type ResultadoReunionInput, type GastoInput, type CampanaInput, type GConfig, type Resultado,
+  saveSocioGestion, deleteSocioGestion, registrarLiquidacionGestion, deleteLiquidacionGestion,
+  type SocioInput, type LiquidacionInput, type EmpresaInput, type PagoInput, type ReunionInput, type ResultadoReunionInput, type GastoInput, type CampanaInput, type GConfig, type Resultado,
 } from "@/lib/services/gestion"
 import type { EtapaPipeline, MotivoPerdida, RolGestion } from "@/lib/gestion/reglas"
 
@@ -33,6 +34,10 @@ export async function guardarConfig(parcial: Partial<GConfig>) { return rev(awai
 export async function guardarCuenta(input: { id?: number; nombre: string; banco?: string | null; moneda?: string; activo?: boolean }) { return rev(await saveCuentaGestion(input)) }
 export async function cambiarRolAdmin(userId: string, rol: RolGestion) { return rev(await setRolAdminGestion(userId, rol)) }
 export async function urlComprobante(path: string) { return urlComprobanteGestion(path) }
+export async function guardarSocio(input: SocioInput) { return rev(await saveSocioGestion(input)) }
+export async function eliminarSocio(id: number) { return rev(await deleteSocioGestion(id)) }
+export async function registrarLiquidacion(input: LiquidacionInput) { return rev(await registrarLiquidacionGestion(input)) }
+export async function eliminarLiquidacion(id: number) { return rev(await deleteLiquidacionGestion(id)) }
 
 /** Gasto con comprobante opcional: llega como FormData (campo `archivo`). */
 export async function guardarGasto(fd: FormData): Promise<Resultado<number>> {
@@ -54,6 +59,8 @@ export async function guardarGasto(fd: FormData): Promise<Resultado<number>> {
     metodo: String(fd.get("metodo") || "") || null,
     observaciones: String(fd.get("observaciones") || "") || null,
     comprobante_path,
+    // "" = lo pagó EasyCount (null); un id = el socio que lo pagó de su bolsa.
+    socio_id: fd.get("socio_id") ? Number(fd.get("socio_id")) : idRaw ? null : undefined,
   }
   if (!input.fecha) return { data: null, error: "La fecha es obligatoria." }
   return rev(await saveGastoGestion(input))

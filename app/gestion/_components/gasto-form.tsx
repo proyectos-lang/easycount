@@ -11,19 +11,23 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from "@/hooks/use-toast"
 import { ETIQUETA_CATEGORIA } from "@/lib/gestion/reglas"
 import { eliminarGasto, guardarGasto, urlComprobante } from "@/app/gestion/actions"
-import type { GGasto } from "@/lib/services/gestion"
+import type { GGasto, GSocio } from "@/lib/services/gestion"
 
-export function GastoForm({ gasto, categorias, hoy, trigger }: { gasto?: GGasto | null; categorias: string[]; hoy: string; trigger?: React.ReactNode }) {
+export function GastoForm({ gasto, categorias, hoy, trigger, socios = [] }: { gasto?: GGasto | null; categorias: string[]; hoy: string; trigger?: React.ReactNode; socios?: GSocio[] }) {
   const { toast } = useToast()
   const [open, setOpen] = React.useState(false)
   const [guardando, setGuardando] = React.useState(false)
   const [categoria, setCategoria] = React.useState(gasto?.categoria ?? categorias[0] ?? "otros")
+  // "" = lo pagó EasyCount; un id = lo asumió ese socio (se le reembolsa en su liquidación).
+  const [pagadoPor, setPagadoPor] = React.useState(gasto?.socio_id ? String(gasto.socio_id) : "")
+  const sociosOpciones = socios.filter((s) => s.activo || s.id === gasto?.socio_id)
   const formRef = React.useRef<HTMLFormElement>(null)
 
   async function enviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     fd.set("categoria", categoria)
+    fd.set("socio_id", pagadoPor)
     if (gasto?.id) fd.set("id", String(gasto.id))
     if (!(Number(fd.get("monto")) > 0)) return toast({ title: "El monto debe ser mayor que cero", variant: "destructive" })
     setGuardando(true)
@@ -54,6 +58,19 @@ export function GastoForm({ gasto, categorias, hoy, trigger }: { gasto?: GGasto 
               </div>
               <div className="grid gap-1.5"><Label>Método</Label><Input name="metodo" defaultValue={gasto?.metodo ?? ""} placeholder="Tarjeta, transferencia…" /></div>
             </div>
+            {sociosOpciones.length > 0 && (
+              <div className="grid gap-1.5">
+                <Label>¿Quién lo pagó?</Label>
+                <Select value={pagadoPor || "easycount"} onValueChange={(v) => setPagadoPor(v === "easycount" ? "" : v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="easycount">EasyCount</SelectItem>
+                    {sociosOpciones.map((s) => <SelectItem key={s.id} value={String(s.id)}>Socio: {s.nombre}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {pagadoPor && <p className="text-[11px] text-amber-700">Lo asumió el socio: sale del pool global y se le suma completo en su liquidación del mes.</p>}
+              </div>
+            )}
             <div className="grid gap-1.5"><Label>Descripción</Label><Input name="descripcion" defaultValue={gasto?.descripcion ?? ""} placeholder="Meta Ads octubre, dominio…" /></div>
             <div className="grid gap-1.5"><Label className="flex items-center gap-1"><Paperclip className="h-3.5 w-3.5" /> Comprobante (imagen o PDF, máx. 10 MB)</Label><Input name="archivo" type="file" accept="image/*,application/pdf" />{gasto?.comprobante_path && <p className="text-[11px] text-stone-500">Ya tiene comprobante; si subes otro, lo reemplaza.</p>}</div>
             <div className="grid gap-1.5"><Label>Observaciones</Label><Textarea name="observaciones" rows={2} defaultValue={gasto?.observaciones ?? ""} /></div>

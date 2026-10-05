@@ -502,3 +502,12 @@ CRM + cobros + finanzas **del negocio EasyCount** (no de los tenants): las empre
 - **`gestion_gastos`** (`categoria`, `comprobante_path` en bucket `documentos`), **`gestion_campanas`** (invertido, prospectos/reuniones/clientes generados), **`gestion_actividades`** (bitácora automática + notas), **`gestion_notificaciones`** (`clave` UNIQUE para no duplicar), **`gestion_config`** (fila única: días de prueba = 10, moneda, planes, categorías, plantillas), **`gestion_cuentas`**.
 
 Reglas de negocio PURAS en `lib/gestion/reglas.ts` (fin de prueba, próximo pago mensual —día 29–31 cae al último día— y anual, estado derivado del cobro pagado/próximo/pendiente/atrasado, activo ↔ pago_pendiente, MRR, utilidad/margen, costo por prospecto/cliente) con tests en `tests/gestion-reglas.test.ts`; agregaciones por mes en `lib/gestion/calculos.ts`. `sincronizarGestion()` corre al cargar el portal (sin cron): aplica activo ↔ pago_pendiente y genera las notificaciones del día.
+
+### Socios y liquidaciones (script 077)
+
+- **`gestion_socios`**: `nombre`, `porcentaje` (0–100; los activos no pueden sumar más de 100, lo valida `saveSocioGestion`), `correo`, `notas`, `activo` (inactivo = deja de participar, conserva historia).
+- **`gestion_gastos.socio_id`** (nullable): quién pagó el gasto. NULL = EasyCount; un id = lo asumió ese socio de su bolsa.
+- **`gestion_liquidaciones`**: pagos hechos a un socio a cuenta de lo que se le debe (`fecha`, `monto`, `periodo` 'YYYY-MM', `cuenta_id`, `notas`).
+
+Cálculo (puro, `lib/gestion/socios.ts`, tests en `tests/gestion-socios.test.ts`): por mes, **utilidad = ingresos − todos los gastos**; cada socio activo devenga **% × utilidad + los gastos que él pagó** (reembolso); EasyCount retiene (100 − Σ%) × utilidad. Un gasto asumido por un socio sale del pool global, así baja lo de EasyCount y lo de los demás socios. Saldo por socio = devengado acumulado − liquidaciones pagadas. Pantalla: `/gestion/socios`.
+
