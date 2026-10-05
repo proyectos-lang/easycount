@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { liquidacionMes, repartoPorcentajes, saldoSocios, serieLiquidaciones } from "@/lib/gestion/socios"
+import { estadoResultados, liquidacionMes, repartoPorcentajes, saldoSocios, serieLiquidaciones } from "@/lib/gestion/socios"
 
 const socios = [
   { id: 1, nombre: "Sebas", porcentaje: 40, activo: true },
@@ -63,5 +63,19 @@ describe("acumulado y saldo por socio", () => {
   it("no cuenta liquidaciones posteriores al mes consultado", () => {
     const s = saldoSocios({ anio: 2026, mes: 9, ingresos, gastos, socios, pagos: [{ socio_id: 1, fecha: "2026-10-01", monto: 2000 }] })
     expect(s.find((x) => x.socio_id === 1)).toEqual({ socio_id: 1, nombre: "Sebas", devengado: 2000, pagado: 0, saldo: 2000 })
+  })
+})
+
+describe("estado de resultados (participación DESPUÉS de gastos)", () => {
+  it("Ingresos − Gastos = Utilidad bruta − Participación socios = Utilidad neta", () => {
+    const l = liquidacionMes({ anio: 2026, mes: 10, ingresos: [{ fecha: "2026-10-03", monto: 10000 }], gastos: [{ fecha: "2026-10-05", monto: 2000, socio_id: null }, { fecha: "2026-10-08", monto: 1000, socio_id: 2 }], socios })
+    const e = estadoResultados(l)
+    expect(e).toEqual({ ingresos: 10000, gastos: 3000, utilidadBruta: 7000, participacionSocios: 4900, utilidadNeta: 2100, margenBruto: 0.7, margenNeto: 0.21 })
+    // La utilidad neta es lo que retiene EasyCount; el reembolso del socio ya está en Gastos.
+    expect(e.utilidadNeta).toBe(l.easycountParticipacion)
+  })
+  it("sin socios la utilidad neta es la bruta", () => {
+    const e = estadoResultados(liquidacionMes({ anio: 2026, mes: 10, ingresos: [{ fecha: "2026-10-03", monto: 500 }], gastos: [], socios: [] }))
+    expect([e.utilidadBruta, e.participacionSocios, e.utilidadNeta]).toEqual([500, 0, 500])
   })
 })

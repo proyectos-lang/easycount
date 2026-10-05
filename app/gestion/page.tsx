@@ -52,7 +52,7 @@ export default async function InicioGestion({ searchParams }: { searchParams: Pr
         <Kpi label="Pagos pendientes" value={fmtNum(r.kpis.pagosPendientes)} tono={r.kpis.pagosPendientes > 0 ? "amarillo" : undefined} />
         <Kpi label="Ingresos del mes" value={fmtMoneda(r.kpis.ingresos, m)} tono="verde" />
         <Kpi label="Gastos del mes" value={fmtMoneda(r.kpis.gastos, m)} tono="rojo" />
-        <Kpi label="Utilidad" value={fmtMoneda(r.kpis.utilidad, m)} tono={r.kpis.utilidad >= 0 ? "verde" : "rojo"} />
+        <Kpi label="Utilidad bruta" value={fmtMoneda(r.kpis.utilidad, m)} tono={r.kpis.utilidad >= 0 ? "verde" : "rojo"} />
         <Kpi label="Reuniones próximas" value={fmtNum(r.kpis.reunionesProximas)} />
         <Kpi label="Nuevos prospectos" value={fmtNum(r.kpis.nuevosProspectos)} sub="creados en el mes" />
       </div>

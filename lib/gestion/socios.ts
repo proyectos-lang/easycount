@@ -72,6 +72,34 @@ export function liquidacionMes(args: { anio: number; mes: number; ingresos: Ingr
   return { mes: k, ingresos, gastosEasycount, gastosSocios, utilidad, socios: filas, easycountPorcentaje: pctEc, easycountParticipacion: r2((utilidad * pctEc) / 100) }
 }
 
+export interface EstadoResultadosMes {
+  ingresos: number
+  gastos: number
+  utilidadBruta: number
+  participacionSocios: number
+  utilidadNeta: number
+  margenBruto: number | null
+  margenNeto: number | null
+}
+
+/**
+ * Estado de resultados de EasyCount (la participación va DESPUÉS de gastos):
+ *   Ingresos − Gastos (todos, también los que asumió un socio) = Utilidad bruta
+ *   − Participación socios (Σ % × utilidad bruta)              = Utilidad neta
+ * El reembolso a un socio NO es otra resta: es devolverle un gasto que ya está
+ * dentro de "Gastos".
+ */
+export function estadoResultados(l: LiquidacionMes): EstadoResultadosMes {
+  const gastos = r2(l.gastosEasycount + l.gastosSocios)
+  const participacionSocios = r2(l.socios.reduce((a, s) => a + s.participacion, 0))
+  const utilidadNeta = r2(l.utilidad - participacionSocios)
+  return {
+    ingresos: l.ingresos, gastos, utilidadBruta: l.utilidad, participacionSocios, utilidadNeta,
+    margenBruto: l.ingresos > 0 ? Math.round((l.utilidad / l.ingresos) * 10000) / 10000 : null,
+    margenNeto: l.ingresos > 0 ? Math.round((utilidadNeta / l.ingresos) * 10000) / 10000 : null,
+  }
+}
+
 /** Serie de N meses hasta (anio, mes), del más antiguo al más reciente. */
 export function serieLiquidaciones(args: { anio: number; mes: number; meses: number; ingresos: IngresoCalc[]; gastos: GastoSocioCalc[]; socios: SocioCalc[] }): LiquidacionMes[] {
   const out: LiquidacionMes[] = []

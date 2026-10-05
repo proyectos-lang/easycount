@@ -73,9 +73,9 @@ export default async function SociosPage({ searchParams }: { searchParams: Promi
         <Kpi label={`Ingresos · ${etiquetaMes(sel.anio, sel.mes)}`} value={fmtMoneda(mes.ingresos, m)} tono="verde" />
         <Kpi label="Gastos de EasyCount" value={fmtMoneda(mes.gastosEasycount, m)} tono="rojo" />
         <Kpi label="Gastos asumidos por socios" value={fmtMoneda(mes.gastosSocios, m)} tono="amarillo" sub="salen del pool y se reembolsan" />
-        <Kpi label="Utilidad a repartir" value={fmtMoneda(mes.utilidad, m)} tono={mes.utilidad >= 0 ? "verde" : "rojo"} />
+        <Kpi label="Utilidad bruta" value={fmtMoneda(mes.utilidad, m)} tono={mes.utilidad >= 0 ? "verde" : "rojo"} />
       </div>
-      <Panel titulo={`Liquidación de ${etiquetaMes(sel.anio, sel.mes)}`} descripcion="Participación = % × utilidad (ingresos − todos los gastos). A liquidar = participación + gastos que pagó el socio.">
+      <Panel titulo={`Liquidación de ${etiquetaMes(sel.anio, sel.mes)}`} descripcion="Participación = % × utilidad bruta (ingresos − todos los gastos). A liquidar = participación + gastos que pagó el socio. Lo que queda es la utilidad neta de EasyCount.">
         {mes.socios.length === 0 && mes.utilidad === 0 ? <Vacio titulo="Sin movimientos en el mes" /> : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -93,7 +93,7 @@ export default async function SociosPage({ searchParams }: { searchParams: Promi
                   </tr>
                 ))}
                 <tr className="border-t bg-stone-50">
-                  <td className="py-2 pr-3 font-medium text-stone-600">EasyCount (queda en la empresa)</td>
+                  <td className="py-2 pr-3 font-medium text-stone-600">Utilidad neta (queda en EasyCount)</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{mes.easycountPorcentaje}%</td>
                   <td className={`py-2 pr-3 text-right tabular-nums ${mes.easycountParticipacion < 0 ? "text-red-700" : ""}`}>{fmtMoneda(mes.easycountParticipacion, m)}</td>
                   <td className="py-2 pr-3 text-right">—</td>
@@ -111,7 +111,7 @@ export default async function SociosPage({ searchParams }: { searchParams: Promi
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-[11px] uppercase tracking-wide text-stone-500">
-                <tr><th className="py-1.5 pr-3 font-medium">Mes</th><th className="py-1.5 pr-3 text-right font-medium">Utilidad</th>{conMov.map((s) => <th key={s.id} className="py-1.5 pr-3 text-right font-medium">{s.nombre}</th>)}<th className="py-1.5 text-right font-medium">EasyCount</th></tr>
+                <tr><th className="py-1.5 pr-3 font-medium">Mes</th><th className="py-1.5 pr-3 text-right font-medium">Utilidad bruta</th>{conMov.map((s) => <th key={s.id} className="py-1.5 pr-3 text-right font-medium">{s.nombre}</th>)}<th className="py-1.5 text-right font-medium">Utilidad neta</th></tr>
               </thead>
               <tbody>
                 {serie.map((l) => (
