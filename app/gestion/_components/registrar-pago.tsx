@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
-import { ETIQUETA_METODO, METODOS_PAGO, proximoPago, periodoCubierto, type Ciclo, type MetodoPago } from "@/lib/gestion/reglas"
+import { ETIQUETA_METODO, METODOS_PAGO, basePeriodoPago, proximoPago, periodoCubierto, type Ciclo, type MetodoPago } from "@/lib/gestion/reglas"
 import { registrarPago } from "@/app/gestion/actions"
 import { fmtFecha, fmtMoneda } from "./ui"
 
@@ -46,8 +46,10 @@ export function RegistrarPagoSheet({ abierto, onOpenChange, empresas, cuentas, m
     const e = empresas.find((x) => String(x.id) === v)
     if (e) { setMonto(String(e.cuota || "")); setCiclo(e.ciclo_cobro) }
   }
-  const proximo = fecha ? proximoPago(fecha, ciclo, empresa?.dia_cobro ?? null) : null
-  const periodo = fecha ? periodoCubierto(fecha, ciclo, empresa?.dia_cobro ?? null) : null
+  // Mismo criterio que el servidor: el pago salda el cobro programado del cliente.
+  const base = fecha ? basePeriodoPago(fecha, empresa?.fecha_proximo_pago, empresa?.estado ?? "") : null
+  const proximo = base ? proximoPago(base, ciclo, empresa?.dia_cobro ?? null) : null
+  const periodo = base ? periodoCubierto(base, ciclo, empresa?.dia_cobro ?? null) : null
 
   async function guardar() {
     if (!empresa) return toast({ title: "Elige la empresa", variant: "destructive" })

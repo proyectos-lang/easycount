@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { getSuperadmin, type Superadmin } from "@/lib/services/plataforma"
 import { getHondurasNowISO, getHondurasTodayISODate } from "@/lib/utils/honduras-time"
 import {
-  estadoCobro, estadoDesdeEtapa, estadoEmpresaPorCobro, etapaDesdeEstado, etapaPorResultado, finPrueba, periodoCubierto, primerProximoPago,
+  basePeriodoPago, estadoCobro, estadoDesdeEtapa, estadoEmpresaPorCobro, etapaDesdeEstado, etapaPorResultado, finPrueba, periodoCubierto, primerProximoPago,
   proximoPago, sumarDias, diasEntre, DIAS_PRUEBA_DEFAULT, ETIQUETA_ESTADO, ETIQUETA_ETAPA, ETIQUETA_RESULTADO,
   type Ciclo, type EstadoCobro, type EstadoEmpresa, type EtapaPipeline, type MetodoPago, type MotivoPerdida, type ResultadoReunion,
   type RolGestion, type TipoReunion, type EstadoReunion,
@@ -472,14 +472,16 @@ export interface PagoInput {
 export async function registrarPagoGestion(input: PagoInput): Promise<Resultado<{ id: number; proximo_pago: string }>> {
   return con(async ({ admin, usuario }) => {
     if (!(input.monto > 0)) throw new Error("El monto debe ser mayor que cero.")
-    const { data: emp, error: e1 } = await admin.from("gestion_empresas").select("id, nombre, estado, dia_cobro, ciclo_cobro").eq("id", input.empresa_id).maybeSingle()
+    const { data: emp, error: e1 } = await admin.from("gestion_empresas").select("id, nombre, estado, dia_cobro, ciclo_cobro, fecha_proximo_pago").eq("id", input.empresa_id).maybeSingle()
     if (e1) throw e1
     if (!emp) throw new Error("Empresa no encontrada.")
     const c = emp as Fila
     const diaCobro = c.dia_cobro == null ? null : num(c.dia_cobro)
     const ciclo = input.ciclo_aplicado || ((c.ciclo_cobro as Ciclo) || "mensual")
-    const periodo = periodoCubierto(input.fecha, ciclo, diaCobro)
-    const proximo = proximoPago(input.fecha, ciclo, diaCobro)
+    // El pago salda el cobro programado (aunque llegue tarde), no "desde hoy".
+    const base = basePeriodoPago(input.fecha, txt(c.fecha_proximo_pago), String(c.estado))
+    const periodo = periodoCubierto(base, ciclo, diaCobro)
+    const proximo = proximoPago(base, ciclo, diaCobro)
     const { data, error } = await admin.from("gestion_pagos").insert({
       empresa_id: input.empresa_id, fecha: input.fecha, monto: input.monto, metodo: input.metodo, cuenta_id: input.cuenta_id,
       referencia: txt(input.referencia), observaciones: txt(input.observaciones), ciclo_aplicado: ciclo,

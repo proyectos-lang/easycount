@@ -501,7 +501,7 @@ CRM + cobros + finanzas **del negocio EasyCount** (no de los tenants): las empre
 - **`gestion_reuniones`**: `fecha`, `hora`, `tipo`, `estado`, `resultado`, `motivo_perdida` (CHECK: obligatorio solo si resultado = no_interesado), `proximo_paso`.
 - **`gestion_gastos`** (`categoria`, `comprobante_path` en bucket `documentos`), **`gestion_campanas`** (invertido, prospectos/reuniones/clientes generados), **`gestion_actividades`** (bitácora automática + notas), **`gestion_notificaciones`** (`clave` UNIQUE para no duplicar), **`gestion_config`** (fila única: días de prueba = 10, moneda, planes, categorías, plantillas), **`gestion_cuentas`**.
 
-Reglas de negocio PURAS en `lib/gestion/reglas.ts` (fin de prueba, próximo pago mensual —día 29–31 cae al último día— y anual, estado derivado del cobro pagado/próximo/pendiente/atrasado, activo ↔ pago_pendiente, MRR, utilidad/margen, costo por prospecto/cliente) con tests en `tests/gestion-reglas.test.ts`; agregaciones por mes en `lib/gestion/calculos.ts`. `sincronizarGestion()` corre al cargar el portal (sin cron): aplica activo ↔ pago_pendiente y genera las notificaciones del día.
+Reglas de negocio PURAS en `lib/gestion/reglas.ts` (fin de prueba, próximo pago mensual —día 29–31 cae al último día— y anual; un pago de un cliente vigente salda su COBRO PROGRAMADO aunque llegue tarde —`basePeriodoPago`—, estado derivado del cobro pagado/próximo/pendiente/atrasado, activo ↔ pago_pendiente, MRR, utilidad/margen, costo por prospecto/cliente) con tests en `tests/gestion-reglas.test.ts`; agregaciones por mes en `lib/gestion/calculos.ts`. `sincronizarGestion()` corre al cargar el portal (sin cron): aplica activo ↔ pago_pendiente y genera las notificaciones del día.
 
 ### Socios y liquidaciones (script 077)
 
