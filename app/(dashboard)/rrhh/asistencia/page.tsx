@@ -294,7 +294,7 @@ function MarcacionForm({ editar, empleados, onClose, onSaved }: { editar: Marcac
           <SelectContent>{empleados.map((e) => <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>)}</SelectContent>
         </Select>
       </div>
-      <div className="grid gap-3 grid-cols-3">
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
         <div className="space-y-1"><Label>Fecha</Label><Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} disabled={!!editar} /></div>
         <div className="space-y-1"><Label>Entrada</Label><Input type="time" value={entrada} onChange={(e) => setEntrada(e.target.value)} /></div>
         <div className="space-y-1"><Label>Salida</Label><Input type="time" value={salida} onChange={(e) => setSalida(e.target.value)} /></div>

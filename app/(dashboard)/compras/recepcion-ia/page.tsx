@@ -799,7 +799,7 @@ export default function RecepcionIAPage() {
       </div>
 
       {/* Selector de modo */}
-      <div className="inline-flex rounded-lg border bg-muted/40 p-1 text-sm">
+      <div className="flex w-full rounded-lg border bg-muted/40 p-1 text-xs sm:inline-flex sm:w-auto sm:text-sm">
         {([
           { k: 'digitalizar', label: 'Digitalizar (IA)' },
           { k: 'manual', label: 'Captura manual' },
@@ -809,7 +809,7 @@ export default function RecepcionIAPage() {
             key={t.k}
             type="button"
             onClick={() => setModo(t.k)}
-            className={`rounded-md px-3 py-1.5 font-medium transition-colors ${modo === t.k ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            className={`flex-1 sm:flex-none rounded-md px-2 sm:px-3 py-1.5 font-medium transition-colors ${modo === t.k ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
           >
             {t.label}
           </button>
@@ -1025,6 +1025,205 @@ export default function RecepcionIAPage() {
 
         {/* Verification Table & Costs */}
         {(() => {
+        // Piezas de cada línea, compartidas por la TABLA (md+) y las TARJETAS
+        // de celular (< md): así ambas vistas se comportan igual.
+        const infoLinea = (linea: LineaFactura) => (
+          <>
+            <p className="text-sm font-medium truncate">{linea.nombreExtraido}</p>
+            {linea.tallasDetectadas && linea.tallasDetectadas.length >= 2 && (
+              <p className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
+                <Layers3 className="h-3 w-3" />
+                Tallas: {linea.tallasDetectadas.map((t) => `${t.talla}(${t.cantidad})`).join(" ")}
+              </p>
+            )}
+            {/*
+              Atajo visible solo mientras la linea NO esta
+              mapeada: deja crear el producto con un solo
+              clic, prefilled con el nombre extraido y el
+              costo de la factura.
+            */}
+            {!linea.productoId && (
+              <button
+                type="button"
+                onClick={() => setQuickCreateLineaId(linea.id)}
+                className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 hover:text-amber-900 hover:underline"
+              >
+                <PackagePlus className="h-3 w-3" />
+                {linea.tallasDetectadas && linea.tallasDetectadas.length >= 2 ? "Crear producto tallado" : "Crear producto"}
+              </button>
+            )}
+            {/*
+              Atajo "Agregar tallas": solo si la línea YA está
+              asociada, la empresa usa tallas y el producto NO es
+              tallado aún. Lo convierte en tallado y reparte el
+              ingreso por talla.
+            */}
+            {linea.productoId != null && tallasActivo && !productosTallados.has(linea.productoId) && (
+              <button
+                type="button"
+                onClick={() => setAgregarTallasLineaId(linea.id)}
+                className="mt-1 inline-flex items-center gap-1 text-xs text-sky-700 hover:text-sky-900 hover:underline"
+              >
+                <Layers3 className="h-3 w-3" />
+                Agregar tallas
+              </button>
+            )}
+          </>
+        )
+        const comboLinea = (linea: LineaFactura) => (
+          <Popover 
+            open={linea.comboboxOpen} 
+            onOpenChange={(open) => toggleCombobox(linea.id, open)}
+          >
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                className={cn(
+                  "w-full justify-between text-left font-normal",
+                  !linea.productoId && "text-muted-foreground border-amber-300"
+                )}
+              >
+                {linea.productoId ? (
+                  <span className="truncate">{linea.productoNombre}</span>
+                ) : (
+                  <span>Seleccionar producto...</span>
+                )}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[min(320px,calc(100vw-2rem))] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Buscar producto..." />
+                <CommandList>
+                  <CommandEmpty>
+                    <div className="px-2 py-3 text-center">
+                      <p className="text-sm text-muted-foreground mb-2">
+                        No se encontro producto.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2 border-amber-300 text-amber-800 hover:bg-amber-50"
+                        onClick={() => {
+                          toggleCombobox(linea.id, false)
+                          setQuickCreateLineaId(linea.id)
+                        }}
+                      >
+                        <PackagePlus className="h-4 w-4" />
+                        Crear este producto
+                      </Button>
+                    </div>
+                  </CommandEmpty>
+                  <CommandGroup>
+                    {productos.map((producto) => (
+                      <CommandItem
+                        key={producto.id}
+                        value={`${producto.nombre} ${producto.codigo_barras}`}
+                        onSelect={() => mapProducto(linea.id, producto)}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            linea.productoId === producto.id ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm truncate">{producto.nombre}</p>
+                          <p className="text-xs text-muted-foreground font-mono">
+                            {producto.codigo_barras}
+                          </p>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+                {/* Footer permanente: quick create siempre visible */}
+                <div className="border-t p-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start gap-2 text-amber-800 hover:bg-amber-50 hover:text-amber-900"
+                    onClick={() => {
+                      toggleCombobox(linea.id, false)
+                      setQuickCreateLineaId(linea.id)
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Crear nuevo producto
+                  </Button>
+                </div>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        )
+        const cantLinea = (linea: LineaFactura, className = "w-16 text-center") => (
+          <Input
+            type="number"
+            min="0"
+            step="any"
+            value={linea.cantidad}
+            onChange={(e) => updateLinea(linea.id, 'cantidad', parseFloat(e.target.value) || 0)}
+            className={className}
+          />
+        )
+        const costoLinea = (linea: LineaFactura, className = "w-24 text-right") => (
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            value={linea.costoOriginal}
+            onChange={(e) => updateLinea(linea.id, 'costoOriginal', parseFloat(e.target.value) || 0)}
+            className={className}
+          />
+        )
+        const costoFinalLinea = (linea: LineaFactura) => (
+          <>
+            <Badge variant="secondary" className="font-mono">
+              L {linea.costoFinalLocal.toFixed(2)}
+            </Badge>
+            {(() => {
+              const prod = prodDeLinea(linea)
+              const precio = linea.precioVenta ?? prod?.precio_venta_sugerido ?? 0
+              const util = +(precio - linea.costoFinalLocal).toFixed(2)
+              const margen = precio > 0 ? +(((precio - linea.costoFinalLocal) / precio) * 100).toFixed(1) : 0
+              if (precio <= 0) return null
+              return (
+                <p className={`mt-1 text-[10px] ${util < 0 ? "text-destructive" : "text-emerald-600"}`}>
+                  Margen {margen}% · Util. L {util.toFixed(2)}
+                </p>
+              )
+            })()}
+          </>
+        )
+        const precioLinea = (linea: LineaFactura, className = "w-24 text-right ml-auto") => (
+          <>
+            <Input
+              type="number" min="0" step="0.01"
+              value={linea.precioVenta ?? (prodDeLinea(linea)?.precio_venta_sugerido ?? 0)}
+              onChange={(e) => updateLinea(linea.id, 'precioVenta', parseFloat(e.target.value) || 0)}
+              className={className}
+            />
+            {(() => {
+              const prod = prodDeLinea(linea)
+              return (
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Ant.: L {(prod?.precio_venta_sugerido ?? 0).toFixed(2)} · Costo ant.: L {(prod?.costo_promedio ?? 0).toFixed(2)}
+                </p>
+              )
+            })()}
+          </>
+        )
+        const quitarLinea = (linea: LineaFactura) => (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-destructive hover:text-destructive"
+            onClick={() => removeLinea(linea.id)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )
         const verCard = (
         <Card className="lg:col-span-2">
           <CardHeader className="p-4 md:p-6">
@@ -1092,8 +1291,45 @@ export default function RecepcionIAPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Products Table */}
-                <div className="border rounded-lg overflow-hidden">
+                {/* Celular (< md): una tarjeta por línea, sin scroll horizontal. */}
+                <div className="space-y-3 md:hidden">
+                  {lineas.map((linea) => (
+                    <div
+                      key={linea.id}
+                      className={cn("rounded-lg border p-3 space-y-3", !linea.productoId && "border-amber-300 bg-amber-50/50")}
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="min-w-0 flex-1">{infoLinea(linea)}</div>
+                        {quitarLinea(linea)}
+                      </div>
+                      <div>
+                        <Label className="text-[11px] text-muted-foreground">Producto</Label>
+                        <div className="mt-1">{comboLinea(linea)}</div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <Label className="text-[11px] text-muted-foreground">Cant.</Label>
+                          <div className="mt-1">{cantLinea(linea, "w-full text-center")}</div>
+                        </div>
+                        <div>
+                          <Label className="text-[11px] text-muted-foreground">Costo orig.</Label>
+                          <div className="mt-1">{costoLinea(linea, "w-full text-right")}</div>
+                        </div>
+                        <div>
+                          <Label className="text-[11px] text-muted-foreground">Precio venta</Label>
+                          <div className="mt-1">{precioLinea(linea, "w-full text-right")}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 border-t pt-2">
+                        <span className="text-xs text-muted-foreground">Costo final</span>
+                        <div className="text-right">{costoFinalLinea(linea)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Products Table (md+) */}
+                <div className="hidden md:block border rounded-lg overflow-hidden">
                   <Table containerClassName="max-h-[60vh] overflow-y-auto">
                     <TableHeader sticky>
                       <TableRow className="bg-muted/50">
@@ -1109,197 +1345,13 @@ export default function RecepcionIAPage() {
                     <TableBody>
                       {lineas.map((linea) => (
                         <TableRow key={linea.id} className={!linea.productoId ? "bg-amber-50/50" : ""}>
-                          <TableCell>
-                            <p className="text-sm font-medium truncate">{linea.nombreExtraido}</p>
-                            {linea.tallasDetectadas && linea.tallasDetectadas.length >= 2 && (
-                              <p className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
-                                <Layers3 className="h-3 w-3" />
-                                Tallas: {linea.tallasDetectadas.map((t) => `${t.talla}(${t.cantidad})`).join(" ")}
-                              </p>
-                            )}
-                            {/*
-                              Atajo visible solo mientras la linea NO esta
-                              mapeada: deja crear el producto con un solo
-                              clic, prefilled con el nombre extraido y el
-                              costo de la factura.
-                            */}
-                            {!linea.productoId && (
-                              <button
-                                type="button"
-                                onClick={() => setQuickCreateLineaId(linea.id)}
-                                className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 hover:text-amber-900 hover:underline"
-                              >
-                                <PackagePlus className="h-3 w-3" />
-                                {linea.tallasDetectadas && linea.tallasDetectadas.length >= 2 ? "Crear producto tallado" : "Crear producto"}
-                              </button>
-                            )}
-                            {/*
-                              Atajo "Agregar tallas": solo si la línea YA está
-                              asociada, la empresa usa tallas y el producto NO es
-                              tallado aún. Lo convierte en tallado y reparte el
-                              ingreso por talla.
-                            */}
-                            {linea.productoId != null && tallasActivo && !productosTallados.has(linea.productoId) && (
-                              <button
-                                type="button"
-                                onClick={() => setAgregarTallasLineaId(linea.id)}
-                                className="mt-1 inline-flex items-center gap-1 text-xs text-sky-700 hover:text-sky-900 hover:underline"
-                              >
-                                <Layers3 className="h-3 w-3" />
-                                Agregar tallas
-                              </button>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Popover 
-                              open={linea.comboboxOpen} 
-                              onOpenChange={(open) => toggleCombobox(linea.id, open)}
-                            >
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  role="combobox"
-                                  className={cn(
-                                    "w-full justify-between text-left font-normal",
-                                    !linea.productoId && "text-muted-foreground border-amber-300"
-                                  )}
-                                >
-                                  {linea.productoId ? (
-                                    <span className="truncate">{linea.productoNombre}</span>
-                                  ) : (
-                                    <span>Seleccionar producto...</span>
-                                  )}
-                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-[320px] p-0" align="start">
-                                <Command>
-                                  <CommandInput placeholder="Buscar producto..." />
-                                  <CommandList>
-                                    <CommandEmpty>
-                                      <div className="px-2 py-3 text-center">
-                                        <p className="text-sm text-muted-foreground mb-2">
-                                          No se encontro producto.
-                                        </p>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          className="gap-2 border-amber-300 text-amber-800 hover:bg-amber-50"
-                                          onClick={() => {
-                                            toggleCombobox(linea.id, false)
-                                            setQuickCreateLineaId(linea.id)
-                                          }}
-                                        >
-                                          <PackagePlus className="h-4 w-4" />
-                                          Crear este producto
-                                        </Button>
-                                      </div>
-                                    </CommandEmpty>
-                                    <CommandGroup>
-                                      {productos.map((producto) => (
-                                        <CommandItem
-                                          key={producto.id}
-                                          value={`${producto.nombre} ${producto.codigo_barras}`}
-                                          onSelect={() => mapProducto(linea.id, producto)}
-                                        >
-                                          <Check
-                                            className={cn(
-                                              "mr-2 h-4 w-4",
-                                              linea.productoId === producto.id ? "opacity-100" : "opacity-0"
-                                            )}
-                                          />
-                                          <div className="flex-1 min-w-0">
-                                            <p className="text-sm truncate">{producto.nombre}</p>
-                                            <p className="text-xs text-muted-foreground font-mono">
-                                              {producto.codigo_barras}
-                                            </p>
-                                          </div>
-                                        </CommandItem>
-                                      ))}
-                                    </CommandGroup>
-                                  </CommandList>
-                                  {/* Footer permanente: quick create siempre visible */}
-                                  <div className="border-t p-2">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="w-full justify-start gap-2 text-amber-800 hover:bg-amber-50 hover:text-amber-900"
-                                      onClick={() => {
-                                        toggleCombobox(linea.id, false)
-                                        setQuickCreateLineaId(linea.id)
-                                      }}
-                                    >
-                                      <Plus className="h-4 w-4" />
-                                      Crear nuevo producto
-                                    </Button>
-                                  </div>
-                                </Command>
-                              </PopoverContent>
-                            </Popover>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="any"
-                              value={linea.cantidad}
-                              onChange={(e) => updateLinea(linea.id, 'cantidad', parseFloat(e.target.value) || 0)}
-                              className="w-16 text-center"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={linea.costoOriginal}
-                              onChange={(e) => updateLinea(linea.id, 'costoOriginal', parseFloat(e.target.value) || 0)}
-                              className="w-24 text-right"
-                            />
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Badge variant="secondary" className="font-mono">
-                              L {linea.costoFinalLocal.toFixed(2)}
-                            </Badge>
-                            {(() => {
-                              const prod = prodDeLinea(linea)
-                              const precio = linea.precioVenta ?? prod?.precio_venta_sugerido ?? 0
-                              const util = +(precio - linea.costoFinalLocal).toFixed(2)
-                              const margen = precio > 0 ? +(((precio - linea.costoFinalLocal) / precio) * 100).toFixed(1) : 0
-                              if (precio <= 0) return null
-                              return (
-                                <p className={`mt-1 text-[10px] ${util < 0 ? "text-destructive" : "text-emerald-600"}`}>
-                                  Margen {margen}% · Util. L {util.toFixed(2)}
-                                </p>
-                              )
-                            })()}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Input
-                              type="number" min="0" step="0.01"
-                              value={linea.precioVenta ?? (prodDeLinea(linea)?.precio_venta_sugerido ?? 0)}
-                              onChange={(e) => updateLinea(linea.id, 'precioVenta', parseFloat(e.target.value) || 0)}
-                              className="w-24 text-right ml-auto"
-                            />
-                            {(() => {
-                              const prod = prodDeLinea(linea)
-                              return (
-                                <p className="mt-1 text-[10px] text-muted-foreground">
-                                  Ant.: L {(prod?.precio_venta_sugerido ?? 0).toFixed(2)} · Costo ant.: L {(prod?.costo_promedio ?? 0).toFixed(2)}
-                                </p>
-                              )
-                            })()}
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              onClick={() => removeLinea(linea.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
+                          <TableCell>{infoLinea(linea)}</TableCell>
+                          <TableCell>{comboLinea(linea)}</TableCell>
+                          <TableCell>{cantLinea(linea)}</TableCell>
+                          <TableCell>{costoLinea(linea)}</TableCell>
+                          <TableCell className="text-right">{costoFinalLinea(linea)}</TableCell>
+                          <TableCell className="text-right">{precioLinea(linea)}</TableCell>
+                          <TableCell>{quitarLinea(linea)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -1421,7 +1473,7 @@ export default function RecepcionIAPage() {
 
                 {/* Totals */}
                 <div className="bg-gradient-to-r from-stone-50 to-amber-50/50 rounded-lg p-4">
-                  <div className="grid gap-2 md:grid-cols-4 text-sm">
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-4 text-sm">
                     <div>
                       <p className="text-muted-foreground">Subtotal ({moneda})</p>
                       <p className="font-medium">{formatCurrency(totales.subtotalOriginal, moneda)}</p>
@@ -1443,7 +1495,9 @@ export default function RecepcionIAPage() {
                   </div>
                 </div>
 
-                {/* Submit Button */}
+                {/* Submit Button: en celular queda fijo abajo para que siempre se
+                    vea, aunque la lista de productos sea larga. */}
+                <div className="sticky bottom-0 z-10 -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
                 <Button
                   className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700"
                   size="lg"
@@ -1462,6 +1516,7 @@ export default function RecepcionIAPage() {
                     </>
                   )}
                 </Button>
+                </div>
                 
                 {!allProductsMapped && lineas.length > 0 && (
                   <p className="text-sm text-amber-600 text-center flex items-center justify-center gap-2">
@@ -1489,7 +1544,9 @@ export default function RecepcionIAPage() {
         // diálogo que abarca toda la pantalla, para más visibilidad.
         return modo === 'manual' && mapeoFullScreen ? (
           <Dialog open={mapeoFullScreen} onOpenChange={setMapeoFullScreen}>
-            <DialogContent className="max-w-none w-screen h-screen sm:rounded-none p-4 md:p-6 overflow-y-auto flex flex-col">
+            {/* 100dvh = alto VISIBLE (en celular h-screen queda bajo la barra del
+                navegador y tapaba el botón Confirmar). Un solo scroll interno. */}
+            <DialogContent className="max-w-none sm:max-w-none w-screen h-[100dvh] max-h-[100dvh] rounded-none sm:rounded-none p-3 md:p-6 gap-3 flex flex-col">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <PackageCheck className="h-5 w-5" /> Verificación y Mapeo de Productos
