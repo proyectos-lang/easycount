@@ -44,6 +44,9 @@ export default async function PlataformaLayout({
           </div>
           <div className="flex items-center gap-4 text-sm text-stone-500">
             <span className="hidden sm:inline">{sa.email}</span>
+            <Link href="/gestion" className="rounded-md bg-stone-800 px-2.5 py-1 text-xs font-medium text-white hover:bg-stone-700">
+              Gestión (CRM y cobros)
+            </Link>
             <Link href="/dashboard" className="underline underline-offset-4">
               Ir a la app
             </Link>
