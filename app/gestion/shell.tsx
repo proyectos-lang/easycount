@@ -4,7 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  Home, CreditCard, CalendarDays, Building2, Users, Handshake, Megaphone, Wallet, Receipt, BarChart3, PieChart, UserCog, Settings, LogOut, Plus, ExternalLink, ShieldCheck,
+  Home, CreditCard, CalendarDays, Building2, Users, Handshake, Megaphone, Wallet, Receipt, BarChart3, PieChart, Repeat, UserCog, Settings, LogOut, Plus, ExternalLink, ShieldCheck,
 } from "lucide-react"
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu,
@@ -45,6 +45,7 @@ const GRUPOS: Grupo[] = [
     { href: "/gestion/publicidad", label: "Publicidad", icon: Megaphone },
   ] },
   { titulo: "Dinero", roles: ["administrador", "contabilidad"], items: [
+    { href: "/gestion/suscripciones", label: "Suscripciones", icon: Repeat },
     { href: "/gestion/finanzas", label: "Finanzas", icon: Wallet },
     { href: "/gestion/gastos", label: "Gastos", icon: Receipt },
     { href: "/gestion/socios", label: "Socios", icon: PieChart },
@@ -58,10 +59,10 @@ const GRUPOS: Grupo[] = [
 
 const TITULOS: Record<string, string> = {
   "/gestion": "Inicio", "/gestion/pagos": "Pagos", "/gestion/calendario": "Calendario", "/gestion/empresas": "Empresas", "/gestion/prospectos": "Prospectos",
-  "/gestion/reuniones": "Reuniones", "/gestion/publicidad": "Publicidad", "/gestion/finanzas": "Finanzas", "/gestion/gastos": "Gastos", "/gestion/reportes": "Reportes", "/gestion/socios": "Socios",
+  "/gestion/reuniones": "Reuniones", "/gestion/publicidad": "Publicidad", "/gestion/finanzas": "Finanzas", "/gestion/gastos": "Gastos", "/gestion/reportes": "Reportes", "/gestion/socios": "Socios", "/gestion/suscripciones": "Suscripciones",
   "/gestion/usuarios": "Usuarios", "/gestion/configuracion": "Configuración",
 }
-const CON_MES = new Set(["/gestion", "/gestion/pagos", "/gestion/calendario", "/gestion/gastos", "/gestion/finanzas", "/gestion/publicidad", "/gestion/socios"])
+const CON_MES = new Set(["/gestion", "/gestion/pagos", "/gestion/calendario", "/gestion/gastos", "/gestion/finanzas", "/gestion/publicidad", "/gestion/socios", "/gestion/suscripciones"])
 
 function iniciales(n: string): string {
   const p = n.trim().split(/\s+/)
