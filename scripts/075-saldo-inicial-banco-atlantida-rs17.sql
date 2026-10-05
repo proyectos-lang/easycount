@@ -41,9 +41,10 @@ END $$;
 
 -- 1) Saldo inicial (solo si la cuenta no tiene ya una apertura).
 INSERT INTO public.cuenta_movimientos
-  (razon_social_id, cuenta_id, fecha, tipo, monto, concepto, ref_tipo, ref_id, usuario)
+  (razon_social_id, cuenta_id, fecha, tipo, monto, concepto, ref_tipo, ref_id, usuario, saldo_resultante)
+-- saldo_resultante es NOT NULL: valor provisional, el paso 2 lo recalcula.
 SELECT 17, 27, '2026-09-30T00:00:00+00', 'Ingreso', 15823.09, 'Saldo inicial', 'apertura', NULL,
-       'Soporte (script 075)'
+       'Soporte (script 075)', 15823.09
 WHERE NOT EXISTS (
   SELECT 1 FROM public.cuenta_movimientos
   WHERE cuenta_id = 27 AND ref_tipo = 'apertura'
