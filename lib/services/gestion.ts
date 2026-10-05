@@ -109,7 +109,15 @@ export interface GGasto {
   observaciones: string | null
   usuario: string | null
   created_at: string
+  /** Quién pagó el gasto: null = EasyCount; id = socio (script 077). */
+  socio_id: number | null
 }
+
+export interface GSocio { id: number; nombre: string; porcentaje: number; correo: string | null; notas: string | null; activo: boolean }
+export interface GLiquidacion { id: number; socio_id: number; fecha: string; monto: number; periodo: string | null; cuenta_id: number | null; notas: string | null; usuario: string | null; created_at: string }
+
+/** Marca la ausencia del script 077 (socios). El resto del portal sigue funcionando. */
+export const SOCIOS_FEATURE_PENDING = "Socios y liquidaciones necesitan la base de datos: aplica scripts/077-gestion-socios.sql en Supabase."
 
 export interface GCampana {
   id: number
@@ -589,7 +597,7 @@ export async function deleteReunionGestion(id: number): Promise<Resultado<true>>
 // ==================== GASTOS ====================
 
 function mapGasto(g: Fila): GGasto {
-  return { id: num(g.id), fecha: String(g.fecha), categoria: String(g.categoria || "otros"), descripcion: txt(g.descripcion), monto: num(g.monto), metodo: txt(g.metodo), comprobante_path: txt(g.comprobante_path), observaciones: txt(g.observaciones), usuario: txt(g.usuario), created_at: String(g.created_at) }
+  return { id: num(g.id), fecha: String(g.fecha), categoria: String(g.categoria || "otros"), descripcion: txt(g.descripcion), monto: num(g.monto), metodo: txt(g.metodo), comprobante_path: txt(g.comprobante_path), observaciones: txt(g.observaciones), usuario: txt(g.usuario), created_at: String(g.created_at), socio_id: g.socio_id == null ? null : num(g.socio_id) }
 }
 
 export async function getGastosGestion(opts: { desde?: string; hasta?: string } = {}): Promise<Resultado<GGasto[]>> {
@@ -604,13 +612,17 @@ export async function getGastosGestion(opts: { desde?: string; hasta?: string } 
   })
 }
 
-export interface GastoInput { id?: number; fecha: string; categoria: string; descripcion?: string | null; monto: number; metodo?: string | null; observaciones?: string | null; comprobante_path?: string | null }
+export interface GastoInput { id?: number; fecha: string; categoria: string; descripcion?: string | null; monto: number; metodo?: string | null; observaciones?: string | null; comprobante_path?: string | null; socio_id?: number | null }
 
 export async function saveGastoGestion(input: GastoInput): Promise<Resultado<number>> {
   return con(async ({ admin, usuario }) => {
     if (!(input.monto > 0)) throw new Error("El monto debe ser mayor que cero.")
     const payload: Fila = { fecha: input.fecha, categoria: input.categoria || "otros", descripcion: txt(input.descripcion), monto: input.monto, metodo: txt(input.metodo), observaciones: txt(input.observaciones), usuario }
     if (input.comprobante_path !== undefined) payload.comprobante_path = input.comprobante_path
+    // Quién lo pagó (script 077). Solo se envía si es un socio, o al editar
+    // (para poder volverlo a EasyCount); así un gasto de EasyCount se sigue
+    // pudiendo crear aunque el 077 no esté aplicado.
+    if (input.socio_id != null || (input.id && input.socio_id !== undefined)) payload.socio_id = input.socio_id ?? null
     if (input.id) {
       const { error } = await admin.from("gestion_gastos").update(payload).eq("id", input.id)
       if (error) throw error
@@ -690,6 +702,93 @@ export async function deleteCampanaGestion(id: number): Promise<Resultado<true>>
   })
 }
 
+// ==================== SOCIOS Y LIQUIDACIONES (script 077) ====================
+
+async function leerSocios(admin: SupabaseClient): Promise<GSocio[]> {
+  const { data, error } = await admin.from("gestion_socios").select("*").order("porcentaje", { ascending: false }).order("nombre")
+  if (error) throw error
+  return ((data || []) as Fila[]).map((r) => ({ id: num(r.id), nombre: String(r.nombre), porcentaje: num(r.porcentaje), correo: txt(r.correo), notas: txt(r.notas), activo: r.activo !== false }))
+}
+
+async function leerLiquidaciones(admin: SupabaseClient): Promise<GLiquidacion[]> {
+  const rows = await todas((a, b) => admin.from("gestion_liquidaciones").select("*").order("fecha", { ascending: false }).order("id", { ascending: false }).range(a, b))
+  return rows.map((r) => ({ id: num(r.id), socio_id: num(r.socio_id), fecha: String(r.fecha), monto: num(r.monto), periodo: txt(r.periodo), cuenta_id: r.cuenta_id == null ? null : num(r.cuenta_id), notas: txt(r.notas), usuario: txt(r.usuario), created_at: String(r.created_at) }))
+}
+
+/** Socios y liquidaciones; `pendiente` = el script 077 no está aplicado (no rompe el portal). */
+export async function getSociosGestion(): Promise<Resultado<{ socios: GSocio[]; liquidaciones: GLiquidacion[]; pendiente: string | null }>> {
+  return con(async ({ admin }) => {
+    try {
+      const [socios, liquidaciones] = await Promise.all([leerSocios(admin), leerLiquidaciones(admin)])
+      return { socios, liquidaciones, pendiente: null }
+    } catch (e) {
+      if (mensajeError(e) === GESTION_FEATURE_PENDING) return { socios: [], liquidaciones: [], pendiente: SOCIOS_FEATURE_PENDING }
+      throw e
+    }
+  })
+}
+
+export interface SocioInput { id?: number; nombre: string; porcentaje: number; correo?: string | null; notas?: string | null; activo?: boolean }
+
+/** Crea/edita un socio. La suma de % de los socios activos no puede pasar de 100. */
+export async function saveSocioGestion(input: SocioInput): Promise<Resultado<number>> {
+  return con(async ({ admin }) => {
+    const pct = Math.round((Number(input.porcentaje) || 0) * 100) / 100
+    if (pct < 0 || pct > 100) throw new Error("El porcentaje debe estar entre 0 y 100.")
+    const activo = input.activo ?? true
+    const otros = (await leerSocios(admin)).filter((s) => s.activo && s.id !== input.id).reduce((a, s) => a + s.porcentaje, 0)
+    if (activo && otros + pct > 100.0001) {
+      throw new Error(`Los socios activos sumarían ${Math.round((otros + pct) * 100) / 100}%: no puede pasar de 100%. Disponible: ${Math.round((100 - otros) * 100) / 100}%.`)
+    }
+    const payload = { nombre: input.nombre.trim(), porcentaje: pct, correo: txt(input.correo), notas: txt(input.notas), activo, updated_at: new Date().toISOString() }
+    if (!payload.nombre) throw new Error("El nombre es obligatorio.")
+    if (input.id) {
+      const { error } = await admin.from("gestion_socios").update(payload).eq("id", input.id)
+      if (error) throw error
+      return input.id
+    }
+    const { data, error } = await admin.from("gestion_socios").insert(payload).select("id").single()
+    if (error) throw error
+    return num((data as Fila).id)
+  })
+}
+
+/** Solo se elimina un socio sin gastos ni liquidaciones; si tiene historia, se desactiva. */
+export async function deleteSocioGestion(id: number): Promise<Resultado<true>> {
+  return con(async ({ admin }) => {
+    const [{ count: g }, { count: l }] = await Promise.all([
+      admin.from("gestion_gastos").select("id", { count: "exact", head: true }).eq("socio_id", id),
+      admin.from("gestion_liquidaciones").select("id", { count: "exact", head: true }).eq("socio_id", id),
+    ])
+    if ((g || 0) + (l || 0) > 0) throw new Error("Este socio tiene gastos o liquidaciones registrados: desactívalo en lugar de eliminarlo.")
+    const { error } = await admin.from("gestion_socios").delete().eq("id", id)
+    if (error) throw error
+    return true as const
+  })
+}
+
+export interface LiquidacionInput { socio_id: number; fecha: string; monto: number; periodo?: string | null; cuenta_id?: number | null; notas?: string | null }
+
+/** Registra un pago hecho a un socio (a cuenta de lo que se le debe). */
+export async function registrarLiquidacionGestion(input: LiquidacionInput): Promise<Resultado<number>> {
+  return con(async ({ admin, usuario }) => {
+    if (!(input.monto > 0)) throw new Error("El monto debe ser mayor que cero.")
+    const { data, error } = await admin.from("gestion_liquidaciones").insert({
+      socio_id: input.socio_id, fecha: input.fecha, monto: input.monto, periodo: txt(input.periodo), cuenta_id: input.cuenta_id ?? null, notas: txt(input.notas), usuario,
+    }).select("id").single()
+    if (error) throw error
+    return num((data as Fila).id)
+  })
+}
+
+export async function deleteLiquidacionGestion(id: number): Promise<Resultado<true>> {
+  return con(async ({ admin }) => {
+    const { error } = await admin.from("gestion_liquidaciones").delete().eq("id", id)
+    if (error) throw error
+    return true as const
+  })
+}
+
 // ==================== NOTIFICACIONES Y SINCRONIZACIÓN ====================
 
 export async function getNotificacionesGestion(): Promise<Resultado<GNotificacion[]>> {
@@ -753,12 +852,15 @@ export async function sincronizarGestion(): Promise<void> {
 }
 
 /** Todo lo que necesitan las pantallas agregadas (Inicio, Finanzas, Reportes…) en una sola lectura. */
-export async function getDatosGestion(): Promise<Resultado<{ empresas: GEmpresa[]; pagos: GPago[]; gastos: GGasto[]; reuniones: GReunion[]; campanas: GCampana[]; cuentas: GCuenta[]; config: GConfig; notificaciones: GNotificacion[]; hoy: string }>> {
+export async function getDatosGestion(): Promise<Resultado<{ empresas: GEmpresa[]; pagos: GPago[]; gastos: GGasto[]; reuniones: GReunion[]; campanas: GCampana[]; cuentas: GCuenta[]; config: GConfig; notificaciones: GNotificacion[]; socios: GSocio[]; liquidaciones: GLiquidacion[]; sociosPendiente: string | null; hoy: string }>> {
   return con(async ({ admin, hoy }) => {
-    const [empresas, pagos, gastos, reuniones, campanas, cuentas, config, notis] = await Promise.all([
-      leerEmpresas(admin, hoy), getPagosGestion(), getGastosGestion(), getReunionesGestion(), getCampanasGestion(), getCuentasGestion(), getConfigGestion(), getNotificacionesGestion(),
+    const [empresas, pagos, gastos, reuniones, campanas, cuentas, config, notis, soc] = await Promise.all([
+      leerEmpresas(admin, hoy), getPagosGestion(), getGastosGestion(), getReunionesGestion(), getCampanasGestion(), getCuentasGestion(), getConfigGestion(), getNotificacionesGestion(), getSociosGestion(),
     ])
-    for (const r of [pagos, gastos, reuniones, campanas, cuentas, config, notis]) if (r.error) throw new Error(r.error)
-    return { empresas, pagos: pagos.data!, gastos: gastos.data!, reuniones: reuniones.data!, campanas: campanas.data!, cuentas: cuentas.data!, config: config.data!, notificaciones: notis.data!, hoy }
+    for (const r of [pagos, gastos, reuniones, campanas, cuentas, config, notis, soc]) if (r.error) throw new Error(r.error)
+    return {
+      empresas, pagos: pagos.data!, gastos: gastos.data!, reuniones: reuniones.data!, campanas: campanas.data!, cuentas: cuentas.data!, config: config.data!, notificaciones: notis.data!,
+      socios: soc.data!.socios, liquidaciones: soc.data!.liquidaciones, sociosPendiente: soc.data!.pendiente, hoy,
+    }
   })
 }
