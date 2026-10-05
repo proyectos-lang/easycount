@@ -337,7 +337,8 @@ function ProductImage({
       height={160}
       unoptimized
       onError={() => setErrored(true)}
-      // El object-fit lo decide cada uso (contain en el grid, cover en la lista).
+      // El object-fit lo decide cada uso (cover en el grid y en la lista: todas
+      // las fotos llenan su recuadro y se ven del mismo tamaño).
       className={cn(className)}
     />
   )
@@ -374,11 +375,13 @@ function ProductGrid({ productos, idsEnVenta, onAdd, disabled, getStock, precioF
               enVenta && "border-primary"
             )}
           >
-            <div className="relative aspect-square w-full bg-muted/30">
+            {/* Recuadro cuadrado fijo: la foto lo llena (object-cover, centrada),
+                así que todas se ven del mismo tamaño sin importar sus proporciones. */}
+            <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-muted/30">
               <ProductImage
                 url={p.foto_url}
                 nombre={p.nombre}
-                className="h-full w-full object-contain"
+                className="absolute inset-0 h-full w-full object-cover object-center"
               />
               {enVenta && (
                 <span className="absolute top-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow">
@@ -386,8 +389,9 @@ function ProductGrid({ productos, idsEnVenta, onAdd, disabled, getStock, precioF
                 </span>
               )}
             </div>
-            <div className="flex flex-col gap-0.5 p-1.5 sm:p-2 min-w-0">
-              <p className="text-[10px] sm:text-[11px] font-medium leading-tight line-clamp-2 break-words">
+            <div className="flex flex-1 flex-col gap-0.5 p-1.5 sm:p-2 min-w-0">
+              {/* El nombre siempre reserva 2 líneas para que todas las tarjetas alineen. */}
+              <p className="text-[10px] sm:text-[11px] font-medium leading-tight line-clamp-2 break-words min-h-[2lh]">
                 {p.nombre}
               </p>
               {p.talla && (
@@ -400,7 +404,7 @@ function ProductGrid({ productos, idsEnVenta, onAdd, disabled, getStock, precioF
                   {p.codigo_barras}
                 </p>
               )}
-              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 mt-0.5">
+              <div className="mt-auto flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 pt-0.5">
                 {hayLista ? (
                   <span className="flex flex-col items-start leading-none">
                     <span className="text-[8px] sm:text-[9px] text-muted-foreground line-through">L {base.toFixed(2)}</span>
