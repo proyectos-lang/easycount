@@ -137,6 +137,20 @@
     background-color: #ffffff !important;
   }
   
+  /* iOS (Safari) hace zoom al enfocar un campo con letra < 16 px y deja la
+     página ampliada: los botones quedan fuera de la vista. Solo en iOS y en
+     pantallas chicas, todo campo editable usa 16 px. */
+  @supports (-webkit-touch-callout: none) {
+    @media (max-width: 767px) {
+      input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+      textarea,
+      select,
+      [cmdk-input] {
+        font-size: 16px !important;
+      }
+    }
+  }
+
   /* EasyCount Typography System */
   h1, h2, h3, h4, h5, h6 {
     @apply font-bold tracking-tight;

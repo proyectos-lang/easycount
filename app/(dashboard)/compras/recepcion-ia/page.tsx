@@ -792,7 +792,7 @@ export default function RecepcionIAPage() {
   }
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className={cn("space-y-4 md:space-y-6", modo !== 'historial' && lineas.length > 0 && "pb-28 md:pb-0")}>
       <div>
         <h1 className="text-xl md:text-2xl font-semibold text-foreground">Recepcion por Factura</h1>
         <p className="text-sm md:text-base text-muted-foreground">Digitaliza con IA, captura manual, o revisa el historial de facturas de compra.</p>
@@ -1495,9 +1495,15 @@ export default function RecepcionIAPage() {
                   </div>
                 </div>
 
-                {/* Submit Button: en celular queda fijo abajo para que siempre se
-                    vea, aunque la lista de productos sea larga. */}
-                <div className="sticky bottom-0 z-10 -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
+                {/* Submit Button. En la página, en celular se oculta: lo reemplaza
+                    la barra FIJA de abajo (sticky no sirve aquí porque el <main>
+                    del layout tiene overflow sin altura fija y nunca hace scroll).
+                    Dentro del diálogo de pantalla completa sí se ve y queda
+                    sticky, porque allí el contenedor con scroll es real. */}
+                <div className={cn(
+                  "md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none",
+                  mapeoFullScreen ? "sticky bottom-0 z-10 -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur" : "hidden md:block",
+                )}>
                 <Button
                   className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700"
                   size="lg"
@@ -1646,6 +1652,30 @@ export default function RecepcionIAPage() {
         defaultTallas={agregarTallasLinea?.tallasDetectadas}
         onDone={handleTallasAgregadas}
       />
+      {/* Celular: barra FIJA con el total y "Confirmar Recepción" (siempre
+          visible, también en iPhone). No se muestra con la pantalla completa
+          abierta: allí el botón va dentro del diálogo. */}
+      {modo !== 'historial' && lineas.length > 0 && !mapeoFullScreen && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 px-4 pt-2 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] backdrop-blur md:hidden" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
+          <div className="mb-1.5 flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">{lineas.length} producto(s) · Total</span>
+            <span className="font-bold text-amber-700 tabular-nums">{formatCurrency(totales.totalFinal, 'LPS')}</span>
+          </div>
+          <Button
+            className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700"
+            size="lg"
+            onClick={handleProcessRecepcion}
+            disabled={processing || !allProductsMapped || !almacenId || !localizacionId}
+          >
+            {processing ? <><Spinner className="h-4 w-4" /> Procesando…</> : <><CheckCircle2 className="h-4 w-4" /> Confirmar Recepción</>}
+          </Button>
+          {(!allProductsMapped || !almacenId || !localizacionId) && (
+            <p className="mt-1 text-center text-[11px] text-amber-700">
+              {!allProductsMapped ? "Falta asociar productos a un artículo" : "Elige almacén y localización de destino"}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
