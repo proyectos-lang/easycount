@@ -10,7 +10,13 @@
 --
 -- Este script:
 --   1) Inserta el Ingreso 'Saldo inicial' (ref_tipo 'apertura') por 15,823.09
---      con fecha 2026-10-03 00:00 (HN-as-UTC), antes del egreso.
+--      con fecha 2026-09-30 00:00 (HN-as-UTC): saldo al cierre de septiembre.
+--      NO se fecha en octubre porque el usuario ya escribió 15,823.09 como
+--      saldo inicial de OCTUBRE en Consolidación Bancaria (override en
+--      consolidacion_saldos_iniciales): un Ingreso en octubre se sumaría
+--      encima y la consolidación mostraría 23,846.18. Con fecha de septiembre,
+--      el saldo inicial calculado de octubre (15,823.09) coincide con el
+--      override y todas las pantallas dan 8,023.09.
 --   2) Recalcula la cadena saldo_resultante de la cuenta en orden (fecha, id).
 --   3) Recalcula cuentas_config.saldo = SUMA de movimientos (convención de
 --      tesorería). Resultado esperado: 15,823.09 − 7,800 = 8,023.09.
@@ -36,7 +42,7 @@ END $$;
 -- 1) Saldo inicial (solo si la cuenta no tiene ya una apertura).
 INSERT INTO public.cuenta_movimientos
   (razon_social_id, cuenta_id, fecha, tipo, monto, concepto, ref_tipo, ref_id, usuario)
-SELECT 17, 27, '2026-10-03T00:00:00+00', 'Ingreso', 15823.09, 'Saldo inicial', 'apertura', NULL,
+SELECT 17, 27, '2026-09-30T00:00:00+00', 'Ingreso', 15823.09, 'Saldo inicial', 'apertura', NULL,
        'Soporte (script 075)'
 WHERE NOT EXISTS (
   SELECT 1 FROM public.cuenta_movimientos
