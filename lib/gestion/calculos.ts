@@ -4,7 +4,7 @@
  * leídos y `hoy`; no tocan la BD. Testeables.
  */
 import {
-  CATEGORIAS_PUBLICIDAD, ETAPAS_EN_VENTA, diasEntre, esClienteVigente, finPrueba, mesRelativo, mrr, sumarDias, utilidad,
+  CATEGORIAS_PUBLICIDAD, ETAPAS_EN_VENTA, cobrosAdeudados, diasEntre, esClienteVigente, finPrueba, mesRelativo, mrr, sumarDias, utilidad,
   type Ciclo, type EstadoCobro, type EstadoEmpresa, type EtapaPipeline, type MotivoPerdida,
 } from "./reglas"
 
@@ -93,14 +93,32 @@ export function resumenInicio(args: { empresas: EmpresaCalc[]; pagos: PagoCalc[]
   }
 }
 
-/** KPIs de la pantalla Pagos para el mes seleccionado. */
-export function resumenPagos(empresas: EmpresaCalc[], pagos: PagoCalc[], anio: number, mes: number) {
+/** Último día ('YYYY-MM-DD') del mes. */
+const finDeMes = (anio: number, mes: number) => `${mesISO(anio, mes)}-${String(new Date(Date.UTC(anio, mes, 0)).getUTCDate()).padStart(2, "0")}`
+
+/**
+ * Lo que un cliente adeuda hasta fin del mes elegido: cobros ya vencidos
+ * (antes de hoy) y cobros por vencer dentro del mes. Un cliente que arrastra
+ * meses sin pagar debe VARIAS cuotas.
+ */
+export function adeudoCliente(e: EmpresaCalc, hoy: string, anio: number, mes: number) {
+  const hasta = finDeMes(anio, mes)
+  const fechas = esClienteVigente(e.estado) ? cobrosAdeudados(e.fecha_proximo_pago, e.ciclo_cobro, e.dia_cobro, hasta) : []
+  const vencidos = fechas.filter((f) => f < hoy)
+  const porVencer = fechas.filter((f) => f >= hoy)
+  const cuota = Number(e.cuota || 0)
+  return { fechas, vencidos, porVencer, montoVencido: r2(vencidos.length * cuota), montoPorVencer: r2(porVencer.length * cuota), total: r2(fechas.length * cuota) }
+}
+
+/** KPIs de la pantalla Pagos para el mes seleccionado (las cuotas adeudadas se suman todas). */
+export function resumenPagos(empresas: EmpresaCalc[], pagos: PagoCalc[], anio: number, mes: number, hoy: string) {
   const clientes = empresas.filter((e) => esClienteVigente(e.estado))
   const pagosMes = pagos.filter((p) => enMes(p.fecha, anio, mes))
   const cobrado = r2(pagosMes.reduce((s, p) => s + Number(p.monto || 0), 0))
-  const porCobrar = r2(clientes.filter((e) => e.estado_cobro === "pendiente" || e.estado_cobro === "proximo").reduce((s, e) => s + Number(e.cuota || 0), 0))
-  const atrasado = r2(clientes.filter((e) => e.estado_cobro === "atrasado").reduce((s, e) => s + Number(e.cuota || 0), 0))
-  return { cobrado, porCobrar, atrasado, cantidad: pagosMes.length }
+  const adeudos = clientes.map((e) => adeudoCliente(e, hoy, anio, mes))
+  const porCobrar = r2(adeudos.reduce((s, a) => s + a.montoPorVencer, 0))
+  const atrasado = r2(adeudos.reduce((s, a) => s + a.montoVencido, 0))
+  return { cobrado, porCobrar, atrasado, cantidad: pagosMes.length, clientesAtrasados: adeudos.filter((a) => a.vencidos.length > 0).length }
 }
 
 /** Finanzas del mes: totales, MRR, ingresos por cuenta y top de clientes. */

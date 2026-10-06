@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import {
-  basePeriodoPago, finPrueba, proximoPagoMensual, proximoPagoAnual, proximoPago, periodoCubierto, primerProximoPago,
+  basePeriodoPago, cobrosAdeudados, finPrueba, proximoPagoMensual, proximoPagoAnual, proximoPago, periodoCubierto, primerProximoPago,
   estadoCobro, estadoEmpresaPorCobro, mrr, utilidad, costoPor, sumarMeses, ultimoDiaMes, diasEntre,
   estadoDesdeEtapa, etapaDesdeEstado, etapaPorResultado,
 } from "@/lib/gestion/reglas"
@@ -129,5 +129,15 @@ describe("pago atrasado o adelantado", () => {
     expect(basePeriodoPago("2026-10-10", "2026-09-15", "pago_pendiente")).toBe("2026-09-15")
     expect(basePeriodoPago("2026-10-10", null, "activo")).toBe("2026-10-10")
     expect(basePeriodoPago("2026-10-10", "2026-09-15", "prueba")).toBe("2026-10-10")
+  })
+})
+
+describe("cuotas adeudadas", () => {
+  it("lista desde el próximo pago (el más antiguo sin pagar) hasta la fecha dada", () => {
+    expect(cobrosAdeudados("2026-09-05", "mensual", 5, "2026-10-31")).toEqual(["2026-09-05", "2026-10-05"])
+    expect(cobrosAdeudados("2026-10-17", "mensual", 17, "2026-10-31")).toEqual(["2026-10-17"])
+    expect(cobrosAdeudados("2026-11-05", "mensual", 5, "2026-10-31")).toEqual([])
+    expect(cobrosAdeudados("2027-08-20", "anual", null, "2026-10-31")).toEqual([])
+    expect(cobrosAdeudados(null, "mensual", 5, "2026-10-31")).toEqual([])
   })
 })

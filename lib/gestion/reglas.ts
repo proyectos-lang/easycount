@@ -154,6 +154,22 @@ export function periodoCubierto(fechaPago: string, ciclo: Ciclo, diaCobro: numbe
 }
 
 /**
+ * Cobros que el cliente adeuda desde su próximo pago (el más antiguo sin
+ * pagar) hasta `hasta` inclusive. Ej.: próximo pago 05/09 y hasta 31/10 →
+ * ["2026-09-05", "2026-10-05"] (debe septiembre y octubre). Tope de 60
+ * cobros por seguridad.
+ */
+export function cobrosAdeudados(fechaProximoPago: string | null | undefined, ciclo: Ciclo, diaCobro: number | null | undefined, hasta: string): string[] {
+  const out: string[] = []
+  let f = fechaProximoPago || null
+  while (f && f <= hasta && out.length < 60) {
+    out.push(f)
+    f = proximoPago(f, ciclo, diaCobro)
+  }
+  return out
+}
+
+/**
  * Primer vencimiento de un cliente que se activa SIN pago previo: mensual →
  * el día de cobro de este mes si aún no pasó, si no el del mes siguiente;
  * anual → instalación (o hoy) + 12 meses.
