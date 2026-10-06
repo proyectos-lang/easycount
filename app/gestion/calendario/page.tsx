@@ -2,15 +2,17 @@ import Link from "next/link"
 import { datosGestion } from "../datos"
 import { leerMes } from "@/lib/gestion/mes"
 import { etiquetaMes, mesISO } from "@/lib/gestion/calculos"
-import { esClienteVigente, ultimoDiaMes } from "@/lib/gestion/reglas"
+import { ultimoDiaMes } from "@/lib/gestion/reglas"
+import { cobrosDelMes } from "@/lib/gestion/suscripciones"
 import { cn } from "@/lib/utils"
 import { fmtHora } from "../_components/ui"
 
 export const dynamic = "force-dynamic"
 
-type Evento = { tipo: "pago" | "prueba" | "reunion" | "atrasado"; texto: string; href: string }
+type Evento = { tipo: "pago" | "porcobrar" | "prueba" | "reunion" | "atrasado"; texto: string; href: string }
 const ESTILO: Record<Evento["tipo"], string> = {
   pago: "bg-emerald-100 text-emerald-800 hover:bg-emerald-200",
+  porcobrar: "bg-amber-100 text-amber-900 hover:bg-amber-200",
   prueba: "bg-sky-100 text-sky-800 hover:bg-sky-200",
   reunion: "bg-slate-800 text-white hover:bg-slate-700",
   atrasado: "bg-red-100 text-red-800 hover:bg-red-200",
@@ -27,10 +29,16 @@ export default async function CalendarioPage({ searchParams }: { searchParams: P
 
   const eventos = new Map<string, Evento[]>()
   const add = (fecha: string | null | undefined, ev: Evento) => { if (fecha && fecha.startsWith(clave)) eventos.set(fecha, [...(eventos.get(fecha) || []), ev]) }
+  // Cada cuota que vence en el mes, aunque el cliente arrastre atrasos de
+  // meses anteriores: pagada (verde), por cobrar (ámbar) o vencida (rojo).
+  const cobros = cobrosDelMes({
+    empresas: d.empresas, hoy: d.hoy, anio: sel.anio, mes: sel.mes,
+    pagos: d.pagos.map((p) => ({ empresa_id: p.empresa_id, fecha: p.fecha, monto: p.monto, periodo_cubierto_desde: p.periodo_cubierto_desde, periodo_cubierto_hasta: p.periodo_cubierto_hasta })),
+  })
+  for (const c of cobros) {
+    add(c.vence, { tipo: c.estado === "pagado" ? "pago" : c.estado === "vencido" ? "atrasado" : "porcobrar", texto: `${c.estado === "pagado" ? "✓ " : ""}${c.nombre}`, href: `/gestion/empresas/${c.empresa_id}` })
+  }
   for (const e of d.empresas) {
-    if (esClienteVigente(e.estado) && e.fecha_proximo_pago) {
-      add(e.fecha_proximo_pago, { tipo: e.fecha_proximo_pago < d.hoy ? "atrasado" : "pago", texto: `${e.nombre}`, href: `/gestion/empresas/${e.id}` })
-    }
     if (e.estado === "prueba" && e.fin_prueba) add(e.fin_prueba, { tipo: "prueba", texto: `Fin prueba · ${e.nombre}`, href: `/gestion/empresas/${e.id}` })
   }
   for (const r of d.reuniones) add(r.fecha, { tipo: "reunion", texto: `${fmtHora(r.hora)} ${r.empresa_nombre || "Reunión"}`, href: `/gestion/reuniones?reunion=${r.id}` })
@@ -45,10 +53,11 @@ export default async function CalendarioPage({ searchParams }: { searchParams: P
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-stone-800">{etiquetaMes(sel.anio, sel.mes)}</h2>
         <div className="flex flex-wrap gap-2 text-[11px] text-stone-600">
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-300" /> Pago</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-300" /> Cuota pagada</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-amber-300" /> Cuota por cobrar</span>
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-sky-300" /> Fin de prueba</span>
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-slate-800" /> Reunión</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-red-300" /> Atrasado</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-red-300" /> Cuota vencida</span>
         </div>
       </div>
       <div className="overflow-x-auto">

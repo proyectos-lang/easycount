@@ -4,7 +4,7 @@ import { datosGestion } from "../datos"
 import { EmpresaForm } from "../_components/empresa-form"
 import { TrLink } from "../_components/tr-link"
 import { Chips, CicloBadge, EstadoBadge, Vacio, fmtFecha, fmtMoneda } from "../_components/ui"
-import type { EstadoEmpresa } from "@/lib/gestion/reglas"
+import { cobrosAdeudados, type EstadoEmpresa } from "@/lib/gestion/reglas"
 
 export const dynamic = "force-dynamic"
 
@@ -77,7 +77,14 @@ export default async function EmpresasPage({ searchParams }: { searchParams: Pro
                   <td className="px-3 py-2 tabular-nums text-stone-600 whitespace-nowrap">{e.telefono || e.whatsapp || "—"}</td>
                   <td className="px-3 py-2 tabular-nums text-stone-600">{fmtFecha(e.fecha_instalacion)}</td>
                   <td className="px-3 py-2 tabular-nums text-stone-600">{e.estado === "prueba" ? fmtFecha(e.fin_prueba) : "—"}</td>
-                  <td className="px-3 py-2 tabular-nums text-stone-600">{e.estado === "activo" || e.estado === "pago_pendiente" ? fmtFecha(e.fecha_proximo_pago) : "—"}</td>
+                  <td className="px-3 py-2 tabular-nums text-stone-600 whitespace-nowrap">
+                    {e.estado === "activo" || e.estado === "pago_pendiente" ? fmtFecha(e.fecha_proximo_pago) : "—"}
+                    {(() => {
+                      // Cuotas vencidas a hoy (incluye meses anteriores).
+                      const n = e.estado === "activo" || e.estado === "pago_pendiente" ? cobrosAdeudados(e.fecha_proximo_pago, e.ciclo_cobro, e.dia_cobro, d.hoy).filter((f) => f < d.hoy).length : 0
+                      return n > 0 ? <span className="block text-[10px] font-semibold text-red-700">debe {n} cuota{n === 1 ? "" : "s"} ({fmtMoneda(n * e.cuota, e.moneda || m)})</span> : null
+                    })()}
+                  </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     <span className="tabular-nums">{fmtMoneda(e.cuota, e.moneda || m)}</span> <CicloBadge ciclo={e.ciclo_cobro} />
                   </td>

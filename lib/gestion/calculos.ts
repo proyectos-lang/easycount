@@ -74,6 +74,8 @@ export function resumenInicio(args: { empresas: EmpresaCalc[]; pagos: PagoCalc[]
   const pruebasPronto = pruebas.filter((p) => p.restantes >= 0 && p.restantes <= 3)
   const alDia = clientes.filter((e) => e.estado_cobro === "pagado")
   const t = totalesMes(pagos, gastos, anio, mes)
+  // Cuotas que se deben hasta fin del mes elegido (también las de meses anteriores).
+  const adeudos = clientes.map((e) => adeudoCliente(e, hoy, anio, mes))
   const reunionesProximas = reuniones
     .filter((r) => !r.resultado && r.fecha >= hoy)
     .sort((a, b) => `${a.fecha} ${a.hora || ""}`.localeCompare(`${b.fecha} ${b.hora || ""}`))
@@ -85,7 +87,7 @@ export function resumenInicio(args: { empresas: EmpresaCalc[]; pagos: PagoCalc[]
   return {
     chips: { atrasados: atrasados.length, estaSemana: estaSemana.length, pruebasPronto: pruebasPronto.length, alDia: alDia.length },
     kpis: {
-      activos: clientes.length, enPrueba: enPrueba.length, pagosPendientes: clientes.filter((e) => e.estado_cobro === "pendiente" || e.estado_cobro === "atrasado").length,
+      activos: clientes.length, enPrueba: enPrueba.length, pagosPendientes: adeudos.reduce((n, x) => n + x.fechas.length, 0), montoPendiente: r2(adeudos.reduce((n, x) => n + x.total, 0)), montoVencido: r2(adeudos.reduce((n, x) => n + x.montoVencido, 0)),
       ingresos: t.ingresos, gastos: t.gastos, utilidad: t.utilidad, reunionesProximas: reunionesProximas.length, nuevosProspectos,
     },
     pagosProximos, pruebas, reunionesProximas: reunionesProximas.slice(0, 6),

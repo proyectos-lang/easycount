@@ -9,7 +9,7 @@
  *   · Anual: genera su cuota completa en el mes aniversario de su inicio
  *     (para la curva de valor recurrente cuenta como cuota ÷ 12 al mes).
  */
-import { ultimoDiaMes, mesRelativo, type Ciclo, type EstadoEmpresa } from "./reglas"
+import { cobrosAdeudados, ultimoDiaMes, mesRelativo, sumarDias, type Ciclo, type EstadoEmpresa } from "./reglas"
 
 export interface SuscripcionCalc {
   id: number
@@ -91,6 +91,25 @@ export function resumenSuscripciones(args: { empresas: SuscripcionCalc[]; pagos:
     vencido: r2(cobros.filter((c) => c.estado === "vencido").reduce((a, c) => a + c.monto, 0)),
     cobros,
   }
+}
+
+/**
+ * Cuotas de MESES ANTERIORES al elegido que el cliente todavía debe (desde su
+ * próximo pago sin saldar hasta el día anterior al 1.º del mes). Son deuda
+ * arrastrada; las cuotas del propio mes salen en `cobrosDelMes`.
+ */
+export function atrasosAnteriores(args: { empresas: (SuscripcionCalc & { fecha_proximo_pago: string | null })[]; anio: number; mes: number }) {
+  // Hasta el día anterior al 1.º del mes elegido.
+  const hasta = sumarDias(`${clave(args.anio, args.mes)}-01`, -1)
+  const filas = args.empresas
+    .filter(vigente)
+    .map((e) => {
+      const fechas = cobrosAdeudados(e.fecha_proximo_pago, e.ciclo_cobro, e.dia_cobro, hasta)
+      return { empresa_id: e.id, nombre: e.nombre, fechas, monto: r2(fechas.length * (Number(e.cuota) || 0)) }
+    })
+    .filter((x) => x.fechas.length > 0)
+    .sort((a, b) => a.fechas[0].localeCompare(b.fechas[0]))
+  return { filas, total: r2(filas.reduce((a, x) => a + x.monto, 0)), cuotas: filas.reduce((a, x) => a + x.fechas.length, 0) }
 }
 
 export interface PuntoCrecimiento {

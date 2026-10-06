@@ -2,7 +2,7 @@ import Link from "next/link"
 import { datosGestion } from "../datos"
 import { leerMes, claveMes } from "@/lib/gestion/mes"
 import { etiquetaMes } from "@/lib/gestion/calculos"
-import { curvaCrecimiento, inicioSuscripcion, resumenSuscripciones, valorMensual } from "@/lib/gestion/suscripciones"
+import { atrasosAnteriores, curvaCrecimiento, inicioSuscripcion, resumenSuscripciones, valorMensual } from "@/lib/gestion/suscripciones"
 import { esClienteVigente } from "@/lib/gestion/reglas"
 import { GraficaCrecimiento } from "../_components/grafica-crecimiento"
 import { TrLink } from "../_components/tr-link"
@@ -19,6 +19,7 @@ export default async function SuscripcionesPage({ searchParams }: { searchParams
   const m = d.config.moneda
   const pagos = d.pagos.map((p) => ({ empresa_id: p.empresa_id, fecha: p.fecha, monto: p.monto, periodo_cubierto_desde: p.periodo_cubierto_desde, periodo_cubierto_hasta: p.periodo_cubierto_hasta }))
   const r = resumenSuscripciones({ empresas: d.empresas, pagos, anio: sel.anio, mes: sel.mes, hoy: d.hoy })
+  const atrasos = atrasosAnteriores({ empresas: d.empresas, anio: sel.anio, mes: sel.mes })
   const curva = curvaCrecimiento({ empresas: d.empresas, pagos, hasta: sel, hoy: d.hoy, proyeccionMeses: 3 })
   const vigentes = d.empresas.filter((e) => esClienteVigente(e.estado)).sort((a, b) => valorMensual(b) - valorMensual(a))
   const avance = r.porCobrar > 0 ? Math.round((r.cobrosCubiertos / r.porCobrar) * 100) : 0
@@ -35,16 +36,31 @@ export default async function SuscripcionesPage({ searchParams }: { searchParams
       </div>
 
       {/* A cobrar vs cobrado del mes */}
-      <Panel titulo={`Cobro de ${etiqueta}`} descripcion="Lo que toca cobrar en el mes según las suscripciones vigentes, frente a lo que ya pagaron.">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Kpi label="A cobrar en el mes" value={fmtMoneda(r.porCobrar, m)} tono="amarillo" sub={`${r.cobros.length} cobro(s) que vencen en el mes`} />
-          <Kpi label="Ya pagado" value={fmtMoneda(r.cobrosCubiertos, m)} tono="verde" sub={`${avance}% de lo que toca cobrar`} />
-          <Kpi label="Falta por cobrar" value={fmtMoneda(r.pendiente, m)} tono={r.pendiente > 0 ? "rojo" : undefined} sub={r.vencido > 0 ? `${fmtMoneda(r.vencido, m)} ya vencido` : "nada vencido"} />
+      <Panel titulo={`Cobro de ${etiqueta}`} descripcion="Las cuotas que vencen en el mes (independiente de atrasos) y, aparte, lo que se arrastra de meses anteriores.">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <Kpi label="Cuotas del mes" value={fmtMoneda(r.porCobrar, m)} tono="amarillo" sub={`${r.cobros.length} cuota(s) que vencen en el mes`} />
+          <Kpi label="Ya pagado" value={fmtMoneda(r.cobrosCubiertos, m)} tono="verde" sub={`${avance}% de las cuotas del mes`} />
+          <Kpi label="Falta del mes" value={fmtMoneda(r.pendiente, m)} tono={r.pendiente > 0 ? "rojo" : undefined} sub={r.vencido > 0 ? `${fmtMoneda(r.vencido, m)} ya vencido` : "nada vencido"} />
+          <Kpi label="Atrasos de meses anteriores" value={fmtMoneda(atrasos.total, m)} tono={atrasos.total > 0 ? "rojo" : undefined} sub={atrasos.cuotas ? `${atrasos.cuotas} cuota(s) sin pagar` : "sin atrasos"} />
+          <Kpi label="Total que se debe" value={fmtMoneda(r.pendiente + atrasos.total, m)} tono={r.pendiente + atrasos.total > 0 ? "rojo" : "verde"} sub="falta del mes + atrasos" />
           <Kpi label="Entró en el mes" value={fmtMoneda(r.cobradoMes, m)} sub="todos los pagos recibidos (incluye atrasos y adelantos)" />
         </div>
         <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-stone-100">
           <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, avance)}%` }} />
         </div>
+        {atrasos.filas.length > 0 && (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50/50 p-3">
+            <p className="text-xs font-semibold text-red-800">Atrasos de meses anteriores (aún sin pagar)</p>
+            <ul className="mt-1.5 space-y-1 text-sm">
+              {atrasos.filas.map((a) => (
+                <li key={a.empresa_id} className="flex flex-wrap items-center justify-between gap-2">
+                  <Link href={`/gestion/empresas/${a.empresa_id}`} className="font-medium text-stone-800 hover:underline">{a.nombre}</Link>
+                  <span className="text-xs text-red-800">{a.fechas.map((f) => fmtFecha(f)).join(", ")} · <span className="font-semibold tabular-nums">{fmtMoneda(a.monto, m)}</span></span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {r.cobros.length > 0 && (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm">
