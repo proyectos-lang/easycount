@@ -1,6 +1,6 @@
 import { datosGestion } from "../datos"
 import { leerMes } from "@/lib/gestion/mes"
-import { NOMBRES_MES, etiquetaMes, serieReportes, resumenPublicidad } from "@/lib/gestion/calculos"
+import { NOMBRES_MES, adeudoCliente, etiquetaMes, serieReportes, resumenPublicidad } from "@/lib/gestion/calculos"
 import { ETIQUETA_COBRO, ETIQUETA_ESTADO, ETIQUETA_MOTIVO, ETIQUETA_PLATAFORMA, costoPor, esClienteVigente, sumarDias, type MotivoPerdida } from "@/lib/gestion/reglas"
 import { ExportarReporte, type FilaReporte } from "../_components/reportes-export"
 import { fmtMoneda, fmtNum, fmtPct } from "../_components/ui"
@@ -19,6 +19,8 @@ export default async function ReportesPage({ searchParams }: { searchParams: Pro
   const serie = serieReportes({ empresas: d.empresas, pagos: d.pagos, gastos: d.gastos, anio: sel.anio, mes: sel.mes, meses: 12 })
   const clientes = d.empresas.filter((e) => esClienteVigente(e.estado))
   const hace12 = sumarDias(d.hoy, -365)
+  // Lo que se debe hasta fin del mes elegido (cuotas vencidas y por vencer, incluidos atrasos).
+  const adeudos = clientes.map((e) => ({ e, a: adeudoCliente(e, d.hoy, sel.anio, sel.mes) }))
 
   // Conversión por mes: empresas creadas en el mes vs cuántas de ellas hoy son clientes.
   const conversion = serie.map((s) => {
@@ -39,8 +41,8 @@ export default async function ReportesPage({ searchParams }: { searchParams: Pro
     { titulo: "Ingresos", valor: fmtMoneda(serie.reduce((a, s) => a + s.ingresos, 0), m), sub: "últimos 12 meses", archivo: "ingresos", filas: serie.map((s) => ({ Mes: mesLargo(s.mes), Ingresos: s.ingresos })) },
     { titulo: "Gastos", valor: fmtMoneda(serie.reduce((a, s) => a + s.gastos, 0), m), sub: "últimos 12 meses", archivo: "gastos", filas: serie.map((s) => ({ Mes: mesLargo(s.mes), Gastos: s.gastos })) },
     { titulo: "Utilidad bruta", valor: fmtMoneda(serie.reduce((a, s) => a + s.utilidad, 0), m), sub: "ingresos − gastos, 12 meses", archivo: "utilidad", filas: serie.map((s) => ({ Mes: mesLargo(s.mes), Ingresos: s.ingresos, Gastos: s.gastos, Utilidad: s.utilidad, Margen: s.ingresos ? Math.round((s.utilidad / s.ingresos) * 1000) / 10 : null })) },
-    { titulo: "Pagos pendientes", valor: fmtNum(clientes.filter((e) => e.estado_cobro === "pendiente" || e.estado_cobro === "proximo").length), sub: "vencen este mes o en 7 días", archivo: "pagos-pendientes", filas: clientes.filter((e) => e.estado_cobro === "pendiente" || e.estado_cobro === "proximo").map(empresaFila) },
-    { titulo: "Pagos atrasados", valor: fmtNum(clientes.filter((e) => e.estado_cobro === "atrasado").length), sub: "fecha vencida sin pago", archivo: "pagos-atrasados", filas: clientes.filter((e) => e.estado_cobro === "atrasado").map(empresaFila) },
+    { titulo: "Cuotas por cobrar", valor: fmtMoneda(adeudos.reduce((a, x) => a + x.a.montoPorVencer, 0), m), sub: `${adeudos.reduce((a, x) => a + x.a.porVencer.length, 0)} cuota(s) que vencen hasta fin de ${etiquetaMes(sel.anio, sel.mes)}`, archivo: "cuotas-por-cobrar", filas: adeudos.filter((x) => x.a.porVencer.length > 0).map((x) => ({ ...empresaFila(x.e), "Cuotas por vencer": x.a.porVencer.length, "Monto por vencer": x.a.montoPorVencer, Vencimientos: x.a.porVencer.join(", ") })) },
+    { titulo: "Cuotas vencidas", valor: fmtMoneda(adeudos.reduce((a, x) => a + x.a.montoVencido, 0), m), sub: `${adeudos.reduce((a, x) => a + x.a.vencidos.length, 0)} cuota(s) vencidas sin pagar (incluye meses anteriores)`, archivo: "cuotas-vencidas", filas: adeudos.filter((x) => x.a.vencidos.length > 0).map((x) => ({ ...empresaFila(x.e), "Cuotas vencidas": x.a.vencidos.length, "Monto vencido": x.a.montoVencido, "Fechas vencidas": x.a.vencidos.join(", ") })) },
     { titulo: "Prospectos convertidos", valor: fmtNum(totConv), sub: `de ${totCreadas} creados en 12 meses`, archivo: "prospectos-convertidos", filas: d.empresas.filter((e) => esClienteVigente(e.estado) && e.created_at.slice(0, 10) >= hace12).map((e) => ({ Empresa: e.nombre, Creada: e.created_at.slice(0, 10), Instalación: e.fecha_instalacion, Plan: e.plan, Cuota: e.cuota })) },
     { titulo: "Tasa de conversión", valor: fmtPct(totCreadas ? totConv / totCreadas : null), sub: "convertidos ÷ creados, por mes", archivo: "tasa-conversion", filas: conversion.map((c) => ({ Mes: mesLargo(c.mes), Creados: c.creadas, Convertidos: c.convertidas, "Tasa %": c.tasa == null ? null : Math.round(c.tasa * 1000) / 10 })) },
     { titulo: "Motivos de pérdida", valor: fmtNum(Object.values(motivos).reduce((a, b) => a + b, 0)), sub: "reuniones «no interesado», 12 meses", archivo: "motivos-perdida", filas: Object.entries(motivos).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ Motivo: ETIQUETA_MOTIVO[k as MotivoPerdida] ?? k, Total: v })) },

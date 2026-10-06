@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { getSuperadmin } from "@/lib/services/plataforma"
 import { leerMes } from "@/lib/gestion/mes"
-import { etiquetaMes, resumenInicio } from "@/lib/gestion/calculos"
+import { adeudoCliente, etiquetaMes, resumenInicio } from "@/lib/gestion/calculos"
 import { ETIQUETA_TIPO_REUNION } from "@/lib/gestion/reglas"
 import { datosGestion } from "./datos"
 import { GraficaIngresosGastos } from "./_components/graficas"
@@ -49,7 +49,7 @@ export default async function InicioGestion({ searchParams }: { searchParams: Pr
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Kpi label="Clientes activos" value={fmtNum(r.kpis.activos)} tono="verde" />
         <Kpi label="En prueba" value={fmtNum(r.kpis.enPrueba)} tono="azul" />
-        <Kpi label="Pagos pendientes" value={fmtNum(r.kpis.pagosPendientes)} tono={r.kpis.pagosPendientes > 0 ? "amarillo" : undefined} />
+        <Kpi label="Cuotas por cobrar" value={fmtNum(r.kpis.pagosPendientes)} tono={r.kpis.montoVencido > 0 ? "rojo" : r.kpis.pagosPendientes > 0 ? "amarillo" : undefined} sub={`${fmtMoneda(r.kpis.montoPendiente, m)}${r.kpis.montoVencido > 0 ? ` · ${fmtMoneda(r.kpis.montoVencido, m)} vencido` : ""}`} />
         <Kpi label="Ingresos del mes" value={fmtMoneda(r.kpis.ingresos, m)} tono="verde" />
         <Kpi label="Gastos del mes" value={fmtMoneda(r.kpis.gastos, m)} tono="rojo" />
         <Kpi label="Utilidad bruta" value={fmtMoneda(r.kpis.utilidad, m)} tono={r.kpis.utilidad >= 0 ? "verde" : "rojo"} />
@@ -64,7 +64,7 @@ export default async function InicioGestion({ searchParams }: { searchParams: Pr
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-[11px] uppercase tracking-wide text-stone-500">
-                  <tr><th className="py-1.5 pr-3 font-medium">Empresa</th><th className="py-1.5 pr-3 font-medium">Fecha</th><th className="py-1.5 pr-3 text-right font-medium">Cuota</th><th className="py-1.5 font-medium">Estado</th></tr>
+                  <tr><th className="py-1.5 pr-3 font-medium">Empresa</th><th className="py-1.5 pr-3 font-medium">Fecha</th><th className="py-1.5 pr-3 text-right font-medium">Cuota</th><th className="py-1.5 pr-3 text-right font-medium">Adeuda</th><th className="py-1.5 font-medium">Estado</th></tr>
                 </thead>
                 <tbody>
                   {r.pagosProximos.slice(0, 10).map((e) => (
@@ -72,6 +72,10 @@ export default async function InicioGestion({ searchParams }: { searchParams: Pr
                       <td className="py-2 pr-3"><Link href={`/gestion/empresas/${e.id}`} className="font-medium text-stone-800 hover:underline">{e.nombre}</Link></td>
                       <td className="py-2 pr-3 tabular-nums text-stone-600">{fmtFecha(e.fecha_proximo_pago)}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{fmtMoneda(e.cuota, m)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums whitespace-nowrap">{(() => {
+                        const a = adeudoCliente(e, d.hoy, sel.anio, sel.mes)
+                        return a.fechas.length === 0 ? <span className="text-xs text-stone-400">—</span> : <span className={a.vencidos.length ? "font-semibold text-red-700" : "text-amber-700"}>{fmtMoneda(a.total, m)}<span className="block text-[10px] font-normal">{a.fechas.length} cuota{a.fechas.length === 1 ? "" : "s"}</span></span>
+                      })()}</td>
                       <td className="py-2"><CobroBadge estado={e.estado_cobro} /></td>
                     </tr>
                   ))}

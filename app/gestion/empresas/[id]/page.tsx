@@ -2,7 +2,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getEmpresaGestion } from "@/lib/services/gestion"
-import { ETIQUETA_ESTADO_REUNION, ETIQUETA_METODO, ETIQUETA_MOTIVO, ETIQUETA_RESULTADO, ETIQUETA_TIPO_REUNION } from "@/lib/gestion/reglas"
+import { ETIQUETA_ESTADO_REUNION, ETIQUETA_METODO, ETIQUETA_MOTIVO, ETIQUETA_RESULTADO, ETIQUETA_TIPO_REUNION, cobrosAdeudados } from "@/lib/gestion/reglas"
 import { datosGestion } from "../../datos"
 import { BotonEditarEmpresa, BotonRegistrarPago, EliminarEmpresa, EliminarPago, NotaForm } from "../../_components/perfil-acciones"
 import { CicloBadge, CobroBadge, EstadoBadge, Etiqueta, Panel, Vacio, fmtFecha, fmtFechaHora, fmtHora, fmtMoneda } from "../../_components/ui"
@@ -46,6 +46,8 @@ export default async function PerfilEmpresa({ params }: { params: Promise<{ id: 
   const m = e.moneda || config.moneda
   const esCliente = e.estado === "activo" || e.estado === "pago_pendiente"
   const notas = actividades.filter((a) => a.tipo === "nota")
+  // Cuotas vencidas a hoy (incluye meses anteriores sin pagar).
+  const vencidas = esCliente ? cobrosAdeudados(e.fecha_proximo_pago, e.ciclo_cobro, e.dia_cobro, hoy).filter((f) => f < hoy) : []
 
   return (
     <div className="space-y-4">
@@ -68,6 +70,12 @@ export default async function PerfilEmpresa({ params }: { params: Promise<{ id: 
             <EliminarEmpresa empresaId={e.id} nombre={e.nombre} />
           </div>
         </div>
+        {vencidas.length > 0 && (
+          <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+            Debe <strong>{vencidas.length} cuota{vencidas.length === 1 ? "" : "s"}</strong> ({fmtMoneda(vencidas.length * e.cuota, m)}): {vencidas.map((f) => fmtFecha(f)).join(", ")}.
+            Cada pago que registres salda la más antigua.
+          </p>
+        )}
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
           <Dato label={e.ciclo_cobro === "anual" ? "Cuota anual" : "Cuota mensual"} value={<span className="tabular-nums font-semibold">{fmtMoneda(e.cuota, m)} <CicloBadge ciclo={e.ciclo_cobro} /></span>} />
           <Dato label="Próximo pago" value={esCliente ? fmtFecha(e.fecha_proximo_pago) : "—"} />

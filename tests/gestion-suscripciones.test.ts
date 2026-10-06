@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { cobrosDelMes, curvaCrecimiento, resumenSuscripciones, valorMensual, vencimientoEnMes, type SuscripcionCalc } from "@/lib/gestion/suscripciones"
+import { atrasosAnteriores, cobrosDelMes, curvaCrecimiento, resumenSuscripciones, valorMensual, vencimientoEnMes, type SuscripcionCalc } from "@/lib/gestion/suscripciones"
 
 const base = { created_at: "2026-01-01T00:00:00Z" }
 const coral: SuscripcionCalc = { id: 1, nombre: "Coral", estado: "pago_pendiente", cuota: 800, ciclo_cobro: "mensual", dia_cobro: 5, fecha_instalacion: "2026-05-05", ...base }
@@ -61,5 +61,15 @@ describe("curva de crecimiento", () => {
     expect([sep.esperado, sep.mrr, sep.suscripciones]).toEqual([1700, 2465, 3])
     expect(c.at(-1)!.proyeccion).toBe(true)
     expect(c.find((p) => p.mes === "2026-10")!.proyeccion).toBe(false)
+  })
+})
+
+describe("atrasos de meses anteriores", () => {
+  it("cuotas que se deben de antes del mes elegido (las del mes van aparte)", () => {
+    const emp = [{ ...coral, fecha_proximo_pago: "2026-09-05" }, { ...marena, fecha_proximo_pago: "2026-10-31" }, { ...prueba, fecha_proximo_pago: null }]
+    const a = atrasosAnteriores({ empresas: emp, anio: 2026, mes: 10 })
+    expect(a.filas.map((f) => [f.nombre, f.fechas, f.monto])).toEqual([["Coral", ["2026-09-05"], 800]])
+    expect([a.total, a.cuotas]).toEqual([800, 1])
+    expect(atrasosAnteriores({ empresas: emp, anio: 2026, mes: 12 }).filas.find((f) => f.nombre === "Coral")!.fechas).toEqual(["2026-09-05", "2026-10-05", "2026-11-05"])
   })
 })
