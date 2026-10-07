@@ -4,6 +4,7 @@ import {
   getSupabaseProjectStatus,
 } from "@/lib/services/plataforma"
 import { FlagToggle } from "./flag-toggle"
+import type { FeatureFlags } from "@/lib/constants/feature-flags"
 import { RrhhToggle } from "./rrhh-toggle"
 import { LogoutButton } from "./logout-button"
 import { CrearEmpresaDialog } from "./crear-empresa"
@@ -49,6 +50,21 @@ function Kpi({ label, value, sub }: { label: string; value: string; sub?: string
     </div>
   )
 }
+
+/** Funciones por empresa que se encienden/apagan en la tabla (una columna cada una). */
+const FUNCIONES: { clave: string; flag: keyof FeatureFlags | null; corto: string; ayuda: string; on: string; off: string }[] = [
+  { clave: "isv", flag: "ventas_mostrar_isv", corto: "ISV en ventas", ayuda: "Mostrar el ISV (15%) en Nueva Venta para esta empresa", on: "se muestra", off: "oculto" },
+  { clave: "codigo", flag: "tirilla_mostrar_codigo", corto: "Código en tirilla", ayuda: "Imprimir el código del producto bajo su nombre en la tirilla térmica", on: "sí", off: "no" },
+  { clave: "lector", flag: "ventas_lector_codigo_barras", corto: "Lector código", ayuda: "Lector de código de barras en Nueva Venta (escanear = ubicar/agregar)", on: "activo", off: "inactivo" },
+  { clave: "tallas", flag: "productos_por_talla", corto: "Tallas", ayuda: "Productos por talla: check 'tiene tallas' al crear + agrupamiento de tallas en Productos e Inventario", on: "activo", off: "inactivo" },
+  { clave: "rapida", flag: "venta_rapida", corto: "Venta rápida", ayuda: "En Nueva Venta, agregar una línea con descripción y precio a mano, sin afectar inventario", on: "activo", off: "inactivo" },
+  { clave: "cai", flag: "facturacion_cai", corto: "Factura CAI", ayuda: "Habilita el módulo 'Facturación CAI' en Configuración para emitir facturas oficiales del SAR (Honduras)", on: "activo", off: "inactivo" },
+  { clave: "bloqueo", flag: "ventas_bloquear_precio_descuento", corto: "Bloq. precio/desc.", ayuda: "Bloquea la edición del precio por línea y el descuento en Nueva Venta para los usuarios NO admin", on: "bloqueado", off: "libre" },
+  { clave: "caja", flag: "caja_ocultar_saldo", corto: "Ocultar saldo caja", ayuda: "Oculta el saldo y los montos de Caja Chica a los usuarios NO admin (cierre a ciegas); el admin ve todo", on: "oculto", off: "visible" },
+  { clave: "bancos", flag: "cierre_ocultar_saldo_banco", corto: "Ocultar saldo bancos", ayuda: "En los imprimibles del Cierre Diario oculta el SALDO FINAL de cada banco; los movimientos sí se muestran", on: "oculto", off: "visible" },
+  { clave: "retiro", flag: "ventas_orden_retiro_bodega", corto: "Orden retiro bodega", ayuda: "Al imprimir la tirilla de una venta, imprime también la 'ORDEN DE RETIRO EN BODEGA' con el mismo número de factura", on: "activo", off: "inactivo" },
+  { clave: "rrhh", flag: null, corto: "RRHH", ayuda: "Enciende o apaga de un clic los 5 módulos de RRHH (Empleados, Asistencia, Novedades, Nómina, Parámetros RRHH)", on: "activo", off: "apagado" },
+]
 
 export default async function PlataformaPage() {
   const [empRes, dbRes, proj] = await Promise.all([
@@ -139,189 +155,82 @@ export default async function PlataformaPage() {
         </div>
       </div>
 
-      {/* Tabla de empresas */}
+      {/* Tabla de empresas (compacta): empresa fija a la izquierda, una
+          columna por función con su interruptor y cuántas la tienen activa. */}
       <div className="rounded-lg border bg-white">
-        <div className="border-b px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
           <h2 className="text-sm font-semibold">Empresas ({empresas.length})</h2>
+          <p className="text-[11px] text-stone-400">Pasa el mouse sobre cada función para ver qué hace · verde = activa</p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="border-b bg-stone-50 text-left text-[11px] uppercase tracking-wide text-stone-500">
-              <tr>
-                <th className="px-4 py-2 font-medium">Empresa</th>
-                <th className="px-4 py-2 font-medium">RTN</th>
-                <th className="px-4 py-2 text-right font-medium">Usuarios</th>
-                <th className="px-4 py-2 font-medium">Última conexión</th>
-                <th className="px-4 py-2 font-medium">Gestión</th>
-                <th className="px-4 py-2 font-medium" title="Mostrar el ISV (15%) en Nueva Venta para esta empresa">
-                  ISV en ventas
-                </th>
-                <th className="px-4 py-2 font-medium" title="Imprimir el codigo del producto bajo su nombre en la tirilla termica">
-                  Codigo en tirilla
-                </th>
-                <th className="px-4 py-2 font-medium" title="Activar el lector de codigo de barras en Nueva Venta (escanear = ubicar/agregar)">
-                  Lector codigo
-                </th>
-                <th className="px-4 py-2 font-medium" title="Productos por talla: check 'tiene tallas' al crear + agrupamiento de tallas en Productos e Inventario">
-                  Productos por talla
-                </th>
-                <th className="px-4 py-2 font-medium" title="Venta rápida: en Nueva Venta, agregar una línea con descripción y precio a mano, sin afectar inventario">
-                  Venta rápida
-                </th>
-                <th className="px-4 py-2 font-medium" title="Facturación CAI: habilita el módulo 'Facturación CAI' en Configuración para emitir facturas oficiales del SAR (Honduras)">
-                  Factura CAI
-                </th>
-                <th className="px-4 py-2 font-medium" title="Bloquea la edición del precio de venta por línea y el descuento en Nueva Venta para los usuarios NO admin (el admin sí puede)">
-                  Bloquear precio/desc.
-                </th>
-                <th className="px-4 py-2 font-medium" title="Oculta el saldo y los montos de Caja Chica a los usuarios NO admin (cierre a ciegas); el admin ve todo">
-                  Ocultar saldo caja
-                </th>
-                <th className="px-4 py-2 font-medium" title="En los imprimibles del Cierre Diario (tirilla y PDF) oculta el SALDO FINAL de cada banco; los movimientos (ingresos/egresos) sí se muestran">
-                  Ocultar saldo bancos (cierre)
-                </th>
-                <th className="px-4 py-2 font-medium" title="Al imprimir la tirilla de una venta, imprime también una tirilla 'ORDEN DE RETIRO EN BODEGA' con el mismo número de factura y el listado de productos (código y cantidad, sin precios)">
-                  Orden retiro bodega
-                </th>
-                <th className="px-4 py-2 font-medium" title="Enciende o apaga de un clic los 5 módulos de Recursos Humanos (Empleados, Asistencia, Novedades, Nómina, Parámetros RRHH) para la empresa">
-                  RRHH
-                </th>
+          <table className="w-full border-separate border-spacing-0 text-xs">
+            <thead className="text-[10px] uppercase tracking-wide text-stone-500">
+              <tr className="bg-stone-50">
+                <th className="sticky left-0 z-20 border-b bg-stone-50 px-2 py-1.5 text-left font-medium">Empresa</th>
+                <th className="border-b px-2 py-1.5 text-left font-medium whitespace-nowrap">Uso</th>
+                <th className="border-b px-2 py-1.5 text-left font-medium">Gestión</th>
+                {FUNCIONES.map((f) => {
+                  const activas = empresas.filter((e) => (f.flag ? e.flags[f.flag] : e.rrhh_activo)).length
+                  return (
+                    <th key={f.clave} title={f.ayuda} className="cursor-help border-b px-1.5 py-1.5 text-center align-bottom font-medium">
+                      <span className="block min-w-[3.5rem] max-w-[5.5rem] mx-auto leading-tight normal-case text-[10.5px] text-stone-600">{f.corto}</span>
+                      <span className="mt-0.5 block font-normal tabular-nums text-stone-400">{activas}/{empresas.length}</span>
+                    </th>
+                  )
+                })}
               </tr>
             </thead>
             <tbody>
               {empresas.length === 0 ? (
                 <tr>
-                  <td colSpan={16}className="px-4 py-10 text-center text-stone-400">
+                  <td colSpan={3 + FUNCIONES.length} className="px-4 py-10 text-center text-stone-400">
                     Sin empresas para mostrar.
                   </td>
                 </tr>
               ) : (
-                empresas.map((e) => (
-                  <tr key={e.id} className="border-b last:border-0 hover:bg-stone-50/60">
-                    <td className="px-4 py-2">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`inline-block h-2 w-2 rounded-full ${activaReciente(e.ultima_conexion) ? "bg-emerald-500" : "bg-stone-300"}`}
-                          title={activaReciente(e.ultima_conexion) ? "Activa" : "Inactiva"}
-                        />
-                        <div>
-                          <p className="font-medium text-stone-800">{e.nombre}</p>
-                          {e.comercial && e.comercial !== e.nombre && (
-                            <p className="text-[11px] text-stone-400">{e.comercial}</p>
-                          )}
+                empresas.map((e, i) => {
+                  const fondo = i % 2 ? "bg-stone-50/70" : "bg-white"
+                  return (
+                    <tr key={e.id} className={`group ${fondo} hover:bg-amber-50/60`}>
+                      <td className={`sticky left-0 z-10 border-b px-2 py-1.5 ${fondo} group-hover:bg-amber-50 shadow-[1px_0_0_0_#e7e5e4]`}>
+                        <div className="flex items-center gap-1.5 min-w-[11rem] max-w-[15rem]">
+                          <span
+                            className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${activaReciente(e.ultima_conexion) ? "bg-emerald-500" : "bg-stone-300"}`}
+                            title={activaReciente(e.ultima_conexion) ? "Activa (conexión en los últimos 30 días)" : "Inactiva"}
+                          />
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-stone-800" title={e.nombre}>
+                              {e.nombre} <span className="font-normal text-[10px] text-stone-300">#{e.id}</span>
+                            </p>
+                            <p className="truncate text-[10px] text-stone-400">
+                              {[e.comercial && e.comercial !== e.nombre ? e.comercial : null, e.rtn ? `RTN ${e.rtn}` : null].filter(Boolean).join(" · ") || "—"}
+                            </p>
+                          </div>
                         </div>
-                        <span className="ml-1 text-[10px] text-stone-300">#{e.id}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2 text-stone-500">{e.rtn || "—"}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">
-                      {e.usuarios}
-                      <span className="text-stone-400"> ({e.usuarios_activos})</span>
-                    </td>
-                    <td className="px-4 py-2 text-stone-500" title={e.ultima_conexion || ""}>
-                      {haceCuanto(e.ultima_conexion)}
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex items-center gap-2">
-                        <GestionUsuariosDialog razonSocialId={e.id} empresaNombre={e.nombre} />
-                        <GestionModulosDialog razonSocialId={e.id} empresaNombre={e.nombre} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-2">
-                      <FlagToggle
-                        razonSocialId={e.id}
-                        flag="ventas_mostrar_isv"
-                        initial={e.flags.ventas_mostrar_isv}
-                        onLabel="Muestra"
-                        offLabel="Oculto"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <FlagToggle
-                        razonSocialId={e.id}
-                        flag="tirilla_mostrar_codigo"
-                        initial={e.flags.tirilla_mostrar_codigo}
-                        onLabel="Sí"
-                        offLabel="No"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <FlagToggle
-                        razonSocialId={e.id}
-                        flag="ventas_lector_codigo_barras"
-                        initial={e.flags.ventas_lector_codigo_barras}
-                        onLabel="Activo"
-                        offLabel="Inactivo"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <FlagToggle
-                        razonSocialId={e.id}
-                        flag="productos_por_talla"
-                        initial={e.flags.productos_por_talla}
-                        onLabel="Activo"
-                        offLabel="Inactivo"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <FlagToggle
-                        razonSocialId={e.id}
-                        flag="venta_rapida"
-                        initial={e.flags.venta_rapida}
-                        onLabel="Activo"
-                        offLabel="Inactivo"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <FlagToggle
-                        razonSocialId={e.id}
-                        flag="facturacion_cai"
-                        initial={e.flags.facturacion_cai}
-                        onLabel="Activo"
-                        offLabel="Inactivo"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <FlagToggle
-                        razonSocialId={e.id}
-                        flag="ventas_bloquear_precio_descuento"
-                        initial={e.flags.ventas_bloquear_precio_descuento}
-                        onLabel="Bloqueado"
-                        offLabel="Libre"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <FlagToggle
-                        razonSocialId={e.id}
-                        flag="caja_ocultar_saldo"
-                        initial={e.flags.caja_ocultar_saldo}
-                        onLabel="Oculto"
-                        offLabel="Visible"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <FlagToggle
-                        razonSocialId={e.id}
-                        flag="cierre_ocultar_saldo_banco"
-                        initial={e.flags.cierre_ocultar_saldo_banco}
-                        onLabel="Oculto"
-                        offLabel="Visible"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <FlagToggle
-                        razonSocialId={e.id}
-                        flag="ventas_orden_retiro_bodega"
-                        initial={e.flags.ventas_orden_retiro_bodega}
-                        onLabel="Activo"
-                        offLabel="Inactivo"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <RrhhToggle razonSocialId={e.id} initial={e.rrhh_activo} />
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="border-b px-2 py-1.5 whitespace-nowrap text-stone-600" title={e.ultima_conexion || "Sin conexiones"}>
+                        <span className="tabular-nums">{e.usuarios}</span>
+                        <span className="text-stone-400"> ({e.usuarios_activos}) usr</span>
+                        <span className="block text-[10px] text-stone-400">{haceCuanto(e.ultima_conexion)}</span>
+                      </td>
+                      <td className="border-b px-2 py-1.5">
+                        <div className="flex items-center gap-1">
+                          <GestionUsuariosDialog razonSocialId={e.id} empresaNombre={e.nombre} />
+                          <GestionModulosDialog razonSocialId={e.id} empresaNombre={e.nombre} />
+                        </div>
+                      </td>
+                      {FUNCIONES.map((f) => (
+                        <td key={f.clave} className="border-b px-1.5 py-1.5 text-center">
+                          {f.flag ? (
+                            <FlagToggle compacto razonSocialId={e.id} flag={f.flag} initial={e.flags[f.flag]} onLabel={`${f.corto}: ${f.on}`} offLabel={`${f.corto}: ${f.off}`} />
+                          ) : (
+                            <RrhhToggle compacto razonSocialId={e.id} initial={e.rrhh_activo} />
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>

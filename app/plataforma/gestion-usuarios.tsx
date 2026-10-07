@@ -130,7 +130,7 @@ export function GestionUsuariosDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!creando) { setOpen(o); if (!o) setExpandido(null) } }}>
-      <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={() => setOpen(true)}>
+      <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={() => setOpen(true)} title="Usuarios de la empresa">
         <Users className="h-3.5 w-3.5" /> Usuarios
       </Button>
 

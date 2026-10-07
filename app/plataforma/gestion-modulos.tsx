@@ -68,7 +68,7 @@ export function GestionModulosDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setOpen(true)}>
+      <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={() => setOpen(true)} title="Módulos habilitados para la empresa">
         <Boxes className="h-3.5 w-3.5" /> Módulos
       </Button>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
