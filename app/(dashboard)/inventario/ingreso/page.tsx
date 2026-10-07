@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Package, Warehouse, MapPin, ArrowDownCircle, ArrowUpCircle, AlertTriangle, TrendingUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { PrecioProducto } from "@/components/precio-producto"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -281,7 +282,7 @@ export default function MovimientosManualesPage() {
                     <SelectContent>
                       {productosFiltrados.map((p) => (
                         <SelectItem key={p.id} value={p.id!.toString()}>
-                          {p.codigo_barras ? `[${p.codigo_barras}] ` : ''}{p.nombre}
+                          {p.codigo_barras ? `[${p.codigo_barras}] ` : ''}{p.nombre}<PrecioProducto precio={p.precio_venta_sugerido} />
                         </SelectItem>
                       ))}
                     </SelectContent>

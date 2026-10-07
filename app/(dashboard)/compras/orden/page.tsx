@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { PrecioProducto } from "@/components/precio-producto"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
@@ -694,7 +695,7 @@ export default function OrdenCompraPage() {
                               <div className="flex items-center gap-2 min-w-0">
                                 <span className="h-4 w-4 shrink-0" />
                                 <div className="min-w-0">
-                                  <p className="truncate font-medium text-sm">{p.nombre}</p>
+                                  <p className="truncate font-medium text-sm">{p.nombre}<PrecioProducto precio={p.precio_venta_sugerido} /></p>
                                   {p.codigo_barras && (
                                     <p className="text-xs text-muted-foreground font-mono">{p.codigo_barras}</p>
                                   )}

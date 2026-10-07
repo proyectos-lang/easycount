@@ -18,6 +18,7 @@ import {
   FileText
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { PrecioProducto } from "@/components/precio-producto"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -742,7 +743,7 @@ export default function TrasladosPage() {
                         >
                           <div className="flex items-center justify-between w-full gap-3">
                             <div className="flex-1 min-w-0">
-                              <p className="font-medium text-stone-800 truncate">{producto.nombre}</p>
+                              <p className="font-medium text-stone-800 truncate">{producto.nombre}<PrecioProducto precio={producto.precio_venta_sugerido} /></p>
                               <p className="text-xs text-stone-500 font-mono">{producto.codigo_barras || 'Sin codigo'}</p>
                             </div>
                             <Badge variant="outline" className="text-xs shrink-0 border-stone-300">
