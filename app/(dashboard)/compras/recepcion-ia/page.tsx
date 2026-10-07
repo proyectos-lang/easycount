@@ -57,6 +57,8 @@ import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
+import { useIsMobile } from "@/components/ui/use-mobile"
+import { aplicarCambioLinea, totalDeLinea } from "@/lib/utils/recepcion-linea"
 import {
   crearCompraYRecibir,
   calcularProrrateoDetallado,
@@ -98,6 +100,8 @@ interface LineaFactura {
   productoCodigo: string
   cantidad: number
   costoOriginal: number
+  /** Total de la línea escrito por el usuario; si existe, costo unitario = total ÷ cantidad. */
+  totalLinea?: number | null
   costoFinalLocal: number
   /** Precio de venta editable (opcional). Si > 0, actualiza el precio del producto. */
   precioVenta?: number
@@ -186,6 +190,8 @@ export default function RecepcionIAPage() {
   const [addProductoOpen, setAddProductoOpen] = useState(false)
   // Modo manual: ver la sección de verificación/mapeo a pantalla completa.
   const [mapeoFullScreen, setMapeoFullScreen] = useState(false)
+  // < 768 px (md): líneas como tarjetas; si no, tabla. Se dibuja solo una.
+  const esMovil = useIsMobile()
   // Historial de facturas de compra (compras recibidas) + detalle abierto.
   const [historial, setHistorial] = useState<CompraEncabezado[]>([])
   const [detalleAbierto, setDetalleAbierto] = useState<CompraEncabezado | null>(null)
@@ -610,10 +616,13 @@ export default function RecepcionIAPage() {
   }
 
   // Update line values
-  const updateLinea = (lineaId: number, field: 'cantidad' | 'costoOriginal' | 'precioVenta', value: number) => {
-    setLineas(prev => prev.map(l =>
-      l.id === lineaId ? { ...l, [field]: value } : l
-    ))
+  const updateLinea = (lineaId: number, field: 'cantidad' | 'costoOriginal' | 'totalLinea' | 'precioVenta', value: number) => {
+    setLineas(prev => prev.map(l => {
+      if (l.id !== lineaId) return l
+      // Cantidad / costo unitario / total de la línea se mantienen consistentes.
+      if (field === 'precioVenta') return { ...l, precioVenta: value }
+      return aplicarCambioLinea(l, field, value)
+    }))
   }
 
   /** Producto actual de una línea (para costo/precio anteriores). */
@@ -1177,6 +1186,18 @@ export default function RecepcionIAPage() {
             className={className}
           />
         )
+        const totalLineaInput = (linea: LineaFactura, className = "w-28 text-right") => (
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            inputMode="decimal"
+            value={totalDeLinea(linea)}
+            onChange={(e) => updateLinea(linea.id, 'totalLinea', parseFloat(e.target.value) || 0)}
+            className={cn(className, linea.totalLinea != null && "border-sky-300 bg-sky-50/40")}
+            title="Total de la línea: el costo unitario se calcula solo (total ÷ cantidad)"
+          />
+        )
         const costoFinalLinea = (linea: LineaFactura) => (
           <>
             <Badge variant="secondary" className="font-mono">
@@ -1291,8 +1312,13 @@ export default function RecepcionIAPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Celular (< md): una tarjeta por línea, sin scroll horizontal. */}
-                <div className="space-y-3 md:hidden">
+                {/* Celular (< md): una tarjeta por línea, sin scroll horizontal.
+                    Se dibuja SOLO la vista que corresponde (tarjetas o tabla): si
+                    se dibujaran las dos (una oculta con CSS), cada selector de
+                    producto existiría dos veces con el mismo estado y la copia
+                    oculta lo cerraba al instante ("no abre"). */}
+                {esMovil && (
+                <div className="space-y-3">
                   {lineas.map((linea) => (
                     <div
                       key={linea.id}
@@ -1306,13 +1332,17 @@ export default function RecepcionIAPage() {
                         <Label className="text-[11px] text-muted-foreground">Producto</Label>
                         <div className="mt-1">{comboLinea(linea)}</div>
                       </div>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-2 gap-2">
                         <div>
                           <Label className="text-[11px] text-muted-foreground">Cant.</Label>
                           <div className="mt-1">{cantLinea(linea, "w-full text-center")}</div>
                         </div>
                         <div>
-                          <Label className="text-[11px] text-muted-foreground">Costo orig.</Label>
+                          <Label className="text-[11px] text-muted-foreground">Total línea</Label>
+                          <div className="mt-1">{totalLineaInput(linea, "w-full text-right")}</div>
+                        </div>
+                        <div>
+                          <Label className="text-[11px] text-muted-foreground">Costo unit.</Label>
                           <div className="mt-1">{costoLinea(linea, "w-full text-right")}</div>
                         </div>
                         <div>
@@ -1327,16 +1357,19 @@ export default function RecepcionIAPage() {
                     </div>
                   ))}
                 </div>
+                )}
 
                 {/* Products Table (md+) */}
-                <div className="hidden md:block border rounded-lg overflow-hidden">
+                {!esMovil && (
+                <div className="border rounded-lg overflow-hidden">
                   <Table containerClassName="max-h-[60vh] overflow-y-auto">
                     <TableHeader sticky>
                       <TableRow className="bg-muted/50">
                         <TableHead className="w-[200px]">Extraido por IA</TableHead>
                         <TableHead>Mapear a Producto</TableHead>
                         <TableHead className="text-center w-20">Cant.</TableHead>
-                        <TableHead className="text-right w-28">Costo Orig.</TableHead>
+                        <TableHead className="text-right w-32">Total línea</TableHead>
+                        <TableHead className="text-right w-28">Costo unit.</TableHead>
                         <TableHead className="text-right w-28">Costo Final</TableHead>
                         <TableHead className="text-right w-28">Precio venta</TableHead>
                         <TableHead className="w-12"></TableHead>
@@ -1348,6 +1381,7 @@ export default function RecepcionIAPage() {
                           <TableCell>{infoLinea(linea)}</TableCell>
                           <TableCell>{comboLinea(linea)}</TableCell>
                           <TableCell>{cantLinea(linea)}</TableCell>
+                          <TableCell>{totalLineaInput(linea)}</TableCell>
                           <TableCell>{costoLinea(linea)}</TableCell>
                           <TableCell className="text-right">{costoFinalLinea(linea)}</TableCell>
                           <TableCell className="text-right">{precioLinea(linea)}</TableCell>
@@ -1357,6 +1391,7 @@ export default function RecepcionIAPage() {
                     </TableBody>
                   </Table>
                 </div>
+                )}
 
                 {/* Additional Costs */}
                 <div className="grid gap-4 md:grid-cols-3">
