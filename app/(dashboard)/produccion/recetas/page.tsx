@@ -3,6 +3,7 @@
 import * as React from "react"
 import { ClipboardList, Plus, Trash2, Loader2, Search, Check, ChevronsUpDown, Pencil, FileText, Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { PrecioProducto } from "@/components/precio-producto"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -222,7 +223,7 @@ export default function RecetasPage() {
                               onSelect={() => elegirProducto(p.id!)}
                             >
                               <Check className={cn("mr-2 h-4 w-4", productoId === p.id ? "opacity-100" : "opacity-0")} />
-                              <span className="flex-1 truncate">{p.nombre}</span>
+                              <span className="flex-1 truncate">{p.nombre}<PrecioProducto precio={p.precio_venta_sugerido} /></span>
                               {recetaPorProducto.has(p.id!) && (
                                 <Badge variant="outline" className="ml-2 text-[10px] border-amber-200 bg-amber-50 text-amber-800">Con receta</Badge>
                               )}

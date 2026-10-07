@@ -10,6 +10,7 @@ import {
   ScatterChart, Scatter, ZAxis, ReferenceLine, ComposedChart, Line, LineChart,
 } from "recharts"
 import { Button } from "@/components/ui/button"
+import { PrecioProducto } from "@/components/precio-producto"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -675,7 +676,7 @@ function CosteoTab({ auditoria, loading }: { auditoria: ProductoAuditoria[] | nu
             <Select value={productoId} onValueChange={setProductoId}>
               <SelectTrigger className="w-full sm:w-80"><SelectValue placeholder="Seleccionar producto" /></SelectTrigger>
               <SelectContent>
-                {productosFiltrados.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
+                {productosFiltrados.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}<PrecioProducto precio={p.precio_venta_sugerido} /></SelectItem>)}
               </SelectContent>
             </Select>
             {historial && <span className="text-sm text-stone-600">Costo actual: <strong>{formatCurrency(historial.costoActual)}</strong></span>}

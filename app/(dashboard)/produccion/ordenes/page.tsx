@@ -3,6 +3,7 @@
 import * as React from "react"
 import { FileText, Plus, Loader2, Check, ChevronsUpDown, AlertTriangle, CalendarClock } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { PrecioProducto } from "@/components/precio-producto"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PlaneadorProduccion } from "./planeador"
@@ -237,7 +238,7 @@ export default function OrdenesProduccionPage() {
                         {productosFabricados.map((p) => (
                           <CommandItem key={p.id} value={`${p.nombre} ${p.codigo_barras || ""}`} onSelect={() => { setProductoId(p.id!); setComboOpen(false) }}>
                             <Check className={cn("mr-2 h-4 w-4", productoId === p.id ? "opacity-100" : "opacity-0")} />
-                            <span className="flex-1 truncate">{p.nombre}</span>
+                            <span className="flex-1 truncate">{p.nombre}<PrecioProducto precio={p.precio_venta_sugerido} /></span>
                           </CommandItem>
                         ))}
                       </CommandGroup>

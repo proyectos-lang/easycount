@@ -8,6 +8,7 @@ import { formatCurrency, formatNumber } from "@/lib/utils/format"
 import { TablePaginator } from "@/components/ui/table-paginator"
 
 import { Button } from "@/components/ui/button"
+import { PrecioProducto } from "@/components/precio-producto"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -1256,7 +1257,7 @@ export default function HistorialVentasPage() {
                         <SelectItem value="all">Todos los productos</SelectItem>
                         {productos.map(p => (
                           <SelectItem key={p.id} value={p.id!.toString()}>
-                            {p.nombre}
+                            {p.nombre}<PrecioProducto precio={p.precio_venta_sugerido} />
                           </SelectItem>
                         ))}
                       </SelectContent>

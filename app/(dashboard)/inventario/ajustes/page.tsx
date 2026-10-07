@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/contexts/auth-context"
 import { getGruposTallas, type GrupoTallaRef } from "@/lib/services/grupos-tallas"
 import { compararTallas } from "@/lib/utils/tallas"
 import { Button } from "@/components/ui/button"
+import { PrecioProducto } from "@/components/precio-producto"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -139,7 +140,7 @@ export default function AjustesInventarioPage() {
     const coincide = (p: Producto) =>
       !q || p.nombre.toLowerCase().includes(q) || !!p.codigo_barras?.toLowerCase().includes(q) ||
       (tallasActivo && !!p.talla?.toLowerCase().includes(q))
-    const out: { value: string; label: string }[] = []
+    const out: { value: string; label: string; precio?: number | null }[] = []
     const gruposVistos = new Set<number>()
     const porGrupo = new Map<number, Producto[]>()
     if (tallasActivo) {
@@ -155,9 +156,9 @@ export default function AjustesInventarioPage() {
         const tallas = porGrupo.get(g.grupo_id) || [p]
         if (!tallas.some(coincide)) continue
         gruposVistos.add(g.grupo_id)
-        out.push({ value: `g:${g.grupo_id}`, label: `${g.nombre_grupo || p.nombre} · ${tallas.length} talla${tallas.length === 1 ? "" : "s"}` })
+        out.push({ value: `g:${g.grupo_id}`, label: `${g.nombre_grupo || p.nombre} · ${tallas.length} talla${tallas.length === 1 ? "" : "s"}`, precio: p.precio_venta_sugerido })
       } else if (coincide(p)) {
-        out.push({ value: String(p.id), label: p.nombre })
+        out.push({ value: String(p.id), label: p.nombre, precio: p.precio_venta_sugerido })
       }
       if (out.length >= 100) break
     }
@@ -382,7 +383,7 @@ export default function AjustesInventarioPage() {
                 <Select value={productoId} onValueChange={setProductoId}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar producto" /></SelectTrigger>
                   <SelectContent>
-                    {opcionesProducto.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                    {opcionesProducto.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}<PrecioProducto precio={o.precio} /></SelectItem>)}
                   </SelectContent>
                 </Select>
 

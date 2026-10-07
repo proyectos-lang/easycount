@@ -5,6 +5,7 @@ import {
   Coins, Search, Info, Loader2, TrendingUp, TrendingDown, ArrowRight,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { PrecioProducto } from "@/components/precio-producto"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -156,7 +157,7 @@ export default function AjusteCostoPage() {
           <Select value={productoId} onValueChange={setProductoId}>
             <SelectTrigger><SelectValue placeholder="Seleccionar producto" /></SelectTrigger>
             <SelectContent>
-              {productosFiltrados.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}</SelectItem>)}
+              {productosFiltrados.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.nombre}<PrecioProducto precio={p.precio_venta_sugerido} /></SelectItem>)}
             </SelectContent>
           </Select>
 
